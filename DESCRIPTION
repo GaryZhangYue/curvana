@@ -1,18 +1,19 @@
 Package: fdafmR
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Tools to Analyze AFM Force–Distance Curves
 Version: 0.1.0
 Authors@R: c(
-    person(
-      "Jane", "Doe",
-      email = "jane@example.com",
-      role = c("aut", "cre")
-    )
-  )
-Description: More about what it does (maybe more than one line).
-    Continuation lines should be indented.
-License: What license is it under?
+    person("Yue", "Zhang", email = "yuezh2017@gmail.com", role = c("aut")),
+    person("Zhaoyang", "Wang", email = "zhaoyangwang@gwu.edu", role = c("ctb", "cre")))
+Description: An all-in-one R package to read, manage, and analyze 
+    atomic force microscopy (AFM) force–distance curves, with support 
+    for parallel processing and user-supplied metadata.
+License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
 URL: https://github.com/GaryZhangYue/fdafmR
 BugReports: https://github.com/GaryZhangYue/fdafmR/issues
+Imports:
+    future,
+    future.apply,
+    dplyr
+RoxygenNote: 7.3.2
