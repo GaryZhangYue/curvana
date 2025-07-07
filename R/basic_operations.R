@@ -64,3 +64,40 @@ extract <- function(fdObj, by_sample = NULL, by_col = NULL) {
       retractCurves = retract_subset,
       metadata = metadata_subset)
 }
+
+#' Combine two fdObj objects
+#'
+#' @param x A `fdObj` object
+#' @param y A `fdObj` object. This object cannot have any overlapping sample names with the first fdObj.
+#'
+#' @return A new combined `fdObj` object. metadata matrix will be concatenated using bind_rows (dplyr). rawCurves, approachCurves and retractCurves will be concatenated.
+#' @export
+
+combineFdObj <- function(x, y) {
+  stopifnot(inherits(x, "fdObj"), inherits(y, "fdObj"))
+
+  # Check for overlapping sample names
+  name_overlap <- intersect(names(x@rawCurves), names(y@rawCurves))
+  if (length(name_overlap) > 0) {
+    stop("Overlapping sample names in rawCurves: ", paste(name_overlap, collapse = ", "))
+  }
+
+  # Combine curve slots
+  raw_combined      <- c(x@rawCurves,      y@rawCurves)
+  approach_combined <- c(x@approachCurves, y@approachCurves)
+  retract_combined  <- c(x@retractCurves,  y@retractCurves)
+
+  # Combine metadata (preserve rownames, handle missing columns)
+  x_meta <- tibble::rownames_to_column(x@metadata, var = ".sample")
+  y_meta <- tibble::rownames_to_column(y@metadata, var = ".sample")
+
+  metadata_combined <- dplyr::bind_rows(x_meta, y_meta)
+  metadata_combined <- tibble::column_to_rownames(metadata_combined, var = ".sample")
+
+  # Construct and return new fdObj
+  new("fdObj",
+      rawCurves = raw_combined,
+      approachCurves = approach_combined,
+      retractCurves = retract_combined,
+      metadata = metadata_combined)
+}
