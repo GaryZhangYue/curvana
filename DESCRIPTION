@@ -15,5 +15,6 @@ BugReports: https://github.com/GaryZhangYue/fdafmR/issues
 Imports:
     future,
     future.apply,
-    dplyr
+    dplyr,
+    ggplot2
 RoxygenNote: 7.3.2
