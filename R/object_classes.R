@@ -4,54 +4,61 @@
 #' @slot approachCurves A named list of 2-column data.frames (distance vs force from approach segment)
 #' @slot retractCurves A named list of 2-column data.frames (distance vs force from retract segment)
 #' @slot metadata A data.frame with row names matching names(rawCurves). Stores metadata and calculated features.
+#' @slot senscal_segment A list with two slots: approach and retract, each is a named list of data.frames, storing the part of the raw curve used for sensitivity calculation.
+#' @slot baseline_segment A list with two slots: approach and retract, each is a named list of data.frames, storing the part of the raw curve used for baseline calculation
 setClass(
   "fdObj",
   slots = list(
     rawCurves = "list",
     approachCurves = "list",
     retractCurves = "list",
-    metadata = "data.frame"
+    metadata = "data.frame",
+    senscal_segment = "list",
+    baseline_segment = "list"
   ),
   validity = function(object) {
+    check_named_list_of_dfs <- function(x, ref_names, coln = NULL) {
+      if (!is.list(x) || any(!sapply(x, is.data.frame))) return(FALSE)
+      if (!identical(names(x), ref_names)) return(FALSE)
+      if (!is.null(coln) && any(sapply(x, ncol) != coln)) return(FALSE)
+      TRUE
+    }
+
     # --- rawCurves ---
-    if (!is.list(object@rawCurves) || any(!sapply(object@rawCurves, is.data.frame))) {
-      return("rawCurves must be a list of data.frames")
-    }
-    if (any(sapply(object@rawCurves, ncol) != 4)) {
-      return("Each data.frame in rawCurves must have exactly 4 columns")
-    }
-    if (is.null(names(object@rawCurves)) || any(names(object@rawCurves) == "")) {
-      return("rawCurves must be a *named* list")
+    if (!check_named_list_of_dfs(object@rawCurves, names(object@rawCurves), 4)) {
+      return("rawCurves must be a named list of 4-column data.frames")
     }
 
     # --- approachCurves ---
-    if (!is.list(object@approachCurves) || any(!sapply(object@approachCurves, is.data.frame))) {
-      return("approachCurves must be a list of data.frames")
-    }
-    if (!identical(names(object@rawCurves), names(object@approachCurves))) {
-      return("approachCurves must have the same names as rawCurves")
-    }
-    if (any(sapply(object@approachCurves, ncol) != 2)) {
-      return("Each data.frame in approachCurves must have exactly 2 columns")
+    if (!check_named_list_of_dfs(object@approachCurves, names(object@rawCurves), 2)) {
+      return("approachCurves must be a named list of 2-column data.frames with same names as rawCurves")
     }
 
     # --- retractCurves ---
-    if (!is.list(object@retractCurves) || any(!sapply(object@retractCurves, is.data.frame))) {
-      return("retractCurves must be a list of data.frames")
-    }
-    if (!identical(names(object@rawCurves), names(object@retractCurves))) {
-      return("retractCurves must have the same names as rawCurves")
-    }
-    if (any(sapply(object@retractCurves, ncol) != 2)) {
-      return("Each data.frame in retractCurves must have exactly 2 columns")
+    if (!check_named_list_of_dfs(object@retractCurves, names(object@rawCurves), 2)) {
+      return("retractCurves must be a named list of 2-column data.frames with same names as rawCurves")
     }
 
     # --- metadata ---
-    if (is.null(rownames(object@metadata))) {
-      return("metadata must have row names")
+    if (is.null(rownames(object@metadata)) ||
+        !setequal(rownames(object@metadata), names(object@rawCurves))) {
+      return("Row names of metadata must match names of rawCurves")
     }
-    if (!setequal(rownames(object@metadata), names(object@rawCurves))) {
-      return("Row names of metadata must match the names of rawCurves")
+
+    # --- senscal_segment and baseline_segment ---
+    check_seg_structure <- function(seg) {
+      is.list(seg) &&
+        all(c("approach", "retract") %in% names(seg)) &&
+        check_named_list_of_dfs(seg$approach, names(object@rawCurves)) &&
+        check_named_list_of_dfs(seg$retract, names(object@rawCurves))
+    }
+
+    if (!check_seg_structure(object@senscal_segment)) {
+      return("senscal_segment must be a list with 'approach' and 'retract', each a named list of data.frames")
+    }
+
+    if (!check_seg_structure(object@baseline_segment)) {
+      return("baseline_segment must be a list with 'approach' and 'retract', each a named list of data.frames")
     }
 
     TRUE

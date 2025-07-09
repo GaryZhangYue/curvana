@@ -37,32 +37,34 @@ extract <- function(fdObj, by_sample = NULL, by_col = NULL) {
     stop("No matching samples found.")
   }
 
-  # Subset rawCurves
-  raw_subset <- fdObj@rawCurves[samples_to_keep]
-
-  # Subset approachCurves only if not empty
-  if (length(fdObj@approachCurves) > 0) {
-    approach_subset <- fdObj@approachCurves[samples_to_keep]
-  } else {
-    approach_subset <- list()
-  }
-
-  # Subset retractCurves only if not empty
-  if (length(fdObj@retractCurves) > 0) {
-    retract_subset <- fdObj@retractCurves[samples_to_keep]
-  } else {
-    retract_subset <- list()
-  }
-
-  # Subset metadata
+  # Subset
   metadata_subset <- fdObj@metadata[samples_to_keep, , drop = FALSE]
+  raw_subset <- fdObj@rawCurves[samples_to_keep]
+  approach_subset <- fdObj@approachCurves[samples_to_keep]
+  retract_subset <- fdObj@retractCurves[samples_to_keep]
+  senscal_approach_subset <- fdObj@senscal_segment$approach[samples_to_keep]
+  senscal_retract_subset <- fdObj@senscal_segment$retract[samples_to_keep]
+  baseline_approach_subset <- fdObj@baseline_segment$approach[samples_to_keep]
+  baseline_retract_subset  <- fdObj@baseline_segment$retract[samples_to_keep]
 
+  # Combine senscal_segment and baseline_segment
+  senscal_combined <- list(
+    approach = senscal_approach_subset,
+    retract  = senscal_retract_subset
+  )
+  baseline_combined <- list(
+    approach = baseline_approach_subset,
+    retract  = baseline_retract_subset
+  )
   # Return new object
   new("fdObj",
       rawCurves = raw_subset,
       approachCurves = approach_subset,
       retractCurves = retract_subset,
-      metadata = metadata_subset)
+      metadata = metadata_subset,
+      senscal_segment = senscal_combined,
+      baseline_segment = baseline_combined
+      )
 }
 
 #' Combine two fdObj objects
@@ -70,7 +72,7 @@ extract <- function(fdObj, by_sample = NULL, by_col = NULL) {
 #' @param x A `fdObj` object
 #' @param y A `fdObj` object. This object cannot have any overlapping sample names with the first fdObj.
 #'
-#' @return A new combined `fdObj` object. metadata matrix will be concatenated using bind_rows (dplyr). rawCurves, approachCurves and retractCurves will be concatenated.
+#' @return A new combined `fdObj` object. metadata matrix will be concatenated using bind_rows (dplyr). All slots will be concatenated.
 #' @export
 
 combineFdObj <- function(x, y) {
@@ -87,10 +89,19 @@ combineFdObj <- function(x, y) {
   approach_combined <- c(x@approachCurves, y@approachCurves)
   retract_combined  <- c(x@retractCurves,  y@retractCurves)
 
+  # Combine senscal_segment and baseline_segment
+  senscal_combined <- list(
+    approach = c(x@senscal_segment$approach, y@senscal_segment$approach),
+    retract  = c(x@senscal_segment$retract,  y@senscal_segment$retract)
+  )
+  baseline_combined <- list(
+    approach = c(x@baseline_segment$approach, y@baseline_segment$approach),
+    retract  = c(x@baseline_segment$retract,  y@baseline_segment$retract)
+  )
+
   # Combine metadata (preserve rownames, handle missing columns)
   x_meta <- tibble::rownames_to_column(x@metadata, var = ".sample")
   y_meta <- tibble::rownames_to_column(y@metadata, var = ".sample")
-
   metadata_combined <- dplyr::bind_rows(x_meta, y_meta)
   metadata_combined <- tibble::column_to_rownames(metadata_combined, var = ".sample")
 
@@ -99,5 +110,7 @@ combineFdObj <- function(x, y) {
       rawCurves = raw_combined,
       approachCurves = approach_combined,
       retractCurves = retract_combined,
-      metadata = metadata_combined)
+      metadata = metadata_combined,
+      senscal_segment = senscal_combined,
+      baseline_segment = baseline_combined)
 }

@@ -12,9 +12,6 @@
 #'
 #' @return An object of class \code{fdObj}
 #' @export
-#' @importFrom future plan multisession
-#' @importFrom future.apply future_lapply
-#' @import dplyr
 createFdObjFromFolder <- function(folder,
                                   suffix = ".txt",
                                   pattern = "",
@@ -45,7 +42,7 @@ createFdObjFromFolder <- function(folder,
     }
     files_to_read <- all_files
     curve_names <- tools::file_path_sans_ext(basename(files_to_read))
-    metadata <- data.frame(row.names = curve_names,filename = curve_names)
+    metadata <- data.frame(row.names = curve_names, filename = curve_names)
   }
 
   # Read files: parallel if threads > 1
@@ -62,33 +59,47 @@ createFdObjFromFolder <- function(folder,
   required_cols <- c(Calc_Ramp_Ex_nm, Calc_Ramp_Rt_nm, Defl_V_Ex, Defl_V_Rt)
   rawCurves <- setNames(
     read_func(files_to_read, function(f) {
-    df <- read.table(f, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
-    if (!all(required_cols %in% colnames(df))) {
-      warning(sprintf("File %s is missing required columns", f))
-      return(NULL)
-    }
-    df %>%
-      transmute(
-        Calc_Ramp_Ex_nm = .data[[Calc_Ramp_Ex_nm]],
-        Calc_Ramp_Rt_nm = .data[[Calc_Ramp_Rt_nm]],
-        Defl_V_Ex       = .data[[Defl_V_Ex]],
-        Defl_V_Rt       = .data[[Defl_V_Rt]]
-      )
+      df <- read.table(f, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+      if (!all(required_cols %in% colnames(df))) {
+        warning(sprintf("File %s is missing required columns", f))
+        return(NULL)
+      }
+      df %>%
+        transmute(
+          Calc_Ramp_Ex_nm = .data[[Calc_Ramp_Ex_nm]],
+          Calc_Ramp_Rt_nm = rev(.data[[Calc_Ramp_Rt_nm]]),
+          Defl_V_Ex       = rev(.data[[Defl_V_Ex]]),
+          Defl_V_Rt       = .data[[Defl_V_Rt]]
+        )
     }),
     curve_names
   )
 
-  # Initialize empty lists for approach and retract
-  empty_df <- data.frame(distance = numeric(0), force = numeric(0))
-  approachCurves <- setNames(rep(list(empty_df), length(curve_names)), curve_names)
-  retractCurves  <- setNames(rep(list(empty_df), length(curve_names)), curve_names)
+  # Initialize empty lists for approach/retract
+  empty_appr_df <- data.frame(distance = numeric(0), force = numeric(0))
+  empty_retr_df <- data.frame(distance = numeric(0), force = numeric(0))
+  approachCurves <- setNames(rep(list(empty_appr_df), length(curve_names)), curve_names)
+  retractCurves  <- setNames(rep(list(empty_retr_df), length(curve_names)), curve_names)
 
-  # print an message to screen
-  message(length(files_to_read), " files read into rawCurves")
-  # Return the object
+  # Initialize senscal_segment and baseline_segment
+  empty_sens_appr <- data.frame(Calc_Ramp_Ex_nm = numeric(0), Defl_V_Ex = numeric(0))
+  empty_sens_retr <- data.frame(Calc_Ramp_Rt_nm = numeric(0), Defl_V_Rt = numeric(0))
+
+  senscal_segment <- list(
+    approach = setNames(rep(list(empty_sens_appr), length(curve_names)), curve_names),
+    retract  = setNames(rep(list(empty_sens_retr), length(curve_names)), curve_names)
+  )
+  baseline_segment <- list(
+    approach = setNames(rep(list(empty_sens_appr), length(curve_names)), curve_names),
+    retract  = setNames(rep(list(empty_sens_retr), length(curve_names)), curve_names)
+  )
+
+  # Construct and return fdObj
   new("fdObj",
       rawCurves = rawCurves,
       approachCurves = approachCurves,
       retractCurves = retractCurves,
-      metadata = metadata)
+      metadata = metadata,
+      senscal_segment = senscal_segment,
+      baseline_segment = baseline_segment)
 }

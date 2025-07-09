@@ -1,6 +1,19 @@
-library('fdafmR')
+library(dplyr)
+# initalize
+# Install devtools if not already
+install.packages("devtools")
+
+# Load devtools
+library(devtools)
+
+# Install all dependencies and load the package
+devtools::install(dependencies = TRUE)
+devtools::load_all()
+
+# Load necessary libraries
 library(dplyr)
 library(ggplot2)
+
 # test: creating fdOBJ
 folder = system.file("extdata", package = "fdafmR")
 test = createFdObjFromFolder(folder = folder)
@@ -22,12 +35,17 @@ test.combine.2 = combineFdObj(test.paeru,test.paeru2) # should return error
 # test: deflection_plot
 deflection_plot(test,split_curves_by = 'bacteria')
 deflection_plot(test,split_curves_by = 'bacteria',group_curves_by = 'date',
-                alpha = 0.5,point_size = 0.5,
+                alpha = 0.05,point_size = 0.5,
                 color_map = list(`180424` = 'darkred',
                                  `180425` = 'blue'))
 deflection_plot(test,split_curves_by = 'date',group_curves_by = 'bacteria',
-                alpha = 0.5,point_size = 0.5,
+                alpha = 0.3,point_size = 0.5,
                 color_map = list(`paeru` = 'darkred',
                                  `pmon2` = 'blue',
                                  sc = 'orange',
                                  mica = 'lightblue'))
+
+# test: calc_sensitivity
+x = test@rawCurves$`180424_fc_mica_loc1.001`$Calc_Ramp_Ex_nm
+y = test@rawCurves$`180424_fc_mica_loc1.001`$Defl_V_Ex
+calc_sensitivity(end = 200,intv = 4,x = x,y = y)
