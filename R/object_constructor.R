@@ -103,3 +103,4 @@ createFdObjFromFolder <- function(folder,
       senscal_segment = senscal_segment,
       baseline_segment = baseline_segment)
 }
+

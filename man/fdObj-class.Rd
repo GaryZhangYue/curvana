@@ -17,5 +17,9 @@ An S4 class to hold AFM force-distance raw and processed curves with metadata
 \item{\code{retractCurves}}{A named list of 2-column data.frames (distance vs force from retract segment)}
 
 \item{\code{metadata}}{A data.frame with row names matching names(rawCurves). Stores metadata and calculated features.}
+
+\item{\code{senscal_segment}}{A list with two slots: approach and retract, each is a named list of data.frames, storing the part of the raw curve used for sensitivity calculation.}
+
+\item{\code{baseline_segment}}{A list with two slots: approach and retract, each is a named list of data.frames, storing the part of the raw curve used for baseline calculation}
 }}
 

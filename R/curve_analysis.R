@@ -11,8 +11,7 @@
 #'
 #' @return A list of three elements:
 #' \describe{
-#'   \item{sens_x}{A numeric vector of x values used for sensitivity fitting.}
-#'   \item{sens_y}{A numeric vector of y values used for sensitivity fitting.}
+#'   \item{senscal_segment}{a dataframe of a subset of points in the original raw curve which are used for sensitivity calibration}
 #'   \item{sensitivity}{The calculated sensitivity (slope) as a numeric value, or \code{NULL} if not computable.}
 #' }
 #'
@@ -62,10 +61,95 @@ calc_sensitivity <- function(end, intv, x, y) {
   }
 
   if (length(sens_x) == 0 || length(sens_y) == 0) {
-    return(list(NULL, NULL, NULL))
+    return(list(NULL, NULL))
   } else {
     fit <- lm(sens_y ~ sens_x)
-    sensitivity <- -coef(fit)[2]
-    return(list(sens_x, sens_y, sensitivity))
+    sensitivity <- -coef(fit)[2][[1]]
+    senscal_segment = data.frame(x = sens_x, y = sens_y)
+    return(list(senscal_segment = senscal_segment, sensitivity = sensitivity))
   }
 }
+
+#' Add Sensitivity Estimates to an fdObj
+#'
+#' Applies sensitivity estimation to each rawCurve in an fdObj and stores the sensitivity values
+#' in the metadata and the segment used in the senscal_segment slot.
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param end Integer. The maximum index in raw curves to consider (e.g., 200).
+#' @param intv Integer. Chunk size for sensitivity calculation (e.g., 4).
+#' @param useCurve Character. Either "approach" or "retract" to determine which curve to use.
+#' @param threads Number of parallel threads to use (default = 1).
+#'
+#' @return An updated \code{fdObj} with sensitivity values in metadata and segments in senscal_segment.
+#' @export
+analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach", threads = 1) {
+  if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
+  if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
+
+  # Set column names based on approach/retract
+  if (useCurve == "approach") {
+    x_col <- "Calc_Ramp_Ex_nm"
+    y_col <- "Defl_V_Ex"
+    empty_seg <- data.frame(Calc_Ramp_Ex_nm = numeric(0), Defl_V_Ex = numeric(0))
+  } else {
+    x_col <- "Calc_Ramp_Rt_nm"
+    y_col <- "Defl_V_Rt"
+    empty_seg <- data.frame(Calc_Ramp_Rt_nm = numeric(0), Defl_V_Rt = numeric(0))
+  }
+
+  raw_list <- fdObj@rawCurves
+  curve_names <- names(raw_list)
+
+  # Choose parallel or sequential
+  if (threads > 1) {
+    future::plan(future::multisession, workers = threads)
+    results <- future.apply::future_lapply(curve_names, function(name) {
+      df <- raw_list[[name]]
+      if (!(x_col %in% colnames(df)) || !(y_col %in% colnames(df))) {
+        return(list(senscal_segment = NULL, sensitivity = NULL))
+      }
+      x <- df[[x_col]]
+      y <- df[[y_col]]
+      calc_sensitivity(end = end, intv = intv, x = x, y = y)
+    }, future.globals = list(calc_sensitivity = calc_sensitivity))
+  } else {
+    results <- lapply(curve_names, function(name) {
+      df <- raw_list[[name]]
+      if (!(x_col %in% colnames(df)) || !(y_col %in% colnames(df))) {
+        return(list(senscal_segment = NULL, sensitivity = NULL))
+      }
+      x <- df[[x_col]]
+      y <- df[[y_col]]
+      calc_sensitivity(end = end, intv = intv, x = x, y = y)
+    })
+  }
+
+  # Handle failed calculations
+  sensitivity_values <- sapply(results, function(r) {
+    if (is.null(r$sensitivity)) NA_real_ else r$sensitivity
+  })
+
+  segments <- lapply(results, function(r) {
+    if (is.null(r$senscal_segment)) empty_seg else {
+      seg <- r$senscal_segment
+      colnames(seg) <- colnames(empty_seg)
+      seg
+    }
+  })
+  names(segments) <- curve_names
+
+  # Update metadata
+  fdObj@metadata$sensitivity <- sensitivity_values
+
+  # Update senscal_segment slot
+  fdObj@senscal_segment[[useCurve]] <- segments
+
+  # Print summary
+  n_total <- length(curve_names)
+  n_fail  <- sum(is.na(sensitivity_values))
+  message(sprintf("Processed %d curves; %d failed sensitivity calculation.", n_total, n_fail))
+
+  return(fdObj)
+}
+

@@ -12,7 +12,7 @@ combineFdObj(x, y)
 \item{y}{A `fdObj` object. This object cannot have any overlapping sample names with the first fdObj.}
 }
 \value{
-A new combined `fdObj` object. metadata matrix will be concatenated using bind_rows (dplyr). rawCurves, approachCurves and retractCurves will be concatenated.
+A new combined `fdObj` object. metadata matrix will be concatenated using bind_rows (dplyr). All slots will be concatenated.
 }
 \description{
 Combine two fdObj objects

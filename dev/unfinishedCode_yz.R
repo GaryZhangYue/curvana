@@ -49,3 +49,8 @@ deflection_plot(test,split_curves_by = 'date',group_curves_by = 'bacteria',
 x = test@rawCurves$`180424_fc_mica_loc1.001`$Calc_Ramp_Ex_nm
 y = test@rawCurves$`180424_fc_mica_loc1.001`$Defl_V_Ex
 calc_sensitivity(end = 200,intv = 4,x = x,y = y)
+
+
+# test: analyze_sensitivity
+test = analyze_sensitivity(test,useCurve = 'approach',threads = 1)
+test = analyze_sensitivity(test,useCurve = 'approach',threads = 2)
