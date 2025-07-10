@@ -72,3 +72,6 @@ test = analyze_baseline(test,useCurve = 'approach',least_length = 100,threads = 
 test@metadata
 test@baseline_segment$approach
 test@baseline_segment$retract
+test = analyze_baseline(test,useCurve = 'retract',least_length = 100,threads = 2)
+test@metadata
+test@baseline_segment$retract
