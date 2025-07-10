@@ -153,3 +153,168 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach
   return(fdObj)
 }
 
+#' Identify Baseline Segment in AFM Raw Force-Distance Curve
+#'
+#' This function identifies a flat, noise-stable baseline segment at the end of an AFM (Atomic Force Microscopy)
+#' raw force-distance curve. It applies a linear regression on a trailing window to determine if the segment is
+#' sufficiently flat and stable to be considered a baseline.
+#'
+#' @param x Numeric vector. Distance values (e.g., piezo positions or z-sensor values).
+#' @param y Numeric vector. Deflection values (e.g., in volts).
+#' @param least_length Integer. Minimum number of points in the baseline segment.
+#' @param sensitivity Numeric. Scaling factor for the deflection signal (e.g., detector sensitivity in V/nm or V/nN).
+#' @param slp_threshold Numeric. Maximum absolute slope for the segment to be considered flat (default: 0.001).
+#' @param std_threshold Numeric. Maximum standard error of the slope (default: 0.005).
+#'
+#' @return A list with two elements:
+#' \describe{
+#'   \item{baseline}{Numeric. The estimated baseline deflection value (in original units), or \code{NULL} if no valid segment is found.}
+#'   \item{segment}{Data frame with \code{x} and \code{y} columns representing the detected baseline segment, or \code{NULL} if not found.}
+#' }
+#'
+#' @details
+#' The function assumes the baseline occurs toward the tail end of the curve (typically during the retract phase).
+#' It is often used prior to baseline correction or contact point determination in AFM force curve analysis.
+#'
+#' @examples
+#' # Simulated flat tail data
+#' x <- 1:1000
+#' y <- c(rnorm(980, 0.1, 0.05), rnorm(20, 0, 0.002))  # flat tail
+#' result <- find_baseline(least_length = 15, sensitivity = 1, x = x, y = y)
+#' print(result$baseline)
+#' plot(x, y, type = "l"); lines(result$segment, col = "red", lwd = 2)
+#'
+#' @export
+find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001, std_threshold = 0.005) {
+  if (length(x) < least_length + 1 || length(y) != length(x)) {
+    warning("Insufficient data or mismatched x and y lengths.")
+    return(list(baseline = NULL, segment = NULL))
+  }
+
+  # Scale y by sensitivity
+  y_sens_crct <- y / sensitivity
+
+  # Select the tail segment
+  window_x <- tail(x, least_length + 1)[-1]
+  window_y <- tail(y_sens_crct, least_length + 1)[-1]
+
+  # Linear regression
+  model <- lm(window_y ~ window_x)
+  slope <- coef(model)[["window_x"]]
+  std_err <- summary(model)$coefficients["window_x", "Std. Error"]
+
+  if (abs(slope) < slp_threshold && std_err < std_threshold) {
+    base_y <- window_y * sensitivity
+    baseline <- mean(base_y)
+    segment <- data.frame(x = window_x, y = base_y)
+    return(list(baseline = baseline, segment = segment))
+  } else {
+    return(list(baseline = NULL, segment = NULL))
+  }
+}
+
+#' Analyze Baseline from AFM Raw Curves in an fdObj
+#'
+#' Identifies baseline segments in AFM raw force-distance curves using pre-calculated sensitivity values,
+#' and stores baseline values and segments in the fdObj.
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param least_length Integer. Minimum number of points in the baseline segment.
+#' @param useCurve Character. Either "approach" or "retract" to specify which raw curve to use.
+#' @param slp_threshold Numeric. Maximum absolute slope allowed for baseline detection (default = 0.001).
+#' @param std_threshold Numeric. Maximum standard error of the slope (default = 0.005).
+#' @param threads Integer. Number of parallel threads to use (default = 1).
+#'
+#' @return An updated \code{fdObj} with baseline values in the metadata column \code{baseline_nm} and baseline segments in \code{baseline_segment}.
+#' @export
+analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
+                             slp_threshold = 0.001, std_threshold = 0.005,
+                             threads = 1) {
+  if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
+  if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
+
+  # Set column names based on approach/retract
+  if (useCurve == "approach") {
+    x_col <- "Calc_Ramp_Ex_nm"
+    y_col <- "Defl_V_Ex"
+    empty_seg <- data.frame(Calc_Ramp_Ex_nm = numeric(0), Defl_V_Ex = numeric(0))
+  } else {
+    x_col <- "Calc_Ramp_Rt_nm"
+    y_col <- "Defl_V_Rt"
+    empty_seg <- data.frame(Calc_Ramp_Rt_nm = numeric(0), Defl_V_Rt = numeric(0))
+  }
+
+  raw_list <- fdObj@rawCurves
+  curve_names <- names(raw_list)
+  sensitivity_vec <- fdObj@metadata$sensitivity
+  names(sensitivity_vec) <- rownames(fdObj@metadata)
+
+  if (is.null(sensitivity_vec)) stop("No sensitivity values found in metadata.")
+
+  find_result_for_curve <- function(name) {
+    df <- raw_list[[name]]
+    sensitivity <- sensitivity_vec[name]
+
+    if (is.na(sensitivity) || !(x_col %in% names(df)) || !(y_col %in% names(df))) {
+      return(list(baseline = NA_real_, segment = empty_seg))
+    }
+
+    x <- df[[x_col]]
+    y <- df[[y_col]]
+    res <- find_baseline(
+      x = x,
+      y = y,
+      least_length = least_length,
+      sensitivity = sensitivity,
+      slp_threshold = slp_threshold,
+      std_threshold = std_threshold
+    )
+    baseline <- res$baseline
+    seg <- if (!is.null(res$segment)) {
+      colnames(res$segment) <- c(x_col, y_col)
+      res$segment
+    } else {
+      empty_seg
+    }
+
+    list(baseline = baseline, segment = seg)
+  }
+
+  # Apply in parallel or sequentially
+  if (threads > 1) {
+    future::plan(future::multisession, workers = threads)
+    results <- future.apply::future_lapply(
+      curve_names,
+      find_result_for_curve,
+      future.globals = list(
+        find_result_for_curve = find_result_for_curve,
+        find_baseline = find_baseline,
+        raw_list = raw_list,
+        sensitivity_vec = sensitivity_vec,
+        x_col = x_col,
+        y_col = y_col,
+        empty_seg = empty_seg,
+        least_length = least_length,
+        slp_threshold = slp_threshold,
+        std_threshold = std_threshold
+      )
+    )
+  } else {
+    results <- lapply(curve_names, find_result_for_curve)
+  }
+
+  # Extract results
+  baseline_values <- sapply(results, function(r) if (is.null(r$baseline)) NA_real_ else r$baseline)
+  baseline_segments <- lapply(results, function(r) r$segment)
+  names(baseline_segments) <- curve_names
+
+  # Update fdObj
+  if(useCurve == 'approach') fdObj@metadata$baseline_nm_approach <- baseline_values else fdObj@metadata$baseline_nm_retract <- baseline_values
+  fdObj@baseline_segment[[useCurve]] <- baseline_segments
+
+  # Summary
+  n_fail <- sum(is.na(baseline_values))
+  message(sprintf("Processed %d curves; %d failed baseline detection.", length(curve_names), n_fail))
+
+  return(fdObj)
+}

@@ -53,4 +53,22 @@ calc_sensitivity(end = 200,intv = 4,x = x,y = y)
 
 # test: analyze_sensitivity
 test = analyze_sensitivity(test,useCurve = 'approach',threads = 1)
-test = analyze_sensitivity(test,useCurve = 'approach',threads = 2)
+test = analyze_sensitivity(test,useCurve = 'approach',threads = 10)
+
+# test: find_baseline
+x = test@rawCurves$`180424_fc_mica_loc1.001`$Calc_Ramp_Ex_nm
+y = test@rawCurves$`180424_fc_mica_loc1.001`$Defl_V_Ex
+sens = calc_sensitivity(end = 200,intv = 4,x = x,y = y)$sensitivity
+
+tmp = find_baseline(x = x, y = y, least_length = 150, sensitivity = sens,slp_threshold = 0.001,std_threshold = 0.005)
+tmp$segment
+tmp$baseline
+
+# test: analyze_baseline
+tmp2 = extract(test,by_sample = '180424_fc_mica_loc1.001')
+tmp2 = analyze_baseline(tmp2,useCurve = 'approach',least_length = 150)
+
+test = analyze_baseline(test,useCurve = 'approach',least_length = 100,threads = 2)
+test@metadata
+test@baseline_segment$approach
+test@baseline_segment$retract
