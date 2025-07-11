@@ -75,3 +75,32 @@ test@baseline_segment$retract
 test = analyze_baseline(test,useCurve = 'retract',least_length = 100,threads = 2)
 test@metadata
 test@baseline_segment$retract
+
+# test: transform_a_curve
+x = test@rawCurves$`180424_fc_mica_loc1.001`$Calc_Ramp_Ex_nm
+y = test@rawCurves$`180424_fc_mica_loc1.001`$Defl_V_Ex
+baseline = test@metadata['180424_fc_mica_loc1.001', 'baseline_nm_approach']
+sens.res = calc_sensitivity(end = 200,intv = 4,x = x,y = y)
+sensitivity = sens.res$sensitivity
+senscal_seg_x = sens.res$senscal_segment$x
+senscal_seg_y = sens.res$senscal_segment$y
+curve.fd = transform_a_curve(x = x, y= y, baseline = baseline, sensitivity = sensitivity,
+                             spring_constant = 0.3188, senscal_seg_x = senscal_seg_x,
+                             senscal_seg_y = senscal_seg_y)
+ggplot(curve.fd, aes(x = separation_distance_nm, y = force_nN)) +
+  geom_point(size = 1, alpha = 1) +
+  labs(x = "Distance (nm)", y = "Force (nN)")
+
+test = analyze_sensitivity(test,useCurve = 'retract')
+x = test@rawCurves$`180424_fv_pmon2_loc1-18-22.spm`$Calc_Ramp_Rt_nm
+y = test@rawCurves$`180424_fv_pmon2_loc1-18-22.spm`$Defl_V_Rt
+baseline = test@metadata['180424_fv_pmon2_loc1-18-22.spm', 'baseline_nm_retract']
+sensitivity = test@metadata['180424_fv_pmon2_loc1-18-22.spm', 'sensitivity']
+senscal_seg_x = test@senscal_segment$retract$`180424_fv_pmon2_loc1-18-22.spm`$Calc_Ramp_Rt_nm
+senscal_seg_y = test@senscal_segment$retract$`180424_fv_pmon2_loc1-18-22.spm`$Defl_V_Rt
+curve.fd = transform_a_curve(x = x, y= y, baseline = baseline, sensitivity = sensitivity,
+                             spring_constant = 0.3188, senscal_seg_x = senscal_seg_x,
+                             senscal_seg_y = senscal_seg_y)
+ggplot(curve.fd, aes(x = separation_distance_nm, y = force_nN)) +
+  geom_point(size = 1, alpha = 1) +
+  labs(x = "Distance (nm)", y = "Force (nN)")

@@ -318,3 +318,50 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 
   return(fdObj)
 }
+
+#' Transform a Single AFM Curve into Separation Distance and Force
+#'
+#' Converts raw AFM deflection and piezo data into calibrated separation distance and force.
+#' The zero-separation position is estimated from the sensitivity calibration segment.
+#'
+#' @param x Numeric vector. Piezo position (distance) in nm.
+#' @param y Numeric vector. Deflection signal in volts.
+#' @param baseline Numeric. The deflection baseline (in volts).
+#' @param sensitivity Numeric. Sensitivity in V/nm.
+#' @param spring_constant Numeric. Spring constant in nN/nm.
+#' @param senscal_seg_x Numeric vector. X-values of the sensitivity calibration segment.
+#' @param senscal_seg_y Numeric vector. Y-values of the sensitivity calibration segment (in volts).
+#'
+#' @return A data.frame with:
+#' \describe{
+#'   \item{separation_distance_nm}{Tip-sample separation (nm).}
+#'   \item{force_nN}{Force (nN).}
+#' }
+#' @export
+transform_a_curve <- function(x, y,
+                              baseline, sensitivity, spring_constant,
+                              senscal_seg_x, senscal_seg_y) {
+  if (length(x) != length(y)) stop("x and y must be the same length.")
+  if (length(senscal_seg_x) != length(senscal_seg_y)) stop("senscal_seg_x and senscal_seg_y must be the same length.")
+
+  # Correct deflection
+  new_defl_v <- y - baseline
+  new_defl_length_nm <- new_defl_v / sensitivity
+  force_nN <- new_defl_length_nm * spring_constant
+
+  # Estimate contact point using sensitivity calibration segment
+  y_sens_norm <- (senscal_seg_y - baseline) / sensitivity
+  model <- lm(senscal_seg_x ~ y_sens_norm)
+  x_zero_position <- coef(model)["(Intercept)"]
+
+  # Shift piezo to new z-position
+  new_z_nm <- x - x_zero_position
+
+  # Calculate separation distance
+  separation_distance_nm <- new_z_nm + new_defl_v / sensitivity
+
+  return(data.frame(
+    separation_distance_nm = separation_distance_nm,
+    force_nN = force_nN
+  ))
+}
