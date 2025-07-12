@@ -140,7 +140,12 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach
   names(segments) <- curve_names
 
   # Update metadata
-  fdObj@metadata$sensitivity <- sensitivity_values
+  if (useCurve == 'approach'){
+    fdObj@metadata$sensitivity_V_nm_approach <- sensitivity_values
+  } else {
+    fdObj@metadata$sensitivity_V_nm_retract <- sensitivity_values
+    }
+
 
   # Update senscal_segment slot
   fdObj@senscal_segment[[useCurve]] <- segments
@@ -233,20 +238,21 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
   if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
 
-  # Set column names based on approach/retract
+  # Set column names based on approach/retract; select the corresponding sensitivity value
   if (useCurve == "approach") {
     x_col <- "Calc_Ramp_Ex_nm"
     y_col <- "Defl_V_Ex"
     empty_seg <- data.frame(Calc_Ramp_Ex_nm = numeric(0), Defl_V_Ex = numeric(0))
+    sensitivity_vec <- fdObj@metadata$sensitivity_V_nm_approach
   } else {
     x_col <- "Calc_Ramp_Rt_nm"
     y_col <- "Defl_V_Rt"
     empty_seg <- data.frame(Calc_Ramp_Rt_nm = numeric(0), Defl_V_Rt = numeric(0))
+    sensitivity_vec <- fdObj@metadata$sensitivity_V_nm_retract
   }
 
   raw_list <- fdObj@rawCurves
   curve_names <- names(raw_list)
-  sensitivity_vec <- fdObj@metadata$sensitivity
   names(sensitivity_vec) <- rownames(fdObj@metadata)
 
   if (is.null(sensitivity_vec)) stop("No sensitivity values found in metadata.")
@@ -337,6 +343,7 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 #'   \item{separation_distance_nm}{Tip-sample separation (nm).}
 #'   \item{force_nN}{Force (nN).}
 #' }
+#' If any of the input is NULL, an empty dataframe will be returned
 #' @export
 transform_a_curve <- function(x, y,
                               baseline, sensitivity, spring_constant,
@@ -344,6 +351,12 @@ transform_a_curve <- function(x, y,
   if (length(x) != length(y)) stop("x and y must be the same length.")
   if (length(senscal_seg_x) != length(senscal_seg_y)) stop("senscal_seg_x and senscal_seg_y must be the same length.")
 
+  if(is.na(baseline) || is.na(sensitivity) || is.null(senscal_seg_x) || is.null(senscal_seg_y)){
+    return(data.frame(
+      separation_distance_nm = numeric(0),
+      force_nN = numeric(0)
+    ))
+  }
   # Correct deflection
   new_defl_v <- y - baseline
   new_defl_length_nm <- new_defl_v / sensitivity
@@ -365,3 +378,91 @@ transform_a_curve <- function(x, y,
     force_nN = force_nN
   ))
 }
+
+
+#' Transform All Curves in an fdObj into Separation Distance and Force
+#'
+#' Applies `transform_a_curve()` to all raw curves in an fdObj object.
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param spring_constant Numeric. Spring constant in nN/nm.
+#' @param useCurve Character. Either "approach" or "retract".
+#' @param threads Integer. Number of parallel threads to use (default = 1).
+#'
+#' @return An updated \code{fdObj} with transformed curves stored in the corresponding slot.
+#' @export
+transform_curves <- function(fdObj, spring_constant, useCurve = "approach", threads = 1) {
+  if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
+  if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
+
+  # Set column names based on approach/retract
+  if (useCurve == "approach") {
+    x_col <- "Calc_Ramp_Ex_nm"
+    y_col <- "Defl_V_Ex"
+  } else {
+    x_col <- "Calc_Ramp_Rt_nm"
+    y_col <- "Defl_V_Rt"
+  }
+
+  raw_list <- fdObj@rawCurves
+  curve_names <- names(raw_list)
+
+  # Extract relevant metadata
+  sensitivity_vec <- fdObj@metadata[[paste0("sensitivity_V_nm_", useCurve)]]
+  baseline_vec <- fdObj@metadata[[paste0("baseline_nm_", useCurve)]]
+  senscal_segment <- fdObj@senscal_segment[[useCurve]]
+
+  names(sensitivity_vec) <- rownames(fdObj@metadata)
+  names(baseline_vec) <- rownames(fdObj@metadata)
+
+  transform_one <- function(name) {
+    df <- raw_list[[name]]
+    if (!(x_col %in% colnames(df)) || !(y_col %in% colnames(df))) {
+      return(data.frame(separation_distance_nm = numeric(0), force_nN = numeric(0)))
+    }
+
+    x <- df[[x_col]]
+    y <- df[[y_col]]
+    baseline <- baseline_vec[name]
+    sensitivity <- sensitivity_vec[name]
+    senscal_seg <- senscal_segment[[name]]
+
+    if (is.na(baseline) || is.na(sensitivity) || is.null(senscal_seg)) {
+      return(data.frame(separation_distance_nm = numeric(0), force_nN = numeric(0)))
+    } else {
+      transform_a_curve(
+        x = x,
+        y = y,
+        baseline = baseline,
+        sensitivity = sensitivity,
+        spring_constant = spring_constant,
+        senscal_seg_x = senscal_seg[[1]],
+        senscal_seg_y = senscal_seg[[2]]
+      )
+    }
+
+
+  }
+
+  if (threads > 1) {
+    future::plan(future::multisession, workers = threads)
+    results <- future.apply::future_lapply(curve_names, transform_one)
+  } else {
+    results <- lapply(curve_names, transform_one)
+  }
+
+  names(results) <- curve_names
+
+  n_fail <- sum(sapply(results, nrow) == 0)
+  message(sprintf("Processed %d curves; %d failed transformation.", length(curve_names), n_fail))
+
+  # Save results to fdObj
+  if (useCurve == "approach") {
+    fdObj@approachCurves <- results
+  } else {
+    fdObj@retractCurves <- results
+  }
+
+  return(fdObj)
+}
+

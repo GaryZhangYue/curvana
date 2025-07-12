@@ -1,14 +1,14 @@
 library(dplyr)
 # initalize
 # Install devtools if not already
-install.packages("devtools")
+#install.packages("devtools")
 
 # Load devtools
 library(devtools)
 
 # Install all dependencies and load the package
-devtools::install(dependencies = TRUE)
-devtools::load_all()
+# devtools::install(dependencies = TRUE)
+# devtools::load_all()
 
 # Load necessary libraries
 library(dplyr)
@@ -53,6 +53,7 @@ calc_sensitivity(end = 200,intv = 4,x = x,y = y)
 
 # test: analyze_sensitivity
 test = analyze_sensitivity(test,useCurve = 'approach',threads = 1)
+test = analyze_sensitivity(test,useCurve = 'retract',threads = 1)
 test = analyze_sensitivity(test,useCurve = 'approach',threads = 10)
 
 # test: find_baseline
@@ -67,8 +68,10 @@ tmp$baseline
 # test: analyze_baseline
 tmp2 = extract(test,by_sample = '180424_fc_mica_loc1.001')
 tmp2 = analyze_baseline(tmp2,useCurve = 'approach',least_length = 150)
-
+tmp2 = analyze_baseline(tmp2,useCurve = 'retract',least_length = 150)
 test = analyze_baseline(test,useCurve = 'approach',least_length = 100,threads = 2)
+test = analyze_baseline(test,useCurve = 'retract',least_length = 100,threads = 2)
+
 test@metadata
 test@baseline_segment$approach
 test@baseline_segment$retract
@@ -91,11 +94,11 @@ ggplot(curve.fd, aes(x = separation_distance_nm, y = force_nN)) +
   geom_point(size = 1, alpha = 1) +
   labs(x = "Distance (nm)", y = "Force (nN)")
 
-test = analyze_sensitivity(test,useCurve = 'retract')
+test@metadata
 x = test@rawCurves$`180424_fv_pmon2_loc1-18-22.spm`$Calc_Ramp_Rt_nm
 y = test@rawCurves$`180424_fv_pmon2_loc1-18-22.spm`$Defl_V_Rt
 baseline = test@metadata['180424_fv_pmon2_loc1-18-22.spm', 'baseline_nm_retract']
-sensitivity = test@metadata['180424_fv_pmon2_loc1-18-22.spm', 'sensitivity']
+sensitivity = test@metadata['180424_fv_pmon2_loc1-18-22.spm', 'sensitivity_V_nm_retract']
 senscal_seg_x = test@senscal_segment$retract$`180424_fv_pmon2_loc1-18-22.spm`$Calc_Ramp_Rt_nm
 senscal_seg_y = test@senscal_segment$retract$`180424_fv_pmon2_loc1-18-22.spm`$Defl_V_Rt
 curve.fd = transform_a_curve(x = x, y= y, baseline = baseline, sensitivity = sensitivity,
@@ -104,3 +107,6 @@ curve.fd = transform_a_curve(x = x, y= y, baseline = baseline, sensitivity = sen
 ggplot(curve.fd, aes(x = separation_distance_nm, y = force_nN)) +
   geom_point(size = 1, alpha = 1) +
   labs(x = "Distance (nm)", y = "Force (nN)")
+
+# test: transform_curves
+test = transform_curves(test,spring_constant = 0.3188,useCurve = 'approach',threads = 1)
