@@ -110,3 +110,16 @@ ggplot(curve.fd, aes(x = separation_distance_nm, y = force_nN)) +
 
 # test: transform_curves
 test = transform_curves(test,spring_constant = 0.3188,useCurve = 'approach',threads = 1)
+test@approachCurves
+
+ggplot(test@approachCurves[[2]], aes(x = separation_distance_nm, y = force_nN)) +
+  geom_point(size = 1, alpha = 1) +
+  labs(x = "Distance (nm)", y = "Force (nN)")
+
+test = transform_curves(test,spring_constant = 0.3188,useCurve = 'retract',threads = 1)
+test@retractCurves
+
+ggplot(test@retractCurves[[5]], aes(x = separation_distance_nm, y = force_nN)) +
+  geom_point(size = 1, alpha = 1) +
+  labs(x = "Distance (nm)", y = "Force (nN)")
+
