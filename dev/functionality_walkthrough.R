@@ -148,15 +148,23 @@ plot_fd_curves(test,split_curves_by = 'date',group_curves_by = 'bacteria',
                                         sc = 'orange',
                                         mica = 'lightblue'))
 
-plot_deflection_curves(test,curve = 'approach', split_curves_by = 'date',group_curves_by = 'bacteria',
+plot_fd_curves(test,curve = 'approach', split_curves_by = 'date',group_curves_by = 'bacteria',
                        alpha = 0.3,point_size = 0.5,
                        color_map = list(`paeru` = 'darkred',
                                         `pmon2` = 'blue',
                                         sc = 'orange',
                                         mica = 'lightblue'))
-plot_deflection_curves(test,curve = 'retract', split_curves_by = 'date',group_curves_by = 'bacteria',
+plot_fd_curves(test,curve = 'retract', split_curves_by = 'date',group_curves_by = 'bacteria',
                        alpha = 0.3,point_size = 0.5,
                        color_map = list(`paeru` = 'darkred',
                                         `pmon2` = 'blue',
                                         sc = 'orange',
                                         mica = 'lightblue'))
+
+test2 = extract(test,by_col = list(bacteria = 'paeru'))
+plot_fd_curves(test2,split_curves_by = 'bacteria',group_curves_by = 'bacteria',
+               alpha = 0.3,point_size = 0.5,
+               color_map = list(`paeru` = 'darkred',
+                                `pmon2` = 'blue',
+                                sc = 'orange',
+                                mica = 'lightblue'))
