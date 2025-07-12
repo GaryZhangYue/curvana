@@ -32,19 +32,31 @@ test.combine.1 = combineFdObj(test.paeru,test.pmon)
 test.combine.1@metadata
 test.combine.2 = combineFdObj(test.paeru,test.paeru2) # should return error
 
-# test: deflection_plot
-deflection_plot(test,split_curves_by = 'bacteria')
-deflection_plot(test,split_curves_by = 'bacteria',group_curves_by = 'date',
+# test: plot_deflection_curves
+plot_deflection_curves(test,split_curves_by = 'bacteria')
+plot_deflection_curves(test,split_curves_by = 'bacteria',group_curves_by = 'date',
                 alpha = 0.05,point_size = 0.5,
                 color_map = list(`180424` = 'darkred',
                                  `180425` = 'blue'))
-deflection_plot(test,split_curves_by = 'date',group_curves_by = 'bacteria',
+plot_deflection_curves(test,split_curves_by = 'date',group_curves_by = 'bacteria',
                 alpha = 0.3,point_size = 0.5,
                 color_map = list(`paeru` = 'darkred',
                                  `pmon2` = 'blue',
                                  sc = 'orange',
                                  mica = 'lightblue'))
 
+plot_deflection_curves(test,curve = 'approach', split_curves_by = 'date',group_curves_by = 'bacteria',
+                       alpha = 0.3,point_size = 0.5,
+                       color_map = list(`paeru` = 'darkred',
+                                        `pmon2` = 'blue',
+                                        sc = 'orange',
+                                        mica = 'lightblue'))
+plot_deflection_curves(test,curve = 'retract', split_curves_by = 'date',group_curves_by = 'bacteria',
+                       alpha = 0.3,point_size = 0.5,
+                       color_map = list(`paeru` = 'darkred',
+                                        `pmon2` = 'blue',
+                                        sc = 'orange',
+                                        mica = 'lightblue'))
 # test: calc_sensitivity
 x = test@rawCurves$`180424_fc_mica_loc1.001`$Calc_Ramp_Ex_nm
 y = test@rawCurves$`180424_fc_mica_loc1.001`$Defl_V_Ex
@@ -123,3 +135,28 @@ ggplot(test@retractCurves[[5]], aes(x = separation_distance_nm, y = force_nN)) +
   geom_point(size = 1, alpha = 1) +
   labs(x = "Distance (nm)", y = "Force (nN)")
 
+# test: plot_fd_curves
+plot_fd_curves(test,split_curves_by = 'bacteria')
+plot_fd_curves(test,split_curves_by = 'bacteria',group_curves_by = 'date',
+                       alpha = 0.05,point_size = 0.5,
+                       color_map = list(`180424` = 'darkred',
+                                        `180425` = 'blue'))
+plot_fd_curves(test,split_curves_by = 'date',group_curves_by = 'bacteria',
+                       alpha = 0.3,point_size = 0.5,
+                       color_map = list(`paeru` = 'darkred',
+                                        `pmon2` = 'blue',
+                                        sc = 'orange',
+                                        mica = 'lightblue'))
+
+plot_deflection_curves(test,curve = 'approach', split_curves_by = 'date',group_curves_by = 'bacteria',
+                       alpha = 0.3,point_size = 0.5,
+                       color_map = list(`paeru` = 'darkred',
+                                        `pmon2` = 'blue',
+                                        sc = 'orange',
+                                        mica = 'lightblue'))
+plot_deflection_curves(test,curve = 'retract', split_curves_by = 'date',group_curves_by = 'bacteria',
+                       alpha = 0.3,point_size = 0.5,
+                       color_map = list(`paeru` = 'darkred',
+                                        `pmon2` = 'blue',
+                                        sc = 'orange',
+                                        mica = 'lightblue'))
