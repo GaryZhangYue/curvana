@@ -2,10 +2,11 @@
 % Please edit documentation in R/utils.R
 \name{plot_deflection_curves}
 \alias{plot_deflection_curves}
-\title{Plot deflection vs distance from rawCurves slot of fdObj}
+\title{Plot raw deflection vs piezo distance from rawCurves slot of fdObj}
 \usage{
 plot_deflection_curves(
-  obj,
+  fdobj,
+  curve = c("both", "approach", "retract"),
   group_curves_by = NULL,
   split_curves_by = NULL,
   point_size = 0.5,
@@ -14,7 +15,9 @@ plot_deflection_curves(
 )
 }
 \arguments{
-\item{obj}{A `fdObj` object}
+\item{fdobj}{A `fdObj` object}
+
+\item{curve}{Which segment(s) to plot: "approach", "retract", or "both"}
 
 \item{group_curves_by}{Metadata column to color by (optional)}
 
@@ -25,12 +28,10 @@ plot_deflection_curves(
 \item{alpha}{Transparency of points (default = 0.6)}
 
 \item{color_map}{Named vector of colors (optional)}
-
-\item{...}{Additional ggplot2 layers or options}
 }
 \value{
-A ggplot2 object of the scatter plots showing the change of deflection across piezo movement distance. The retraction and extension segments will be plotted in two separate panels.
+A ggplot2 object of the scatter plots showing raw deflection signal.
 }
 \description{
-Plot deflection vs distance from rawCurves slot of fdObj
+Plot raw deflection vs piezo distance from rawCurves slot of fdObj
 }
