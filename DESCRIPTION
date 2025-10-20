@@ -3,7 +3,8 @@ Type: Package
 Title: Tools to Analyze AFM Force–Distance Curves
 Version: 0.1.0
 Authors@R: c(
-    person("Yue", "Zhang", email = "yuezh2017@gmail.com", role = c("aut","cre")),
+    person("Yue", "Zhang", email = "yuezh2017@gmail.com", role = c("aut","cre"))
+    )
 Description: An all-in-one R package to read, manage, and analyze 
     atomic force microscopy (AFM) force–distance curves, with support 
     for parallel processing and user-supplied metadata.

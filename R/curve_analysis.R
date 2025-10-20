@@ -112,7 +112,7 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach
       x <- df[[x_col]]
       y <- df[[y_col]]
       calc_sensitivity(end = end, intv = intv, x = x, y = y)
-    }, future.globals = list(calc_sensitivity = calc_sensitivity))
+    },future.packages = "curvana")
   } else {
     results <- lapply(curve_names, function(name) {
       df <- raw_list[[name]]
@@ -466,3 +466,148 @@ transform_curves <- function(fdObj, spring_constant, useCurve = "approach", thre
   return(fdObj)
 }
 
+#' Adhesive Force for a Single Transformed AFM Curve
+#'
+#' Computes the adhesive force as the most negative force value in a transformed curve
+#' and returns that value along with the separation distance at which it occurs.
+#'
+#' @param curve_df A data.frame with columns:
+#'   \itemize{
+#'     \item{\code{separation_distance_nm}}{Numeric tip-sample separation (nm).}
+#'     \item{\code{force_nN}}{Numeric force (nN).}
+#'   }
+#'
+#' @return A named numeric vector of length 2:
+#' \describe{
+#'   \item{adhesive_force_nN}{The most negative (minimum) force value in nN.}
+#'   \item{separation_distance_nm}{The separation distance (nm) at which the adhesive force occurs.}
+#' }
+#' If no negative force exists (i.e., all forces are \eqn{\ge} 0) or inputs are invalid,
+#' returns \code{c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_)}.
+#'
+#' @examples
+#' df <- data.frame(
+#'   separation_distance_nm = seq(-50, 200, by = 1),
+#'   force_nN = 0.02 * seq(-50, 200, by = 1) + c(rep(0, 80), -3, rep(0, 171))
+#' )
+#' analyze_a_curve_adhesive_force(df)
+#'
+#' @export
+analyze_a_curve_adhesive_force <- function(curve_df) {
+  # Basic validation
+  if (!is.data.frame(curve_df) ||
+      !all(c("separation_distance_nm", "force_nN") %in% names(curve_df))) {
+    return(c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_))
+  }
+
+  # Coerce to numeric and drop NAs
+  sep <- suppressWarnings(as.numeric(curve_df$separation_distance_nm))
+  frc <- suppressWarnings(as.numeric(curve_df$force_nN))
+  ok  <- is.finite(sep) & is.finite(frc)
+
+  if (!any(ok)) {
+    return(c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_))
+  }
+
+  sep <- sep[ok]; frc <- frc[ok]
+
+  # Identify the most negative force (adhesion dip)
+  idx_min <- which.min(frc)
+  min_force <- frc[idx_min]
+
+  # Require negativity to report adhesion (common convention)
+  if (!(is.finite(min_force) && min_force < 0)) {
+    return(c(adhesive_force_nN = 0, separation_distance_nm = NA_real_))
+  }
+
+  c(adhesive_force_nN = unname(min_force),
+    separation_distance_nm = unname(sep[idx_min]))
+}
+
+
+#' Adhesive Force for All Transformed Curves in an fdObj
+#'
+#' Applies \code{analyze_a_curve_adhesive_force()} to each transformed curve in an \code{fdObj}
+#' and stores results in metadata:
+#' \itemize{
+#'   \item \code{adhesive_force_nN_<dir>}
+#'   \item \code{adhesive_sep_nm_<dir>}
+#' }
+#'
+#' Where \code{<dir>} is "approach" or "retract".
+#'
+#' Behavior:
+#' \itemize{
+#'   \item If a curve is present and valid but has no negative force, force = 0 and sep = NA.
+#'   \item If a curve cannot be analyzed at all (missing/invalid transformed data), both are NA.
+#' }
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param useCurve Character. Either "approach" or "retract" (default "retract").
+#' @param threads Integer. Number of parallel workers (default 1).
+#'
+#' @return The updated \code{fdObj}.
+#' @export
+analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads = 1) {
+  if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
+  if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
+
+  curve_list <- if (useCurve == "approach") fdObj@approachCurves else fdObj@retractCurves
+  dir_tag <- if (useCurve == "approach") "approach" else "retract"
+
+  # If no transformed curves are present, create NA columns and exit
+  if (is.null(curve_list) || length(curve_list) == 0) {
+    warning("No transformed curves found for the selected direction. Did you run transform_curves()?")
+
+    fdObj@metadata[[paste0("adhesive_force_nN_", dir_tag)]] <- NA_real_
+    fdObj@metadata[[paste0("adhesive_sep_nm_",  dir_tag)]] <- NA_real_
+    return(fdObj)
+  }
+
+  curve_names <- names(curve_list)
+
+  run_one <- function(id) {
+    df <- curve_list[[id]]
+    # If curve not analyzable at all, return NA/NA to distinguish from "no adhesion" (0/NA)
+    if (!is.data.frame(df) ||
+        !all(c("separation_distance_nm", "force_nN") %in% names(df)) ||
+        nrow(df) == 0) {
+      return(c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_))
+    }
+    analyze_a_curve_adhesive_force(df)
+  }
+
+  res_list <- if (threads > 1) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = threads)
+    future.apply::future_lapply(curve_names, run_one)
+  } else {
+    lapply(curve_names, run_one)
+  }
+
+  # Bind results and align to metadata order
+  res_mat <- do.call(rbind, res_list) %>% as.data.frame(., stringsAsFactors = FALSE)
+  rownames(res_mat) <- curve_names
+
+  # Match metadata rows to result rows
+  fdObj@metadata[[paste0("adhesive_force_nN_", dir_tag)]] <-
+    res_mat$adhesive_force_nN[match(rownames(fdObj@metadata), rownames(res_mat))]
+
+  fdObj@metadata[[paste0("adhesive_sep_nm_", dir_tag)]] <-
+    res_mat$separation_distance_nm[match(rownames(fdObj@metadata), rownames(res_mat))]
+
+  # Reporting
+  forces <- fdObj@metadata[[paste0("adhesive_force_nN_", dir_tag)]]
+  n_total   <- length(curve_list)
+  n_na      <- sum(is.na(forces))
+  n_zero    <- sum(!is.na(forces) & forces == 0)
+  n_detect  <- sum(!is.na(forces) & forces < 0)
+
+  message(sprintf(
+    "Adhesive force analyzed for %d curves: %d with adhesion (negative), %d with no adhesion (0), %d not analyzed (NA).",
+    n_total, n_detect, n_zero, n_na
+  ))
+
+  fdObj
+}
