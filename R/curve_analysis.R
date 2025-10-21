@@ -230,7 +230,7 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001
 #' @param std_threshold Numeric. Maximum standard error of the slope (default = 0.005).
 #' @param threads Integer. Number of parallel threads to use (default = 1).
 #'
-#' @return An updated \code{fdObj} with baseline values in the metadata column \code{baseline_nm} and baseline segments in \code{baseline_segment}.
+#' @return An updated \code{fdObj} with baseline values in the metadata column \code{baseline_V}, the minimum number of points in the baseline segment \code{baseline_span}, and baseline segments in \code{baseline_segment}.
 #' @export
 analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
                              slp_threshold = 0.001, std_threshold = 0.005,
@@ -310,12 +310,19 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
   }
 
   # Extract results
+  if (!all(names(results) == curve_names)) stop("the input and output order does not match")
   baseline_values <- sapply(results, function(r) if (is.null(r$baseline)) NA_real_ else r$baseline)
   baseline_segments <- lapply(results, function(r) r$segment)
   names(baseline_segments) <- curve_names
 
   # Update fdObj
-  if(useCurve == 'approach') fdObj@metadata$baseline_nm_approach <- baseline_values else fdObj@metadata$baseline_nm_retract <- baseline_values
+  if(useCurve == 'approach') {
+    fdObj@metadata$baseline_V_approach <- baseline_values
+    fdObj@metadata$baseline_span_approach <- least_length
+    } else {
+    fdObj@metadata$baseline_V_retract <- baseline_values
+    fdObj@metadata$baseline_span_retract <- least_length
+  }
   fdObj@baseline_segment[[useCurve]] <- baseline_segments
 
   # Summary
@@ -611,3 +618,6 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 
   fdObj
 }
+
+
+
