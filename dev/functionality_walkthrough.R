@@ -172,7 +172,37 @@ plot_fd_curves(test2,split_curves_by = 'bacteria',group_curves_by = 'bacteria',
                                 mica = 'lightblue'))
 
 
-# test analyze_a_curve_adhesive_force
+# test analyze_a_curve_adhesive_force -----------
 curve_df = test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
 analyze_a_curve_adhesive_force(curve_df)
+
+# test analyze_curves_adhesive_force ----------
 test = analyze_curves_adhesive_force(test,useCurve = 'retract',threads = 4)
+
+# test analyze_a_curve_interaction_distance ---------
+test_curve1 = test@approachCurves$`180424_fc_mica_loc1.001`
+test_curve1.repdis = analyze_a_curve_interaction_distance(curve_df = test_curve1,baseline_span = 100,sigma_multiplier = 3,direction = "positive")
+
+test_curve2 = test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
+test_curve2.repdis = analyze_a_curve_interaction_distance(curve_df = test_curve2,baseline_span = 100,sigma_multiplier = 10,direction = "positive")
+test_curve2.ruplen = analyze_a_curve_interaction_distance(curve_df = test_curve2,baseline_span = 100,sigma_multiplier = 10,direction = "negative")
+test_curve2.repdis
+test_curve2.ruplen
+
+# Extract values
+rupture_x   <- test_curve2.ruplen$distance
+repulsive_x <- test_curve2.repdis$distance
+
+# Plot
+ggplot(test_curve2, aes(x = separation_distance_nm, y = force_nN)) +
+  geom_line(color = "gray30") +
+  geom_vline(xintercept = rupture_x, color = "blue", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = repulsive_x, color = "red", linetype = "dotted", size = 1) +
+  labs(
+    title = "AFM Force–Distance Curve with Interaction Distances",
+    x = "Separation Distance (nm)",
+    y = "Force (nN)",
+    subtitle = sprintf("Rupture length = %.2f nm | Repulsive distance = %.2f nm",
+                       rupture_x, repulsive_x)
+  ) +
+  theme_bw(base_size = 14)

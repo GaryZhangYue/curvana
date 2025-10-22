@@ -619,5 +619,129 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
   fdObj
 }
 
+#' Analyze interaction distance from a single AFM curve (flexible thresholding)
+#'
+#' @description
+#' Scans backward from the baseline region to detect the first significant
+#' deviation in force, marking the rupture length (negative excursion) or
+#' repulsive distance (positive excursion). The cutoff can be based on SD, MAD,
+#' IQR, quantiles, absolute-quantiles, or a fixed value.
+#'
+#' @param curve_df data.frame with columns:
+#'   - separation_distance_nm (numeric): x values (distance, nm)
+#'   - force_nN (numeric): y values (force, nN)
+#' @param baseline_span Integer >= 1. Number of last points used as baseline.
+#' @param direction "negative" or "positive".
+#'   - "negative": find first y < -threshold (rupture-like)
+#'   - "positive": find first y > +threshold (repulsion-like)
+#' @param threshold_method One of
+#'   c("sd","mad","iqr","quantile","abs_quantile","fixed"). Default "sd".
+#'   - "sd":      threshold = multiplier * sd(baseline)
+#'   - "mad":     threshold = multiplier * (mad(baseline) * mad_constant)
+#'   - "iqr":     threshold = multiplier * IQR(baseline)
+#'   - "quantile": for "negative" use |quantile(baseline, probs = q_low)|,
+#'                 for "positive" use  quantile(baseline, probs = q_high)
+#'   - "abs_quantile": threshold = quantile(abs(baseline), probs = q_abs)
+#'   - "fixed":  threshold = fixed_threshold (in nN)
+#' @param multiplier Numeric >= 0 used by "sd", "mad", "iqr". Default 3.
+#' @param mad_constant Scaling for MAD to be SD-equivalent. Default 1.4826.
+#' @param q_low,q_high Quantiles for "quantile" method. Defaults: 0.01, 0.99.
+#' @param q_abs Quantile for "abs_quantile". Default 0.99.
+#' @param fixed_threshold Numeric (nN) for "fixed" method. Default NULL.
+#'
+#' @return list(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
+#' @export
+analyze_a_curve_interaction_distance <- function(
+    curve_df,
+    baseline_span,
+    direction = c("negative", "positive"),
+    threshold_method = c("sd","mad","iqr","quantile","abs_quantile","fixed"),
+    multiplier = 3,
+    mad_constant = 1.4826,
+    q_low = 0.01,
+    q_high = 0.99,
+    q_abs = 0.99,
+    fixed_threshold = NULL
+) {
+  direction <- match.arg(direction)
+  threshold_method <- match.arg(threshold_method)
 
+  # ---- validation ----
+  if (!is.data.frame(curve_df)) stop("curve_df must be a data.frame.")
+  if (!all(c("separation_distance_nm","force_nN") %in% names(curve_df))) {
+    stop("curve_df must contain 'separation_distance_nm' and 'force_nN'.")
+  }
+  n <- nrow(curve_df)
+  if (!is.numeric(baseline_span) || length(baseline_span) != 1 || baseline_span < 1) {
+    stop("baseline_span must be a single integer >= 1.")
+  }
+  baseline_span <- min(as.integer(baseline_span), n)
 
+  x <- curve_df$separation_distance_nm
+  y <- curve_df$force_nN
+
+  # ---- baseline window ----
+  b_start <- n - baseline_span + 1L
+  y_base  <- y[b_start:n]
+
+  # ---- compute threshold ----
+  compute_threshold <- function() {
+    # helper to guard tiny/NA
+    guard <- function(val) {
+      if (is.na(val) || val <= 0) .Machine$double.eps else val
+    }
+
+    if (threshold_method == "sd") {
+      sdv <- stats::sd(y_base, na.rm = TRUE)
+      return(multiplier * guard(sdv))
+    }
+    if (threshold_method == "mad") {
+      md <- stats::mad(y_base, constant = 1, na.rm = TRUE)  # raw MAD
+      return(multiplier * guard(md) * mad_constant)
+    }
+    if (threshold_method == "iqr") {
+      iq <- stats::IQR(y_base, na.rm = TRUE)
+      return(multiplier * guard(iq))
+    }
+    if (threshold_method == "quantile") {
+      if (direction == "negative") {
+        qv <- stats::quantile(y_base, probs = q_low, na.rm = TRUE, names = FALSE)
+        return(abs(guard(abs(qv)))) # ensure positive magnitude
+      } else {
+        qv <- stats::quantile(y_base, probs = q_high, na.rm = TRUE, names = FALSE)
+        return(guard(abs(qv)))
+      }
+    }
+    if (threshold_method == "abs_quantile") {
+      qv <- stats::quantile(abs(y_base), probs = q_abs, na.rm = TRUE, names = FALSE)
+      return(guard(qv))
+    }
+    if (threshold_method == "fixed") {
+      if (is.null(fixed_threshold) || !is.numeric(fixed_threshold) || fixed_threshold < 0) {
+        stop("For threshold_method = 'fixed', provide non-negative numeric fixed_threshold (nN).")
+      }
+      return(guard(fixed_threshold))
+    }
+    stop("Unknown threshold_method.")
+  }
+
+  threshold <- compute_threshold()
+
+  # ---- backward scan ----
+  scan_idx <- seq.int(from = b_start - 1L, to = 1L, by = -1L)
+  if (length(scan_idx) == 0L) {
+    return(list(distance = NA_real_, threshold = threshold))
+  }
+
+  y_scan <- y[scan_idx]
+  hit_mask <- if (direction == "negative") {
+    y_scan < -threshold
+  } else {
+    y_scan >  threshold
+  }
+
+  hit <- which(hit_mask)[1L]
+  if (is.na(hit)) return(list(distance = NA_real_, threshold = threshold))
+
+  list(distance = x[scan_idx[hit]], threshold = threshold)
+}
