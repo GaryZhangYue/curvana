@@ -180,29 +180,139 @@ analyze_a_curve_adhesive_force(curve_df)
 test = analyze_curves_adhesive_force(test,useCurve = 'retract',threads = 4)
 
 # test analyze_a_curve_interaction_distance ---------
-test_curve1 = test@approachCurves$`180424_fc_mica_loc1.001`
-test_curve1.repdis = analyze_a_curve_interaction_distance(curve_df = test_curve1,baseline_span = 100,sigma_multiplier = 3,direction = "positive")
+## Test repulsive direction -------
+test_curve1 = test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`
 
-test_curve2 = test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
-test_curve2.repdis = analyze_a_curve_interaction_distance(curve_df = test_curve2,baseline_span = 100,sigma_multiplier = 10,direction = "positive")
-test_curve2.ruplen = analyze_a_curve_interaction_distance(curve_df = test_curve2,baseline_span = 100,sigma_multiplier = 10,direction = "negative")
-test_curve2.repdis
-test_curve2.ruplen
+## 1) Compute interaction distances with different threshold methods
+res_sd  <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "positive", x_direction = "left",
+  multiplier = 3, threshold_method = "sd"
+)
 
-# Extract values
-rupture_x   <- test_curve2.ruplen$distance
-repulsive_x <- test_curve2.repdis$distance
+res_mad <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "positive", x_direction = "left",
+  multiplier = 3, threshold_method = "mad"
+)
 
-# Plot
-ggplot(test_curve2, aes(x = separation_distance_nm, y = force_nN)) +
+
+res_iqr <- analyze_a_curve_interaction_distance(
+   curve_df = test_curve1, baseline_span = 100,
+   y_direction = "positive", x_direction = "left",
+   multiplier = 3, threshold_method = "iqr"
+ )
+
+res_q   <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "positive", x_direction = "left",
+  threshold_method = "quantile", q_high = 0.99
+)
+
+res_aq  <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "positive", x_direction = "left",
+  threshold_method = "abs_quantile", q_abs = 0.99
+)
+
+res_fix <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "positive", x_direction = "left",
+  threshold_method = "fixed", fixed_threshold = 0.01  # nN; adjust as you like
+)
+
+## 2) Collect results into a tidy data frame (drop NAs so we don’t draw missing lines)
+marks <- tibble::tibble(
+  method    = c("sd", "mad", "iqr", "quantile", "abs_quantile", "fixed"),
+  distance  = c(res_sd$distance, res_mad$distance, res_iqr$distance,
+                res_q$distance, res_aq$distance, res_fix$distance),
+  threshold = c(res_sd$threshold, res_mad$threshold, test_curve1.repdis$threshold,
+                res_q$threshold, res_aq$threshold, res_fix$threshold)
+) %>%
+  filter(!is.na(distance))
+
+## 3) Plot the curve and add vertical lines for each method found
+ggplot(test_curve1, aes(x = separation_distance_nm, y = force_nN)) +
   geom_line(color = "gray30") +
-  geom_vline(xintercept = rupture_x, color = "blue", linetype = "dashed", size = 1) +
-  geom_vline(xintercept = repulsive_x, color = "red", linetype = "dotted", size = 1) +
+  geom_vline(data = marks, aes(xintercept = distance, color = method),
+             linetype = "dashed", linewidth = 0.9, alpha = 0.9) +
   labs(
-    title = "AFM Force–Distance Curve with Interaction Distances",
+    title = "AFM Force–Distance Curve with Threshold-based Interaction Distances",
     x = "Separation Distance (nm)",
     y = "Force (nN)",
-    subtitle = sprintf("Rupture length = %.2f nm | Repulsive distance = %.2f nm",
-                       rupture_x, repulsive_x)
+    subtitle = paste0(
+      "Baseline span = 100; y_direction = 'positive'; x_direction = 'right'\n",
+      "Methods shown: ", paste(marks$method, collapse = ", ")
+    )
   ) +
-  theme_bw(base_size = 14)
+  theme_bw(base_size = 13) +
+  guides(color = guide_legend(title = "Threshold method"))
+
+## Test adhesive direction -------
+test_curve1 = test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
+
+## 1) Compute interaction distances with different threshold methods
+res_sd  <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "negative", x_direction = "left",
+  multiplier = 10, threshold_method = "sd"
+)
+
+res_mad <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "negative", x_direction = "left",
+  multiplier = 10, threshold_method = "mad"
+)
+
+
+res_iqr <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "negative", x_direction = "left",
+  multiplier = 10, threshold_method = "iqr"
+)
+
+res_q   <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "negative", x_direction = "left",
+  threshold_method = "quantile", q_high = 0.99
+)
+
+res_aq  <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "negative", x_direction = "left",
+  threshold_method = "abs_quantile", q_abs = 0.99
+)
+
+res_fix <- analyze_a_curve_interaction_distance(
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "negative", x_direction = "left",
+  threshold_method = "fixed", fixed_threshold = 2  # nN; adjust as you like
+)
+
+## 2) Collect results into a tidy data frame (drop NAs so we don’t draw missing lines)
+marks <- tibble::tibble(
+  method    = c("sd", "mad", "iqr", "quantile", "abs_quantile", "fixed"),
+  distance  = c(res_sd$distance, res_mad$distance, res_iqr$distance,
+                res_q$distance, res_aq$distance, res_fix$distance),
+  threshold = c(res_sd$threshold, res_mad$threshold, test_curve1.repdis$threshold,
+                res_q$threshold, res_aq$threshold, res_fix$threshold)
+) %>%
+  filter(!is.na(distance))
+
+## 3) Plot the curve and add vertical lines for each method found
+ggplot(test_curve1, aes(x = separation_distance_nm, y = force_nN)) +
+  geom_line(color = "gray30") +
+  geom_vline(data = marks, aes(xintercept = distance, color = method),
+             linetype = "dashed", linewidth = 0.9, alpha = 0.9) +
+  labs(
+    title = "AFM Force–Distance Curve with Threshold-based Interaction Distances",
+    x = "Separation Distance (nm)",
+    y = "Force (nN)",
+    subtitle = paste0(
+      "Baseline span = 100; y_direction = 'positive'; x_direction = 'right'\n",
+      "Methods shown: ", paste(marks$method, collapse = ", ")
+    )
+  ) +
+  theme_bw(base_size = 13) +
+  guides(color = guide_legend(title = "Threshold method"))
+

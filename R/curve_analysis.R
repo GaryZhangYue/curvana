@@ -622,18 +622,21 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 #' Analyze interaction distance from a single AFM curve (flexible thresholding)
 #'
 #' @description
-#' Scans backward from the baseline region to detect the first significant
-#' deviation in force, marking the rupture length (negative excursion) or
-#' repulsive distance (positive excursion). The cutoff can be based on SD, MAD,
-#' IQR, quantiles, absolute-quantiles, or a fixed value.
+#' Detects the first significant deviation in force relative to a baseline window,
+#' marking rupture length (negative excursion) or repulsive distance (positive excursion).
+#' The cutoff can be based on SD, MAD, IQR, quantiles, absolute-quantiles, or a fixed value.
+#' Scanning can proceed from right-to-left (default) or left-to-right.
 #'
 #' @param curve_df data.frame with columns:
 #'   - separation_distance_nm (numeric): x values (distance, nm)
 #'   - force_nN (numeric): y values (force, nN)
-#' @param baseline_span Integer >= 1. Number of last points used as baseline.
-#' @param direction "negative" or "positive".
+#' @param baseline_span Integer >= 1. Number of last points used as the baseline window.
+#' @param y_direction "negative" or "positive".
 #'   - "negative": find first y < -threshold (rupture-like)
-#'   - "positive": find first y > +threshold (repulsion-like)
+#'   - "positive": find first y >  threshold (repulsion-like)
+#' @param x_direction "left" or "right".
+#'   - "left": scan from right to left (from just before baseline toward the origin)
+#'   - "right": scan from left to right (from origin up to just before baseline)
 #' @param threshold_method One of
 #'   c("sd","mad","iqr","quantile","abs_quantile","fixed"). Default "sd".
 #'   - "sd":      threshold = multiplier * sd(baseline)
@@ -654,7 +657,8 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 analyze_a_curve_interaction_distance <- function(
     curve_df,
     baseline_span,
-    direction = c("negative", "positive"),
+    y_direction = c("negative", "positive"),
+    x_direction = c("left", "right"),
     threshold_method = c("sd","mad","iqr","quantile","abs_quantile","fixed"),
     multiplier = 3,
     mad_constant = 1.4826,
@@ -663,7 +667,8 @@ analyze_a_curve_interaction_distance <- function(
     q_abs = 0.99,
     fixed_threshold = NULL
 ) {
-  direction <- match.arg(direction)
+  y_direction <- match.arg(y_direction)
+  x_direction <- match.arg(x_direction)
   threshold_method <- match.arg(threshold_method)
 
   # ---- validation ----
@@ -680,23 +685,20 @@ analyze_a_curve_interaction_distance <- function(
   x <- curve_df$separation_distance_nm
   y <- curve_df$force_nN
 
-  # ---- baseline window ----
+  # ---- baseline window (last baseline_span points) ----
   b_start <- n - baseline_span + 1L
   y_base  <- y[b_start:n]
 
   # ---- compute threshold ----
   compute_threshold <- function() {
-    # helper to guard tiny/NA
-    guard <- function(val) {
-      if (is.na(val) || val <= 0) .Machine$double.eps else val
-    }
+    guard <- function(val) if (is.na(val) || val <= 0) .Machine$double.eps else val
 
     if (threshold_method == "sd") {
       sdv <- stats::sd(y_base, na.rm = TRUE)
       return(multiplier * guard(sdv))
     }
     if (threshold_method == "mad") {
-      md <- stats::mad(y_base, constant = 1, na.rm = TRUE)  # raw MAD
+      md <- stats::mad(y_base, constant = 1, na.rm = TRUE)  # unscaled MAD
       return(multiplier * guard(md) * mad_constant)
     }
     if (threshold_method == "iqr") {
@@ -704,9 +706,9 @@ analyze_a_curve_interaction_distance <- function(
       return(multiplier * guard(iq))
     }
     if (threshold_method == "quantile") {
-      if (direction == "negative") {
+      if (y_direction == "negative") {
         qv <- stats::quantile(y_base, probs = q_low, na.rm = TRUE, names = FALSE)
-        return(abs(guard(abs(qv)))) # ensure positive magnitude
+        return(abs(guard(abs(qv))))
       } else {
         qv <- stats::quantile(y_base, probs = q_high, na.rm = TRUE, names = FALSE)
         return(guard(abs(qv)))
@@ -727,14 +729,23 @@ analyze_a_curve_interaction_distance <- function(
 
   threshold <- compute_threshold()
 
-  # ---- backward scan ----
-  scan_idx <- seq.int(from = b_start - 1L, to = 1L, by = -1L)
+  # ---- choose scan indices based on x_direction ----
+  if (x_direction == "left") {
+    # right -> left (from just before baseline toward origin)
+    scan_idx <- seq.int(from = b_start - 1L, to = 1L, by = -1L)
+  } else {
+    # left -> right (from origin up to just before baseline)
+    scan_idx <- seq.int(from = 1L, to = max(b_start - 1L, 1L), by = 1L)
+    if (b_start <= 1L) scan_idx <- integer(0)  # no room before baseline
+  }
+
   if (length(scan_idx) == 0L) {
     return(list(distance = NA_real_, threshold = threshold))
   }
 
+  # ---- apply y-direction rule ----
   y_scan <- y[scan_idx]
-  hit_mask <- if (direction == "negative") {
+  hit_mask <- if (y_direction == "negative") {
     y_scan < -threshold
   } else {
     y_scan >  threshold
