@@ -247,3 +247,79 @@ plot_fd_curves <- function(fdobj,
   return(p)
 
 }
+
+#' Calculate the trapezoid area between two points
+#'
+#' Computes the absolute area of a trapezoid formed by two points
+#' \code{(x1, y1)} and \code{(x2, y2)} along the x-axis. This is used when
+#' both points are on the same side of the x-axis (either both positive or both negative).
+#'
+#' @param x1 Numeric. The x-coordinate of the first point.
+#' @param y1 Numeric. The y-coordinate of the first point.
+#' @param x2 Numeric. The x-coordinate of the second point.
+#' @param y2 Numeric. The y-coordinate of the second point.
+#'
+#' @return A single numeric value representing the positive trapezoid area
+#' between the two points.
+#'
+#' @examples
+#' area_trapezoid(0, 2, 1, 4)   # 0.5 * (1 - 0) * (2 + 4) = 3
+#' area_trapezoid(0, -2, 1, -4) # same absolute area = 3
+#'
+#' @seealso [area_triangle()], [crossing_x0()], [calculate_area()]
+#' @export
+area_trapezoid <- function(x1, y1, x2, y2) {
+  0.5 * abs(x2 - x1) * abs(y1 + y2)
+}
+
+#' Calculate the triangle area between a curve point and the x-axis
+#'
+#' Computes the absolute area of a triangle formed by a point \code{(x1, y1)}
+#' on the curve and its intersection with the x-axis at \code{(x0, 0)}.
+#' This function assumes one vertex lies on the x-axis (\code{y = 0}).
+#'
+#' @param x1 Numeric. The x-coordinate of the curve point.
+#' @param y1 Numeric. The y-coordinate of the curve point.
+#' @param x0 Numeric. The x-coordinate of the x-axis intersection point (where \code{y = 0}).
+#'
+#' @return A single numeric value representing the positive triangle area.
+#'
+#' @examples
+#' # Triangle between (0, 4) and (1, 0)
+#' area_triangle(0, 4, 1)  # 0.5 * |1 - 0| * |4| = 2
+#'
+#' @seealso [area_trapezoid()], [crossing_x0()], [calculate_area()]
+#' @export
+area_triangle <- function(x1, y1, x0) {
+  0.5 * abs(x0 - x1) * abs(y1)
+}
+
+#' Interpolate the x-intercept (x0) where y = 0
+#'
+#' Performs linear interpolation between two points \code{(x1, y1)} and
+#' \code{(x2, y2)} to find the x-coordinate (\code{x0}) where the line
+#' crosses the x-axis (\code{y = 0}). Only valid when \code{y1} and \code{y2}
+#' have opposite signs.
+#'
+#' @param x1 Numeric. The x-coordinate of the first point.
+#' @param y1 Numeric. The y-coordinate of the first point.
+#' @param x2 Numeric. The x-coordinate of the second point.
+#' @param y2 Numeric. The y-coordinate of the second point.
+#'
+#' @return A single numeric value for the interpolated \code{x0} coordinate.
+#' Returns \code{NA} if no valid sign change exists between \code{y1} and \code{y2}.
+#'
+#' @examples
+#' crossing_x0(0, 4, 2, -2)  # 1.333 — line crosses y=0 between x=0 and x=2
+#' crossing_x0(0, 4, 2, 6)   # NA — no sign change
+#'
+#' @seealso [area_trapezoid()], [area_triangle()], [calculate_area()]
+#' @export
+crossing_x0 <- function(x1, y1, x2, y2) {
+  if ((y1 > 0 && y2 < 0) || (y1 < 0 && y2 > 0)) {
+    x1 + (-y1) * (x2 - x1) / (y2 - y1)
+  } else {
+    NA_real_
+  }
+}
+

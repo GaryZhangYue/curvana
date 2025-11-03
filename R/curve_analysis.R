@@ -756,3 +756,212 @@ analyze_a_curve_interaction_distance <- function(
 
   list(distance = x[scan_idx[hit]], threshold = threshold)
 }
+
+
+#' Analyze the adhesive and repulsive areas of a single AFM curve (data.frame input)
+#'
+#' Calculates the total areas above (\emph{repulsive}) and below (\emph{adhesive})
+#' the x-axis for one curve supplied as a data.frame with columns
+#' \code{separation_distance_nm} (x) and \code{force_nN} (y).
+#'
+#' The computation proceeds in the given point order (no sorting). Segments entirely
+#' on one side of the x-axis are integrated as trapezoids, and segments that cross
+#' the x-axis are split at the interpolated x-intercept and integrated as two triangles.
+#'
+#' As a practical fix for small transformation offsets near the origin, any
+#' \code{separation_distance_nm < 0} are clamped to 0 before integration.
+#' This works for both approach (x may run high→low) and retract (low→high) traces.
+#'
+#' @param curve_df A data frame with at least two columns:
+#'   \describe{
+#'     \item{\code{separation_distance_nm}}{Numeric x-coordinates (nm). Values < 0 are clamped to 0.}
+#'     \item{\code{force_nN}}{Numeric y-coordinates (nN).}
+#'   }
+#'
+#' @return A list with two numeric elements:
+#' \describe{
+#'   \item{\code{adhesive_area}}{Total positive area where \code{y < 0}.}
+#'   \item{\code{repulsive_area}}{Total positive area where \code{y > 0}.}
+#' }
+#'
+#' @examples
+#' df <- data.frame(
+#'   separation_distance_nm = c(-0.02, 0, 0.10, 0.05, 0.20),  # includes clamp and backtrack
+#'   force_nN               = c( 0.50 , 0, 0.30, -0.20, 0.10)
+#' )
+#' analyze_a_curve_area(df)
+#'
+#' @seealso area_trapezoid, area_triangle, crossing_x0
+#' @export
+analyze_a_curve_area <- function(curve_df) {
+  # ---- Universal input check (adapted to this function's return type) ----
+  if (!is.data.frame(curve_df) ||
+      !all(c("separation_distance_nm", "force_nN") %in% names(curve_df))) {
+    return(list(adhesive_area = NA_real_, repulsive_area = NA_real_))
+  }
+
+  # Coerce to numeric and drop non-finite pairs
+  sep <- suppressWarnings(as.numeric(curve_df$separation_distance_nm))
+  frc <- suppressWarnings(as.numeric(curve_df$force_nN))
+  ok  <- is.finite(sep) & is.finite(frc)
+
+  if (!any(ok)) {
+    return(list(adhesive_area = NA_real_, repulsive_area = NA_real_))
+  }
+
+  # Use only valid pairs, preserve original order
+  x <- sep[ok]
+  y <- frc[ok]
+
+  # Clamp tiny negative x to zero (do not reorder)
+  if (any(x < 0)) x[x < 0] <- 0
+
+  adhesive_area  <- 0
+  repulsive_area <- 0
+  n <- length(x)
+
+  if (n < 2) return(list(adhesive_area = 0, repulsive_area = 0))
+
+  for (i in seq_len(n - 1)) {
+    x1 <- x[i];   y1 <- y[i]
+    x2 <- x[i+1]; y2 <- y[i+1]
+
+    # Skip zero-width segments (possible after clamping/backtracking)
+    if (x1 == x2) next
+
+    # Both strictly above → repulsive trapezoid
+    if (y1 > 0 && y2 > 0) {
+      repulsive_area <- repulsive_area + area_trapezoid(x1, y1, x2, y2)
+      next
+    }
+
+    # Both strictly below → adhesive trapezoid
+    if (y1 < 0 && y2 < 0) {
+      adhesive_area  <- adhesive_area  + area_trapezoid(x1, y1, x2, y2)
+      next
+    }
+
+    # One endpoint on axis → single triangle
+    if (y1 == 0 && y2 != 0) {
+      # Triangle between (x1, 0) and (x2, y2); x0 = x1
+      if (y2 > 0) repulsive_area <- repulsive_area + area_triangle(x2, y2, x1)
+      else        adhesive_area  <- adhesive_area  + area_triangle(x2, y2, x1)
+      next
+    }
+    if (y2 == 0 && y1 != 0) {
+      # Triangle between (x1, y1) and (x2, 0); x0 = x2
+      if (y1 > 0) repulsive_area <- repulsive_area + area_triangle(x1, y1, x2)
+      else        adhesive_area  <- adhesive_area  + area_triangle(x1, y1, x2)
+      next
+    }
+
+    # True sign change → split at x0 and add two triangles
+    x0 <- crossing_x0(x1, y1, x2, y2)
+    if (is.na(x0)) next  # safety
+
+    if (y1 > 0 && y2 < 0) {
+      repulsive_area <- repulsive_area + area_triangle(x1, y1, x0)
+      adhesive_area  <- adhesive_area  + area_triangle(x2, y2, x0)
+    } else if (y1 < 0 && y2 > 0) {
+      adhesive_area  <- adhesive_area  + area_triangle(x1, y1, x0)
+      repulsive_area <- repulsive_area + area_triangle(x2, y2, x0)
+    }
+  }
+
+  list(adhesive_area = adhesive_area, repulsive_area = repulsive_area)
+}
+
+#' Adhesive and Repulsive Energy (aJ) for All Transformed Curves in an fdObj
+#'
+#' Applies \code{analyze_a_curve_area()} to each transformed curve in an \code{fdObj}
+#' and stores the resulting energies (areas under the force–distance curve) in
+#' the metadata as:
+#' \itemize{
+#'   \item \code{adhesive_energy_aJ_<dir>} — total area where \code{y < 0}
+#'   \item \code{repulsive_energy_aJ_<dir>} — total area where \code{y > 0}
+#' }
+#' where \code{<dir>} is \code{"approach"} or \code{"retract"}.
+#'
+#' Energies are reported in \strong{attojoules (aJ)}, since
+#' \eqn{1~\mathrm{nN·nm} = 10^{-18}~\mathrm{J} = 1~\mathrm{aJ}}.
+#'
+#' The function preserves the point order (no sorting), tolerates backtracking in \code{x},
+#' and inherits clamping of \code{x<0} to 0 from \code{analyze_a_curve_area()}.
+#'
+#' Behavior:
+#' \itemize{
+#'   \item If a curve is present/valid but yields no finite result, both energies are \code{NA}.
+#'   \item If no transformed curves exist for the selected direction, both metadata columns are created and filled with \code{NA}.
+#' }
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param useCurve Character; must be one of \code{c("retract", "approach")}.
+#' @param threads Integer. Number of parallel workers (default \code{1}). Uses
+#'   \pkg{future}+\pkg{future.apply} when \code{threads > 1}.
+#'
+#' @return The updated \code{fdObj} with two new metadata columns:
+#' \code{adhesive_energy_aJ_<dir>} and \code{repulsive_energy_aJ_<dir>}.
+#' @seealso analyze_a_curve_area, analyze_curves_adhesive_force
+#' @export
+analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), threads = 1) {
+  if (!inherits(fdObj, "fdObj"))
+    stop("fdObj must be of class 'fdObj'")
+
+  useCurve <- match.arg(useCurve)
+  curve_list <- if (useCurve == "approach") fdObj@approachCurves else fdObj@retractCurves
+  dir_tag <- useCurve
+
+  # If no transformed curves are present, create NA columns and exit
+  if (is.null(curve_list) || length(curve_list) == 0) {
+    warning("No transformed curves found for the selected direction. Did you run transform_curves()?")
+
+    fdObj@metadata[[paste0("adhesive_energy_aJ_",  dir_tag)]] <- NA_real_
+    fdObj@metadata[[paste0("repulsive_energy_aJ_", dir_tag)]] <- NA_real_
+    return(fdObj)
+  }
+
+  curve_names <- names(curve_list)
+
+  run_one <- function(id) {
+    df <- curve_list[[id]]
+    res <- tryCatch(
+      analyze_a_curve_area(df),
+      error = function(e) list(adhesive_area = NA_real_, repulsive_area = NA_real_)
+    )
+    c(adhesive_area = as.numeric(res$adhesive_area),
+      repulsive_area = as.numeric(res$repulsive_area))
+  }
+
+  res_list <- if (threads > 1) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = threads)
+    future.apply::future_lapply(curve_names, run_one)
+  } else {
+    lapply(curve_names, run_one)
+  }
+
+  res_mat <- do.call(rbind, res_list)
+  res_df  <- as.data.frame(res_mat, stringsAsFactors = FALSE)
+  rownames(res_df) <- curve_names
+
+  fdObj@metadata[[paste0("adhesive_energy_aJ_",  dir_tag)]] <-
+    res_df$adhesive_area[match(rownames(fdObj@metadata), rownames(res_df))]
+
+  fdObj@metadata[[paste0("repulsive_energy_aJ_", dir_tag)]] <-
+    res_df$repulsive_area[match(rownames(fdObj@metadata), rownames(res_df))]
+
+  ad  <- fdObj@metadata[[paste0("adhesive_energy_aJ_",  dir_tag)]]
+  rep <- fdObj@metadata[[paste0("repulsive_energy_aJ_", dir_tag)]]
+  n_total <- length(curve_list)
+  n_na_ad  <- sum(is.na(ad))
+  n_na_rep <- sum(is.na(rep))
+
+  message(sprintf(
+    "Energy analyzed for %d curves (%s): %d NA adhesive, %d NA repulsive (units = aJ).",
+    n_total, dir_tag, n_na_ad, n_na_rep
+  ))
+
+  fdObj
+}
+

@@ -315,4 +315,18 @@ ggplot(test_curve1, aes(x = separation_distance_nm, y = force_nN)) +
   ) +
   theme_bw(base_size = 13) +
   guides(color = guide_legend(title = "Threshold method"))
+res_fix
 
+
+# test analyze_a_curve_area
+
+test_curve1 = test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`
+test_curve2 =  test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
+p1 = ggplot(test_curve1, aes(x = separation_distance_nm, y = force_nN)) +
+  geom_line(color = "gray30")
+p2 = ggplot(test_curve2, aes(x = separation_distance_nm, y = force_nN)) +
+  geom_line(color = "gray30")
+cowplot::plot_grid(p1,p2)
+
+test_curve1_energy = analyze_a_curve_area(test_curve1)
+test_curve2_energy = analyze_a_curve_area(test_curve2)
