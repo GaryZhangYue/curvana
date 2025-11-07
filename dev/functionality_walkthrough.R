@@ -96,7 +96,7 @@ test@baseline_segment$retract
 # test: transform_a_curve --------
 x = test@rawCurves$`180424_fc_mica_loc1.001`$Calc_Ramp_Ex_nm
 y = test@rawCurves$`180424_fc_mica_loc1.001`$Defl_V_Ex
-baseline = test@metadata['180424_fc_mica_loc1.001', 'baseline_nm_approach']
+baseline = test@metadata['180424_fc_mica_loc1.001', 'baseline_V_approach']
 sens.res = calc_sensitivity(end = 200,intv = 4,x = x,y = y)
 sensitivity = sens.res$sensitivity
 senscal_seg_x = sens.res$senscal_segment$x
@@ -111,7 +111,7 @@ ggplot(curve.fd, aes(x = separation_distance_nm, y = force_nN)) +
 test@metadata
 x = test@rawCurves$`180424_fv_pmon2_loc1-18-22.spm`$Calc_Ramp_Rt_nm
 y = test@rawCurves$`180424_fv_pmon2_loc1-18-22.spm`$Defl_V_Rt
-baseline = test@metadata['180424_fv_pmon2_loc1-18-22.spm', 'baseline_nm_retract']
+baseline = test@metadata['180424_fv_pmon2_loc1-18-22.spm', 'baseline_V_retract']
 sensitivity = test@metadata['180424_fv_pmon2_loc1-18-22.spm', 'sensitivity_V_nm_retract']
 senscal_seg_x = test@senscal_segment$retract$`180424_fv_pmon2_loc1-18-22.spm`$Calc_Ramp_Rt_nm
 senscal_seg_y = test@senscal_segment$retract$`180424_fv_pmon2_loc1-18-22.spm`$Defl_V_Rt
@@ -330,3 +330,9 @@ cowplot::plot_grid(p1,p2)
 
 test_curve1_energy = analyze_a_curve_area(test_curve1)
 test_curve2_energy = analyze_a_curve_area(test_curve2)
+
+# test analyze_curves_energy
+test = analyze_curves_energy(fdObj = test,useCurve = "retract",threads = 2)
+View(test@metadata)
+test = analyze_curves_energy(fdObj = test,useCurve = "approach",threads = 2)
+View(test@metadata)

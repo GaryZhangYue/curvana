@@ -27,7 +27,7 @@ analyze_baseline(
 \item{threads}{Integer. Number of parallel threads to use (default = 1).}
 }
 \value{
-An updated \code{fdObj} with baseline values in the metadata column \code{baseline_nm} and baseline segments in \code{baseline_segment}.
+An updated \code{fdObj} with baseline values in the metadata column \code{baseline_V}, the minimum number of points in the baseline segment \code{baseline_span}, and baseline segments in \code{baseline_segment}.
 }
 \description{
 Identifies baseline segments in AFM raw force-distance curves using pre-calculated sensitivity values,

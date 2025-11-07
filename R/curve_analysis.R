@@ -416,7 +416,7 @@ transform_curves <- function(fdObj, spring_constant, useCurve = "approach", thre
 
   # Extract relevant metadata
   sensitivity_vec <- fdObj@metadata[[paste0("sensitivity_V_nm_", useCurve)]]
-  baseline_vec <- fdObj@metadata[[paste0("baseline_nm_", useCurve)]]
+  baseline_vec <- fdObj@metadata[[paste0("baseline_V_", useCurve)]]
   senscal_segment <- fdObj@senscal_segment[[useCurve]]
 
   names(sensitivity_vec) <- rownames(fdObj@metadata)
@@ -778,10 +778,10 @@ analyze_a_curve_interaction_distance <- function(
 #'     \item{\code{force_nN}}{Numeric y-coordinates (nN).}
 #'   }
 #'
-#' @return A list with two numeric elements:
+#' @return A named numeric vector of length 2:
 #' \describe{
-#'   \item{\code{adhesive_area}}{Total positive area where \code{y < 0}.}
-#'   \item{\code{repulsive_area}}{Total positive area where \code{y > 0}.}
+#'   \item{adhesive_area}{Total positive area where \code{y < 0}.}
+#'   \item{repulsive_area}{Total positive area where \code{y > 0}.}
 #' }
 #'
 #' @examples
@@ -797,7 +797,7 @@ analyze_a_curve_area <- function(curve_df) {
   # ---- Universal input check (adapted to this function's return type) ----
   if (!is.data.frame(curve_df) ||
       !all(c("separation_distance_nm", "force_nN") %in% names(curve_df))) {
-    return(list(adhesive_area = NA_real_, repulsive_area = NA_real_))
+    return(c(adhesive_area = NA_real_, repulsive_area = NA_real_))
   }
 
   # Coerce to numeric and drop non-finite pairs
@@ -806,7 +806,7 @@ analyze_a_curve_area <- function(curve_df) {
   ok  <- is.finite(sep) & is.finite(frc)
 
   if (!any(ok)) {
-    return(list(adhesive_area = NA_real_, repulsive_area = NA_real_))
+    return(c(adhesive_area = NA_real_, repulsive_area = NA_real_))
   }
 
   # Use only valid pairs, preserve original order
@@ -820,7 +820,7 @@ analyze_a_curve_area <- function(curve_df) {
   repulsive_area <- 0
   n <- length(x)
 
-  if (n < 2) return(list(adhesive_area = 0, repulsive_area = 0))
+  if (n < 2) return(c(adhesive_area = 0, repulsive_area = 0))
 
   for (i in seq_len(n - 1)) {
     x1 <- x[i];   y1 <- y[i]
@@ -868,7 +868,7 @@ analyze_a_curve_area <- function(curve_df) {
     }
   }
 
-  list(adhesive_area = adhesive_area, repulsive_area = repulsive_area)
+  c(adhesive_area = adhesive_area, repulsive_area = repulsive_area)
 }
 
 #' Adhesive and Repulsive Energy (aJ) for All Transformed Curves in an fdObj
@@ -924,12 +924,13 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
 
   run_one <- function(id) {
     df <- curve_list[[id]]
-    res <- tryCatch(
-      analyze_a_curve_area(df),
-      error = function(e) list(adhesive_area = NA_real_, repulsive_area = NA_real_)
-    )
-    c(adhesive_area = as.numeric(res$adhesive_area),
-      repulsive_area = as.numeric(res$repulsive_area))
+    # If curve not analyzable at all, return NA/NA to distinguish from "no adhesion" (0/NA)
+    if (!is.data.frame(df) ||
+        !all(c("separation_distance_nm", "force_nN") %in% names(df)) ||
+        nrow(df) == 0) {
+      return(c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_))
+    }
+    analyze_a_curve_area(df)
   }
 
   res_list <- if (threads > 1) {
@@ -964,4 +965,5 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
 
   fdObj
 }
+
 
