@@ -11,6 +11,22 @@ reproducible data sharing.
 
 ---
 
+## Installation
+
+You can install **curvana** directly from GitHub using the **devtools** package:
+
+```r
+# Install devtools if not already installed
+install.packages("devtools")
+
+# Install curvana from GitHub
+devtools::install_github("GaryZhangYue/curvana", dependencies = TRUE)
+
+# Load the package
+library(curvana)
+
+---
+
 ## Core Workflow
 
 **curvana** accepts as input a directory of raw *deflection–displacement* curves.
