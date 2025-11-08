@@ -1,0 +1,80 @@
+---
+title: "curvana: a comprehensive R package for analyzing atomic force microscopy force distance curves"
+subtitle: "Tutorial"
+date: "`r Sys.Date()`"
+author: Yue (Gary) Zhang, PhD
+output:
+  rmdformats::readthedown:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(warning = T, message = T,echo = T) 
+```
+
+```{r Initiate, results='hide'}
+## initiate ---------------------------------------------------------
+packages_to_load = c('curvana','ggplot2','DT','dplyr','DT')
+# Load packages without printing output
+invisible(suppressPackageStartupMessages({
+    lapply(packages_to_load, library, character.only = TRUE)
+}))
+
+```
+
+# Overview
+
+**curvana** is an R package that provides a comprehensive framework for analyzing
+atomic force microscopy (AFM) force–distance curves.  
+It is built around an S4 object class called **`fdObj`**, which standardizes
+data import, storage, extraction, and analysis.  
+
+The `fdObj` structure organizes all raw and processed data into designated slots,
+ensuring data integrity, simplifying analysis workflows, and facilitating
+reproducible data sharing.
+
+# Core Workflow
+
+**curvana** accepts as input a directory of raw *deflection–displacement* curves.
+All curves are automatically registered in the internal **metadata** slot, while
+the corresponding raw data are stored in the **rawcurves** slot.
+
+Once imported, users can apply curvana’s analysis functions to:
+
+- **Transform** raw deflection–displacement curves into calibrated **force–distance** curves  
+- **Quantify** key mechanical properties such as:
+  - Adhesive force  
+  - Adhesive and repulsive energies  
+  - Rupture and repulsive distances  
+
+All computed results are automatically saved back into the `fdObj` metadata,
+maintaining a complete, self-contained record of the analysis.
+
+# Visualization and Reporting
+
+curvana includes flexible plotting utilities for generating publication-ready figures:
+
+- **Scatter plots** of individual or batch-wise raw and processed curves  
+- **Violin plots** summarizing distributions of curve-derived properties  
+
+These tools make it easy to explore data quality, compare experimental conditions,
+and visualize quantitative trends across samples.
+
+# Integration with shinyCurvana
+
+**curvana** seamlessly integrates with **shinyCurvana**, an R Shiny application that
+provides a **code-free, user-friendly interface** for performing the same analyses
+interactively.  
+
+Together, they enable both scripting-based and graphical workflows for AFM
+force–distance data processing and interpretation.
+
+```{r save image}
+save.image(file = "")
+```

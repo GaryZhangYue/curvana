@@ -54,7 +54,7 @@ c("sd","mad","iqr","quantile","abs_quantile","fixed"). Default "sd".
 \item{fixed_threshold}{Numeric (nN) for "fixed" method. Default NULL.}
 }
 \value{
-list(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
+c(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
 }
 \description{
 Detects the first significant deviation in force relative to a baseline window,
