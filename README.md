@@ -24,6 +24,7 @@ devtools::install_github("GaryZhangYue/curvana", dependencies = TRUE)
 
 # Load the package
 library(curvana)
+```
 
 ---
 
