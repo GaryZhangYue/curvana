@@ -652,7 +652,7 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 #' @param q_abs Quantile for "abs_quantile". Default 0.99.
 #' @param fixed_threshold Numeric (nN) for "fixed" method. Default NULL.
 #'
-#' @return list(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
+#' @return c(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
 #' @export
 analyze_a_curve_interaction_distance <- function(
     curve_df,
@@ -672,14 +672,20 @@ analyze_a_curve_interaction_distance <- function(
   threshold_method <- match.arg(threshold_method)
 
   # ---- validation ----
-  if (!is.data.frame(curve_df)) stop("curve_df must be a data.frame.")
-  if (!all(c("separation_distance_nm","force_nN") %in% names(curve_df))) {
-    stop("curve_df must contain 'separation_distance_nm' and 'force_nN'.")
+  if (!is.data.frame(curve_df)) {
+    warning("curve_df must be a data.frame. Returning NA as results.")
+    return(c(distance = NA_real_, threshold = NA_real_))
   }
-  n <- nrow(curve_df)
+  if (!all(c("separation_distance_nm", "force_nN") %in% names(curve_df))) {
+    warning("curve_df must contain 'separation_distance_nm' and 'force_nN'. Returning NA as results.")
+    return(c(distance = NA_real_, threshold = NA_real_))
+  }
   if (!is.numeric(baseline_span) || length(baseline_span) != 1 || baseline_span < 1) {
-    stop("baseline_span must be a single integer >= 1.")
+    warning("baseline_span must be a single integer >= 1. Returning NA as results.")
+    return(c(distance = NA_real_, threshold = NA_real_))
   }
+
+  n <- nrow(curve_df)
   baseline_span <- min(as.integer(baseline_span), n)
 
   x <- curve_df$separation_distance_nm
@@ -740,7 +746,7 @@ analyze_a_curve_interaction_distance <- function(
   }
 
   if (length(scan_idx) == 0L) {
-    return(list(distance = NA_real_, threshold = threshold))
+    return(c(distance = NA_real_, threshold = threshold))
   }
 
   # ---- apply y-direction rule ----
@@ -752,10 +758,167 @@ analyze_a_curve_interaction_distance <- function(
   }
 
   hit <- which(hit_mask)[1L]
-  if (is.na(hit)) return(list(distance = NA_real_, threshold = threshold))
+  if (is.na(hit)) return(c(distance = NA_real_, threshold = threshold))
 
-  list(distance = x[scan_idx[hit]], threshold = threshold)
+  c(distance = x[scan_idx[hit]], threshold = threshold)
 }
+
+#' Interaction Distance (nm) for All Transformed Curves in an fdObj
+#'
+#' Applies \code{analyze_a_curve_interaction_distance()} to each transformed curve
+#' in an \code{fdObj} and stores the resulting interaction distances and thresholds
+#' in the metadata. These measure the first significant excursion in force relative
+#' to a baseline, either repulsive (positive force deviation) or rupture (negative).
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param useCurve Character; must be one of \code{c("retract", "approach")}.
+#' @param threads Integer. Number of parallel workers (default \code{1}).
+#' @param baseline_span Either a single integer ≥ 1, or the string "automatic".
+#'   When "automatic", per-curve baseline spans are read from
+#'   \code{fdObj@metadata$baseline_span_<useCurve>}.
+#' @param y_direction "negative" (rupture) or "positive" (repulsive).
+#' @param x_direction "left" or "right". Direction to scan from baseline.
+#' @param threshold_method Thresholding method, passed to
+#'   \code{analyze_a_curve_interaction_distance()}.
+#' @param multiplier,mad_constant,q_low,q_high,q_abs,fixed_threshold
+#'   Threshold-related parameters, passed through to the inner function.
+#'
+#' @return The updated \code{fdObj} with two new metadata columns:
+#' \code{<type>_distance_nm_<dir>} and \code{<type>_threshold_nN_<dir>},
+#' where <type> is "repulsive" or "rupture", depending on \code{y_direction},
+#' and <dir> is "approach" or "retract".
+#' @seealso analyze_a_curve_interaction_distance
+#' @export
+analyze_curves_interaction_distance <- function(
+    fdObj,
+    useCurve = c("retract", "approach"),
+    threads = 1,
+    baseline_span,
+    y_direction = c("negative", "positive"),
+    x_direction = c("left", "right"),
+    threshold_method = c("sd","mad","iqr","quantile","abs_quantile","fixed"),
+    multiplier = 3,
+    mad_constant = 1.4826,
+    q_low = 0.01,
+    q_high = 0.99,
+    q_abs = 0.99,
+    fixed_threshold = NULL
+) {
+  # ---- Validation ----
+  if (!inherits(fdObj, "fdObj"))
+    stop("fdObj must be of class 'fdObj'")
+
+  useCurve <- match.arg(useCurve)
+  y_direction <- match.arg(y_direction)
+  x_direction <- match.arg(x_direction)
+  threshold_method <- match.arg(threshold_method)
+
+  curve_list <- if (useCurve == "approach") fdObj@approachCurves else fdObj@retractCurves
+  dir_tag <- useCurve
+
+  # ---- baseline_span handling ----
+  if (is.character(baseline_span) && baseline_span == "automatic") {
+    meta_col <- paste0("baseline_span_", dir_tag)
+    if (!meta_col %in% names(fdObj@metadata)) {
+      stop(sprintf(
+        "baseline_span is set to 'automatic', but column '%s' is missing in fdObj@metadata.",
+        meta_col
+      ))
+    }
+    use_baseline_span <- "from_metadata"
+  } else if (is.numeric(baseline_span) && length(baseline_span) == 1 && baseline_span >= 1) {
+    use_baseline_span <- "fixed"
+  } else {
+    stop("baseline_span must be either 'automatic' or a single integer >= 1.")
+  }
+
+  # ---- Handle missing curves ----
+  if (is.null(curve_list) || length(curve_list) == 0) {
+    warning("No transformed curves found for the selected direction. Did you run transform_curves()?")
+
+    prefix <- if (y_direction == "positive") "repulsive" else "rupture"
+    fdObj@metadata[[paste0(prefix, "_distance_nm_", dir_tag)]]  <- NA_real_
+    fdObj@metadata[[paste0(prefix, "_threshold_nN_", dir_tag)]] <- NA_real_
+    return(fdObj)
+  }
+
+  curve_names <- names(curve_list)
+  prefix <- if (y_direction == "positive") "repulsive" else "rupture"
+
+  # ---- Inner function for one curve ----
+  run_one <- function(id) {
+    df <- curve_list[[id]]
+    if (!is.data.frame(df) ||
+        !all(c("separation_distance_nm", "force_nN") %in% names(df)) ||
+        nrow(df) == 0) {
+      return(c(distance = NA_real_, threshold = NA_real_))
+    }
+
+    # Determine baseline_span for this curve
+    bs_value <- if (use_baseline_span == "from_metadata") {
+      bs <- fdObj@metadata[[paste0("baseline_span_", dir_tag)]][
+        match(id, rownames(fdObj@metadata))
+      ]
+      if (is.na(bs) || !is.numeric(bs) || bs < 1)
+        return(c(distance = NA_real_, threshold = NA_real_))
+      bs
+    } else {
+      baseline_span
+    }
+
+    analyze_a_curve_interaction_distance(
+      curve_df = df,
+      baseline_span = bs_value,
+      y_direction = y_direction,
+      x_direction = x_direction,
+      threshold_method = threshold_method,
+      multiplier = multiplier,
+      mad_constant = mad_constant,
+      q_low = q_low,
+      q_high = q_high,
+      q_abs = q_abs,
+      fixed_threshold = fixed_threshold
+    )
+  }
+
+  # ---- Parallel or sequential execution ----
+  res_list <- if (threads > 1) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = threads)
+    future.apply::future_lapply(curve_names, run_one)
+  } else {
+    lapply(curve_names, run_one)
+  }
+
+  # ---- Combine and align with metadata ----
+  res_mat <- do.call(rbind, res_list)
+  res_df  <- as.data.frame(res_mat, stringsAsFactors = FALSE)
+  rownames(res_df) <- curve_names
+
+  fdObj@metadata[[paste0(prefix, "_distance_nm_", dir_tag)]] <-
+    res_df$distance[match(rownames(fdObj@metadata), rownames(res_df))]
+  fdObj@metadata[[paste0(prefix, "_threshold_nN_", dir_tag)]] <-
+    res_df$threshold[match(rownames(fdObj@metadata), rownames(res_df))]
+
+  # ---- Summary ----
+  n_fdObj  <- nrow(fdObj@metadata)
+  n_total  <- length(curve_list)
+  n_na     <- sum(is.na(res_df$distance))
+  n_valid  <- n_total - n_na
+
+  message(sprintf(
+    "Interaction distance analyzed for %d/%d curves (%s, %s): %d valid results.",
+    n_total, n_fdObj, dir_tag, prefix, n_valid
+  ))
+
+  fdObj
+}
+
+
+
+
+
 
 
 #' Analyze the adhesive and repulsive areas of a single AFM curve (data.frame input)

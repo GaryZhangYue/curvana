@@ -37,15 +37,15 @@ test.combine.2 = combineFdObj(test.paeru,test.paeru2) # should return error
 # test: plot_deflection_curves --------
 plot_deflection_curves(test,split_curves_by = 'bacteria')
 plot_deflection_curves(test,split_curves_by = 'bacteria',group_curves_by = 'date',
-                alpha = 0.05,point_size = 0.5,
-                color_map = list(`180424` = 'darkred',
-                                 `180425` = 'blue'))
+                       alpha = 0.05,point_size = 0.5,
+                       color_map = list(`180424` = 'darkred',
+                                        `180425` = 'blue'))
 plot_deflection_curves(test,split_curves_by = 'date',group_curves_by = 'bacteria',
-                alpha = 0.3,point_size = 0.5,
-                color_map = list(`paeru` = 'darkred',
-                                 `pmon2` = 'blue',
-                                 sc = 'orange',
-                                 mica = 'lightblue'))
+                       alpha = 0.3,point_size = 0.5,
+                       color_map = list(`paeru` = 'darkred',
+                                        `pmon2` = 'blue',
+                                        sc = 'orange',
+                                        mica = 'lightblue'))
 
 plot_deflection_curves(test,curve = 'approach', split_curves_by = 'date',group_curves_by = 'bacteria',
                        alpha = 0.3,point_size = 0.5,
@@ -140,28 +140,28 @@ ggplot(test@retractCurves[[5]], aes(x = separation_distance_nm, y = force_nN)) +
 # test: plot_fd_curves --------
 plot_fd_curves(test,split_curves_by = 'bacteria')
 plot_fd_curves(test,split_curves_by = 'bacteria',group_curves_by = 'date',
-                       alpha = 0.05,point_size = 0.5,
-                       color_map = list(`180424` = 'darkred',
-                                        `180425` = 'blue'))
+               alpha = 0.05,point_size = 0.5,
+               color_map = list(`180424` = 'darkred',
+                                `180425` = 'blue'))
 plot_fd_curves(test,split_curves_by = 'date',group_curves_by = 'bacteria',
-                       alpha = 0.3,point_size = 0.5,
-                       color_map = list(`paeru` = 'darkred',
-                                        `pmon2` = 'blue',
-                                        sc = 'orange',
-                                        mica = 'lightblue'))
+               alpha = 0.3,point_size = 0.5,
+               color_map = list(`paeru` = 'darkred',
+                                `pmon2` = 'blue',
+                                sc = 'orange',
+                                mica = 'lightblue'))
 
 plot_fd_curves(test,curve = 'approach', split_curves_by = 'date',group_curves_by = 'bacteria',
-                       alpha = 0.3,point_size = 0.5,
-                       color_map = list(`paeru` = 'darkred',
-                                        `pmon2` = 'blue',
-                                        sc = 'orange',
-                                        mica = 'lightblue'))
+               alpha = 0.3,point_size = 0.5,
+               color_map = list(`paeru` = 'darkred',
+                                `pmon2` = 'blue',
+                                sc = 'orange',
+                                mica = 'lightblue'))
 plot_fd_curves(test,curve = 'retract', split_curves_by = 'date',group_curves_by = 'bacteria',
-                       alpha = 0.3,point_size = 0.5,
-                       color_map = list(`paeru` = 'darkred',
-                                        `pmon2` = 'blue',
-                                        sc = 'orange',
-                                        mica = 'lightblue'))
+               alpha = 0.3,point_size = 0.5,
+               color_map = list(`paeru` = 'darkred',
+                                `pmon2` = 'blue',
+                                sc = 'orange',
+                                mica = 'lightblue'))
 
 test2 = extract(test,by_col = list(bacteria = 'paeru'))
 plot_fd_curves(test2,split_curves_by = 'bacteria',group_curves_by = 'bacteria',
@@ -198,10 +198,10 @@ res_mad <- analyze_a_curve_interaction_distance(
 
 
 res_iqr <- analyze_a_curve_interaction_distance(
-   curve_df = test_curve1, baseline_span = 100,
-   y_direction = "positive", x_direction = "left",
-   multiplier = 3, threshold_method = "iqr"
- )
+  curve_df = test_curve1, baseline_span = 100,
+  y_direction = "positive", x_direction = "left",
+  multiplier = 3, threshold_method = "iqr"
+)
 
 res_q   <- analyze_a_curve_interaction_distance(
   curve_df = test_curve1, baseline_span = 100,
@@ -249,7 +249,7 @@ ggplot(test_curve1, aes(x = separation_distance_nm, y = force_nN)) +
   guides(color = guide_legend(title = "Threshold method"))
 
 ## Test adhesive direction -------
-test_curve1 = test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
+test_curve1 = test@retractCurves$`180424_fv_paeru_loc1-9-3.spm`
 
 ## 1) Compute interaction distances with different threshold methods
 res_sd  <- analyze_a_curve_interaction_distance(
@@ -317,8 +317,17 @@ ggplot(test_curve1, aes(x = separation_distance_nm, y = force_nN)) +
   guides(color = guide_legend(title = "Threshold method"))
 res_fix
 
+# test analyze_curves_interaction_distance
+test = analyze_curves_interaction_distance(test,useCurve = 'retract',baseline_span = 'automatic',
+                                           y_direction = "negative", x_direction = "left",
+                                           multiplier = 10, threshold_method = "sd",
+                                           threads = 1)
+res_sd
 
 # test analyze_a_curve_area
+analyze_a_curve_area(test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`)
+analyze_a_curve_area(test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`)
+
 
 test_curve1 = test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`
 test_curve2 =  test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
@@ -328,8 +337,7 @@ p2 = ggplot(test_curve2, aes(x = separation_distance_nm, y = force_nN)) +
   geom_line(color = "gray30")
 cowplot::plot_grid(p1,p2)
 
-test_curve1_energy = analyze_a_curve_area(test_curve1)
-test_curve2_energy = analyze_a_curve_area(test_curve2)
+
 
 # test analyze_curves_energy
 test = analyze_curves_energy(fdObj = test,useCurve = "retract",threads = 2)
