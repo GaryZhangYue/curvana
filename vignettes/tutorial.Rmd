@@ -1,80 +1,140 @@
 ---
-title: "curvana: a comprehensive R package for analyzing atomic force microscopy force distance curves"
+title: "curvana: a comprehensive R package for analyzing atomic force microscopy force–distance curves"
 subtitle: "Tutorial"
-date: "`r Sys.Date()`"
 author: Yue (Gary) Zhang, PhD
+date: "`r Sys.Date()`"
 output:
-  rmdformats::readthedown:
-    self_contained: true
-    thumbnails: true
-    lightbox: true
-    gallery: false
+  html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+    number_sections: false
     highlight: tango
-editor_options: 
-  chunk_output_type: console
+vignette: >
+  %\VignetteIndexEntry{curvana tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
+
 
 ```{r setup, include=TRUE}
 knitr::opts_chunk$set(warning = T, message = T,echo = T) 
 ```
 
+
+# Introduction
+
+This tutorial demonstrates the full analytical workflow of the **curvana** R package,  
+from raw AFM deflection–displacement curves to quantitative force–distance metrics  
+such as adhesion, energy, and interaction distance.  
+
+# Preparation 
+
+## Initializing work environment
+
 ```{r Initiate, results='hide'}
-## initiate ---------------------------------------------------------
 packages_to_load = c('curvana','ggplot2','DT','dplyr','DT')
-# Load packages without printing output
 invisible(suppressPackageStartupMessages({
     lapply(packages_to_load, library, character.only = TRUE)
 }))
-
+source(system.file("tutorial_helpers.R", package = "curvana"))
 ```
 
-# Overview
+## Load demo data
 
-**curvana** is an R package that provides a comprehensive framework for analyzing
-atomic force microscopy (AFM) force–distance curves.  
-It is built around an S4 object class called **`fdObj`**, which standardizes
-data import, storage, extraction, and analysis.  
+All examples below use the demo dataset provided in `extdata/` of the package. Note that users can increase the thread used to enable parallel processing for loading a large folder, which will dramatically reduce the computational time. Here we only use 1 thread, as we only have a small demo dataset.
 
-The `fdObj` structure organizes all raw and processed data into designated slots,
-ensuring data integrity, simplifying analysis workflows, and facilitating
-reproducible data sharing.
+At this step, we initialize the fdObj named "test" by importing the test data directory "extdata/" using the "createFdObjFromFolder" function . By default, createFdObjFromFolder will read all files in the designated folder with suffix ".txt", and expect each file has a pair of approach and retract deflection-dislocation raw curve data with standard column names (i.e., Calc_Ramp_Ex_nm, Defl_V_Ex, Calc_Ramp_Rt_nm, Defl_V_Rt). However, users can point to the correct column names in their file, and can also use suffix argument to select to read the designed files, or by providing a metadata. Please note that the input files have to be tab-delimited files. See manuel for details.
 
-# Core Workflow
+```{r load data}
+folder = system.file("extdata", package = "curvana")
+t = 1
+test = createFdObjFromFolder(folder = folder, threads = t)
+```
 
-**curvana** accepts as input a directory of raw *deflection–displacement* curves.
-All curves are automatically registered in the internal **metadata** slot, while
-the corresponding raw data are stored in the **rawcurves** slot.
+Let's take a quick look at the fdObj (named test) we created. We can see that we imported 14 raw curves. Non of them are transformed yet, and filename is the only column in the metadata slot.
 
-Once imported, users can apply curvana’s analysis functions to:
+```{r show init fdobj}
+print(test)
+view_df(test@metadata,'metadata')
+```
 
-- **Transform** raw deflection–displacement curves into calibrated **force–distance** curves  
-- **Quantify** key mechanical properties such as:
-  - Adhesive force  
-  - Adhesive and repulsive energies  
-  - Rupture and repulsive distances  
+## Manipulate the fdObj object
 
-All computed results are automatically saved back into the `fdObj` metadata,
-maintaining a complete, self-contained record of the analysis.
+The demo dataset has measurements made on different bacterial biofilm surface at different dates. Let's group them by setting the date and bacteria group columns
 
-# Visualization and Reporting
+```{r manipulate fdobj by separating data into groups}
+test@metadata$date = sub(pattern = '_.*','',test@metadata$filename)
+test@metadata$bacteria = sub(".*f?_(.*)_loc.*", "\\1", test@metadata$filename)
+view_df(test@metadata,'metadata')
+```
 
-curvana includes flexible plotting utilities for generating publication-ready figures:
 
-- **Scatter plots** of individual or batch-wise raw and processed curves  
-- **Violin plots** summarizing distributions of curve-derived properties  
+It is also possible to extract specific samples from the fdObj object with either sample names (rownames in the metadata), or by subsetting with column conditions
 
-These tools make it easy to explore data quality, compare experimental conditions,
-and visualize quantitative trends across samples.
+```{r manipulate fdobj with extract}
+test.paeru = extract(test,by_col = list(bacteria = "paeru"))
+test.paeru2 = extract(test,by_sample = rownames(test@metadata[test@metadata$bacteria == 'paeru',]))
+test.pmon = extract(test,by_col = list(bacteria = 'pmon2'))
+```
 
-# Integration with shinyCurvana
+Just as we might need to subset fdObj, we might also need to combine two fdObjs. The combine function is designed to do so. Note that if there are overlapping samples between the two fdObjs been combined, the combine function will return error.
 
-**curvana** seamlessly integrates with **shinyCurvana**, an R Shiny application that
-provides a **code-free, user-friendly interface** for performing the same analyses
-interactively.  
+```{r manipulate fdobj with combine}
+test.combine.1 = combineFdObj(test.paeru,test.pmon)
+#test.combine.2 = combineFdObj(test.paeru,test.paeru2) # should return error
+```
 
-Together, they enable both scripting-based and graphical workflows for AFM
-force–distance data processing and interpretation.
+## Preview the raw deflection curves
 
-```{r save image}
+It is important to inspect the raw curves before performing the analysis. We can use the plot_deflection_curves function to plot curves in batch. Here, we split curves into subpanels by column "bacteria", and color code them by column "date".
+
+```{r plot deflection curves, fig.height=7,fig.width=7}
+plot_deflection_curves(test,split_curves_by = 'bacteria',group_curves_by = 'date',
+                       alpha = 0.5,point_size = 0.5,
+                       color_map = list(`180424` = 'darkred',
+                                        `180425` = 'orange'))
+```
+
+# Curve transformation
+
+## Transform curves using the wrapper function transform_curves
+
+At this step, we calculate the baseline and sensitivity of each raw AFM curve and transform the deflection-dislocation curve into force–distance curves. The wrapper function transform_curves() automates this process by internally calling analyze_sensitivity() and analyze_baseline() to estimate the sensitivity and baseline values when their corresponding columns are not yet present in the metadata.
+
+To transform a curve, a spring constant of the AFM probe is required to convert deflection (V) to force (nN). The transform_curves() function accepts either a single numeric value, applied to all curves and stored in metadata$spring_constant, or a metadata column name containing per-curve spring constants. These values are then used with the computed baseline and sensitivity to generate the final force–distance curves.
+
+After these parameters are obtained, the function applies them to transform each curve into its calibrated form. All arguments accepted by analyze_sensitivity() and analyze_baseline() can be passed directly to transform_curves(), allowing full control over the analysis parameters.
+
+```{r transform curves approach,results='hold'}
+t = 1
+test = transform_curves(test,spring_constant = 0.3188,useCurve = 'approach',threads = t)
+```
+```{r transform curves retract,results='hold'}
+t = 1
+test = transform_curves(test,spring_constant = 0.3188,useCurve = 'retract',threads = t)
+```
+## Examine the object after transformation
+
+We can see that now we have curves transformed.
+
+```{r examine fdobj after transformation}
+print(test)
+```
+
+The transformed curves are stored in the retractCurves and approachCurves slots of the fdObj. Note that when the sensitivity or baseline cannot be reliably determined—such as in curves with highly fluctuating probe–surface contact regions or irregular baseline segments—the transformation will fail. In these cases, the corresponding entry in the transformed curve slot (retractCurves or approachCurves) is stored as an empty data frame with zero rows, indicating an unsuccessful transformation.
+
+```{r show retract and approach curve slots}
+print(names(test@retractCurves))
+print(names(test@approachCurves))
+```
+
+The calculated sensitivity, baseline, and input spring constant is not saved as columns in the metadata. Note the curves with baseline/sensitivity undetermined will be NA in the corresponding cell.
+
+```{r show metadata after transformation}
+view_df(test@metadata,'metadata after curve transformation')
+```
+
+```{r save image,eval=FALSE}
 save.image(file = "")
 ```
