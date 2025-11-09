@@ -64,3 +64,56 @@ setClass(
     TRUE
   }
 )
+
+#' Display a Summary of an fdObj Object
+#'
+#' @description
+#' The `show()` method provides a concise overview of an \code{fdObj} object.
+#' It is automatically called when an fdObj is printed in the console (e.g., typing its name).
+#' The summary includes the number of registered samples, imported raw curves,
+#' successfully transformed approach/retract curves, and metadata column names.
+#'
+#' @param object An \code{fdObj} object.
+#'
+#' @details
+#' This method is defined for the S4 class \code{fdObj} and is executed automatically
+#' when the object is shown in the console. It provides a quick overview of data
+#' completeness and analysis progress without modifying the object.
+#'
+#' @return
+#' Prints a formatted summary of the object in the console.
+#'
+#' @examples
+#' \dontrun{
+#' folder <- system.file("extdata", package = "curvana")
+#' test <- createFdObjFromFolder(folder)
+#' test  # calling 'show()' implicitly
+#' }
+#'
+#' @export
+setMethod("show", "fdObj", function(object) {
+  cat("An object of class \"fdObj\"\n")
+  cat("----------------------------------------\n")
+
+  # Metadata summary
+  n_samples <- nrow(object@metadata)
+  cat("Samples registered: ", n_samples, "\n")
+
+  # Raw and transformed curves
+  n_raw <- length(object@rawCurves)
+  n_approach <- sum(sapply(object@approachCurves, function(x) {
+    !is.null(x) && nrow(x) > 0
+  }))
+
+  n_retract <- sum(sapply(object@retractCurves, function(x) {
+    !is.null(x) && nrow(x) > 0
+  }))
+  cat("Raw curves imported: ", n_raw, "\n")
+  cat("Transformed approach curves: ", n_approach, "\n")
+  cat("Transformed retract curves:  ", n_retract, "\n")
+
+  # Metadata columns
+  cat("\nMetadata columns:\n")
+  cat(paste0("  - ", colnames(object@metadata), collapse = "\n"), "\n")
+})
+
