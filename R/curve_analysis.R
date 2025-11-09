@@ -390,19 +390,30 @@ transform_a_curve <- function(x, y,
 #' Transform All Curves in an fdObj into Separation Distance and Force
 #'
 #' Applies `transform_a_curve()` to all raw curves in an fdObj object.
+#' Automatically computes sensitivity and baseline values if they are missing
+#' by calling `analyze_sensitivity()` and `analyze_baseline()`, passing through
+#' any user-supplied arguments that match those functions' parameters.
 #'
 #' @param fdObj An object of class \code{fdObj}.
-#' @param spring_constant Numeric. Spring constant in nN/nm.
-#' @param useCurve Character. Either "approach" or "retract".
+#' @param spring_constant Numeric or character. If numeric, a constant spring
+#'   constant (nN/nm) applied to all curves and written to
+#'   \code{fdObj@metadata$spring_constant}. If character, the name of a column
+#'   in \code{fdObj@metadata} that contains per-curve spring constants.
+#' @param useCurve Character; one of \code{c("approach", "retract")}.
 #' @param threads Integer. Number of parallel threads to use (default = 1).
+#' @param ... Additional arguments passed to `analyze_sensitivity()` or
+#'   `analyze_baseline()` if they are invoked automatically.
 #'
 #' @return An updated \code{fdObj} with transformed curves stored in the corresponding slot.
 #' @export
-transform_curves <- function(fdObj, spring_constant, useCurve = "approach", threads = 1) {
-  if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
-  if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
+transform_curves <- function(fdObj, spring_constant, useCurve = c("approach", "retract"), threads = 1, ...) {
+  # ---- Validation ----
+  if (!inherits(fdObj, "fdObj"))
+    stop("fdObj must be of class 'fdObj'")
 
-  # Set column names based on approach/retract
+  useCurve <- match.arg(useCurve)
+
+  # ---- Determine column names ----
   if (useCurve == "approach") {
     x_col <- "Calc_Ramp_Ex_nm"
     y_col <- "Defl_V_Ex"
@@ -414,14 +425,53 @@ transform_curves <- function(fdObj, spring_constant, useCurve = "approach", thre
   raw_list <- fdObj@rawCurves
   curve_names <- names(raw_list)
 
-  # Extract relevant metadata
-  sensitivity_vec <- fdObj@metadata[[paste0("sensitivity_V_nm_", useCurve)]]
-  baseline_vec <- fdObj@metadata[[paste0("baseline_V_", useCurve)]]
+  # ---- Handle spring constant ----
+  if (is.numeric(spring_constant) && length(spring_constant) == 1) {
+    # Use constant value and record it in metadata
+    fdObj@metadata$spring_constant <- rep(spring_constant, nrow(fdObj@metadata))
+    spring_constant_vec <- fdObj@metadata$spring_constant
+    message(sprintf("Using fixed spring constant: %.4f nN/nm (stored in metadata$spring_constant).", spring_constant))
+  } else if (is.character(spring_constant) && length(spring_constant) == 1) {
+    if (!spring_constant %in% names(fdObj@metadata)) {
+      stop(sprintf("Column '%s' not found in fdObj@metadata for spring constants.", spring_constant))
+    }
+    spring_constant_vec <- fdObj@metadata[[spring_constant]]
+    message(sprintf("Using spring constant column '%s' from metadata.", spring_constant))
+  } else {
+    stop("spring_constant must be either a single numeric value or a column name (string) in metadata.")
+  }
+  names(spring_constant_vec) <- rownames(fdObj@metadata)
+
+  # ---- Ensure sensitivity information ----
+  sens_col <- paste0("sensitivity_V_nm_", useCurve)
+  if (!sens_col %in% names(fdObj@metadata)) {
+    message(sprintf("Column '%s' not found in metadata. Running analyze_sensitivity()...", sens_col))
+    call_args <- c(as.list(environment()), list(...))
+    sens_args <- call_args[names(call_args) %in% names(formals(analyze_sensitivity))]
+    sens_args$fdObj <- fdObj
+    if (is.null(sens_args$useCurve)) sens_args$useCurve <- useCurve
+    fdObj <- do.call(analyze_sensitivity, sens_args)
+  }
+
+  sensitivity_vec <- fdObj@metadata[[sens_col]]
+  names(sensitivity_vec) <- rownames(fdObj@metadata)
   senscal_segment <- fdObj@senscal_segment[[useCurve]]
 
-  names(sensitivity_vec) <- rownames(fdObj@metadata)
+  # ---- Ensure baseline information ----
+  base_col <- paste0("baseline_V_", useCurve)
+  if (!base_col %in% names(fdObj@metadata)) {
+    message(sprintf("Column '%s' not found in metadata. Running analyze_baseline()...", base_col))
+    call_args <- c(as.list(environment()), list(...))
+    base_args <- call_args[names(call_args) %in% names(formals(analyze_baseline))]
+    base_args$fdObj <- fdObj
+    if (is.null(base_args$useCurve)) base_args$useCurve <- useCurve
+    fdObj <- do.call(analyze_baseline, base_args)
+  }
+
+  baseline_vec <- fdObj@metadata[[base_col]]
   names(baseline_vec) <- rownames(fdObj@metadata)
 
+  # ---- Transform a single curve ----
   transform_one <- function(name) {
     df <- raw_list[[name]]
     if (!(x_col %in% colnames(df)) || !(y_col %in% colnames(df))) {
@@ -432,9 +482,10 @@ transform_curves <- function(fdObj, spring_constant, useCurve = "approach", thre
     y <- df[[y_col]]
     baseline <- baseline_vec[name]
     sensitivity <- sensitivity_vec[name]
+    spring_const <- spring_constant_vec[name]
     senscal_seg <- senscal_segment[[name]]
 
-    if (is.na(baseline) || is.na(sensitivity) || is.null(senscal_seg)) {
+    if (is.na(baseline) || is.na(sensitivity) || is.null(senscal_seg) || is.na(spring_const)) {
       return(data.frame(separation_distance_nm = numeric(0), force_nN = numeric(0)))
     } else {
       transform_a_curve(
@@ -442,16 +493,17 @@ transform_curves <- function(fdObj, spring_constant, useCurve = "approach", thre
         y = y,
         baseline = baseline,
         sensitivity = sensitivity,
-        spring_constant = spring_constant,
+        spring_constant = spring_const,
         senscal_seg_x = senscal_seg[[1]],
         senscal_seg_y = senscal_seg[[2]]
       )
     }
-
-
   }
 
+  # ---- Parallel or sequential execution ----
   if (threads > 1) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
     future::plan(future::multisession, workers = threads)
     results <- future.apply::future_lapply(curve_names, transform_one)
   } else {
@@ -461,9 +513,9 @@ transform_curves <- function(fdObj, spring_constant, useCurve = "approach", thre
   names(results) <- curve_names
 
   n_fail <- sum(sapply(results, nrow) == 0)
-  message(sprintf("Processed %d curves; %d failed transformation.", length(curve_names), n_fail))
+  message(sprintf("Processed %d curves (%s); %d failed transformation.", length(curve_names), useCurve, n_fail))
 
-  # Save results to fdObj
+  # ---- Store results in fdObj ----
   if (useCurve == "approach") {
     fdObj@approachCurves <- results
   } else {
@@ -472,6 +524,8 @@ transform_curves <- function(fdObj, spring_constant, useCurve = "approach", thre
 
   return(fdObj)
 }
+
+
 
 #' Adhesive Force for a Single Transformed AFM Curve
 #'
