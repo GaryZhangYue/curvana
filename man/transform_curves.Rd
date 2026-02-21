@@ -4,20 +4,35 @@
 \alias{transform_curves}
 \title{Transform All Curves in an fdObj into Separation Distance and Force}
 \usage{
-transform_curves(fdObj, spring_constant, useCurve = "approach", threads = 1)
+transform_curves(
+  fdObj,
+  spring_constant,
+  useCurve = c("approach", "retract"),
+  threads = 1,
+  ...
+)
 }
 \arguments{
 \item{fdObj}{An object of class \code{fdObj}.}
 
-\item{spring_constant}{Numeric. Spring constant in nN/nm.}
+\item{spring_constant}{Numeric or character. If numeric, a constant spring
+constant (nN/nm) applied to all curves and written to
+\code{fdObj@metadata$spring_constant}. If character, the name of a column
+in \code{fdObj@metadata} that contains per-curve spring constants.}
 
-\item{useCurve}{Character. Either "approach" or "retract".}
+\item{useCurve}{Character; one of \code{c("approach", "retract")}.}
 
 \item{threads}{Integer. Number of parallel threads to use (default = 1).}
+
+\item{...}{Additional arguments passed to `analyze_sensitivity()` or
+`analyze_baseline()` if they are invoked automatically.}
 }
 \value{
 An updated \code{fdObj} with transformed curves stored in the corresponding slot.
 }
 \description{
 Applies `transform_a_curve()` to all raw curves in an fdObj object.
+Automatically computes sensitivity and baseline values if they are missing
+by calling `analyze_sensitivity()` and `analyze_baseline()`, passing through
+any user-supplied arguments that match those functions' parameters.
 }

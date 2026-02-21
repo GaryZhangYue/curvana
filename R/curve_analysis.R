@@ -827,7 +827,7 @@ analyze_a_curve_interaction_distance <- function(
 #' @param fdObj An object of class \code{fdObj}.
 #' @param useCurve Character; must be one of \code{c("retract", "approach")}.
 #' @param threads Integer. Number of parallel workers (default \code{1}).
-#' @param baseline_span Either a single integer ≥ 1, or the string "automatic".
+#' @param baseline_span Either a single integer >= 1, or the string "automatic".
 #'   When "automatic", per-curve baseline spans are read from
 #'   \code{fdObj@metadata$baseline_span_<useCurve>}.
 #' @param y_direction "negative" (rupture) or "positive" (repulsive).

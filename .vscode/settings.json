@@ -1,0 +1,9 @@
+{
+  "workbench.editor.autoLockGroups": {
+    "mainThreadWebview-markdown.preview": true
+  },
+  "r.rterm.windows": "C:\\Program Files\\R\\R-4.4.2\\bin\\x64\\Rterm.exe",
+  "r.rpath.windows": "C:\\Program Files\\R\\R-4.4.2\\bin\\x64\\R.exe",
+  "r.sessionWatcher": true,
+  "r.bracketedPaste": true
+}

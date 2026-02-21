@@ -24,16 +24,14 @@ knitr::opts_chunk$set(warning = T, message = T,echo = T)
 
 # Introduction
 
-This tutorial demonstrates the full analytical workflow of the **curvana** R package,  
-from raw AFM deflection–displacement curves to quantitative force–distance metrics  
-such as adhesion, energy, and interaction distance.  
+This tutorial demonstrates the full analytical workflow of the **curvana** R package, from raw AFM deflection–displacement curves to quantitative force–distance curves and analytical metrics, such as adhesive force, interaction energy and distance.  
 
 # Preparation 
 
 ## Initializing work environment
 
-```{r Initiate, results='hide'}
-packages_to_load = c('curvana','ggplot2','DT','dplyr','DT')
+```{r Initiate, results='hide',warning='False'}
+packages_to_load = c('curvana','ggplot2','DT','dplyr','DT','ggpubr','cowplot')
 invisible(suppressPackageStartupMessages({
     lapply(packages_to_load, library, character.only = TRUE)
 }))
@@ -42,9 +40,13 @@ source(system.file("tutorial_helpers.R", package = "curvana"))
 
 ## Load demo data
 
-All examples below use the demo dataset provided in `extdata/` of the package. Note that users can increase the thread used to enable parallel processing for loading a large folder, which will dramatically reduce the computational time. Here we only use 1 thread, as we only have a small demo dataset.
+All examples below use the demo dataset provided in `extdata/` inside the package. To use your own dataset, you can pass the path to the directory holding the data to the "folder" argument. Note that users can increase the threads to enable parallel processing for loading a large folder (e.g., > 100 curves), which will dramatically reduce the computational time. Here we use 1 thread, as we only have a small demo dataset.
 
-At this step, we initialize the fdObj named "test" by importing the test data directory "extdata/" using the "createFdObjFromFolder" function . By default, createFdObjFromFolder will read all files in the designated folder with suffix ".txt", and expect each file has a pair of approach and retract deflection-dislocation raw curve data with standard column names (i.e., Calc_Ramp_Ex_nm, Defl_V_Ex, Calc_Ramp_Rt_nm, Defl_V_Rt). However, users can point to the correct column names in their file, and can also use suffix argument to select to read the designed files, or by providing a metadata. Please note that the input files have to be tab-delimited files. See manuel for details.
+At this step, we initialize the fdObj named "test" by importing the demo data directory "extdata/" using the "createFdObjFromFolder" function. An fdObj is the core data container in curvana, designed to store atomic force microscopy (AFM) force–distance curve data, including raw approach and retract curves, transformed data, associated metadata for downstream analysis, and the analytical metrics generated.
+
+By default, createFdObjFromFolder will read all files in the designated folder with suffix ".txt", and expect each file has paired approach and retract deflection-dislocation raw curve data with standard column names (i.e., Calc_Ramp_Ex_nm, Defl_V_Ex, Calc_Ramp_Rt_nm, Defl_V_Rt). 
+
+Users working with non-standard input files can specify column headers with corresponding arguments. User may also use the "suffix" argument to specify files to import by specifying filename suffix, or by providing a metadata dataframe whose row names match the input file names. Please note that the input files have to be tab-delimited files. See package manual for detailed usage.
 
 ```{r load data}
 folder = system.file("extdata", package = "curvana")
@@ -52,7 +54,7 @@ t = 1
 test = createFdObjFromFolder(folder = folder, threads = t)
 ```
 
-Let's take a quick look at the fdObj (named test) we created. We can see that we imported 14 raw curves. Non of them are transformed yet, and filename is the only column in the metadata slot.
+Let's take a quick look at the fdObj (named test) we created. We can see that we imported 14 raw curves. Non of them are transformed yet, and "filename" is the only column in the metadata slot.
 
 ```{r show init fdobj}
 print(test)
@@ -61,7 +63,7 @@ view_df(test@metadata,'metadata')
 
 ## Manipulate the fdObj object
 
-The demo dataset has measurements made on different bacterial biofilm surface at different dates. Let's group them by setting the date and bacteria group columns
+The demo data set has measurements made on different bacterial biofilm surface at different dates. Let's group them by setting the date and bacteria group columns
 
 ```{r manipulate fdobj by separating data into groups}
 test@metadata$date = sub(pattern = '_.*','',test@metadata$filename)
@@ -69,8 +71,7 @@ test@metadata$bacteria = sub(".*f?_(.*)_loc.*", "\\1", test@metadata$filename)
 view_df(test@metadata,'metadata')
 ```
 
-
-It is also possible to extract specific samples from the fdObj object with either sample names (rownames in the metadata), or by subsetting with column conditions
+It is also possible to extract specific samples from an fdObj either by providing their sample names (i.e., row names in the metadata) or by subsetting the object based on conditions applied to metadata columns.
 
 ```{r manipulate fdobj with extract}
 test.paeru = extract(test,by_col = list(bacteria = "paeru"))
@@ -78,7 +79,7 @@ test.paeru2 = extract(test,by_sample = rownames(test@metadata[test@metadata$bact
 test.pmon = extract(test,by_col = list(bacteria = 'pmon2'))
 ```
 
-Just as we might need to subset fdObj, we might also need to combine two fdObjs. The combine function is designed to do so. Note that if there are overlapping samples between the two fdObjs been combined, the combine function will return error.
+Just as we might need to subset a fdObj, we might also need to combine two fdObjs (e.g., from different experiments). The "combine" function is designed for this purpose. Note that if there are overlapping samples between the two fdObjs being combined, the "combine" function will return an error.
 
 ```{r manipulate fdobj with combine}
 test.combine.1 = combineFdObj(test.paeru,test.pmon)
@@ -87,7 +88,7 @@ test.combine.1 = combineFdObj(test.paeru,test.pmon)
 
 ## Preview the raw deflection curves
 
-It is important to inspect the raw curves before performing the analysis. We can use the plot_deflection_curves function to plot curves in batch. Here, we split curves into subpanels by column "bacteria", and color code them by column "date".
+It is important to inspect the raw curves before formal analysis. We can use the "plot_deflection_curves" function to plot curves in batch. Here, we split curves into sub-panels by column "bacteria", and color code them by column "date".
 
 ```{r plot deflection curves, fig.height=7,fig.width=7}
 plot_deflection_curves(test,split_curves_by = 'bacteria',group_curves_by = 'date',
@@ -98,22 +99,26 @@ plot_deflection_curves(test,split_curves_by = 'bacteria',group_curves_by = 'date
 
 # Curve transformation
 
-## Transform curves using the wrapper function transform_curves
+One advantage of curvana is that each step of the data analysis is modularized, enabling a flexible and customizable workflow. Curve transformation in curvana involves several steps, including sensitivity calculation, baseline offset calculation, and the application of these parameters to convert raw data into interaction force–separation distance curves. In this section, we demonstrate how to apply a wrapper function to transform all curves at once, as well as how each curve is transformed internally under the hood.
 
-At this step, we calculate the baseline and sensitivity of each raw AFM curve and transform the deflection-dislocation curve into force–distance curves. The wrapper function transform_curves() automates this process by internally calling analyze_sensitivity() and analyze_baseline() to estimate the sensitivity and baseline values when their corresponding columns are not yet present in the metadata.
+## Transform curves using the wrapper function "transform_curves"
 
-To transform a curve, a spring constant of the AFM probe is required to convert deflection (V) to force (nN). The transform_curves() function accepts either a single numeric value, applied to all curves and stored in metadata$spring_constant, or a metadata column name containing per-curve spring constants. These values are then used with the computed baseline and sensitivity to generate the final force–distance curves.
+At this step, we calculate the baseline and sensitivity of each raw AFM curve and transform the deflection-dislocation data into calibrated force–distance curves. The wrapper function transform_curves() automates this process by internally calling analyze_sensitivity() and analyze_baseline() to estimate the sensitivity and baseline values when their corresponding columns are not yet present in the metadata.
+
+To transform a curve, the spring constant of the AFM probe is required to convert deflection (V) to force (nN). The transform_curves() function accepts either a single numeric value, applied to all curves and stored in metadata$spring_constant, or a metadata column name containing per-curve spring constants. These values are then used with the computed baseline and sensitivity to generate the final force–distance curves.
 
 After these parameters are obtained, the function applies them to transform each curve into its calibrated form. All arguments accepted by analyze_sensitivity() and analyze_baseline() can be passed directly to transform_curves(), allowing full control over the analysis parameters.
 
-```{r transform curves approach,results='hold'}
+```{r transform curves approach,warning=TRUE, message=TRUE,results='hold', echo=TRUE}
 t = 1
-test = transform_curves(test,spring_constant = 0.3188,useCurve = 'approach',threads = t)
+test2 = transform_curves(test,spring_constant = 0.3188,useCurve = 'approach',threads = t)
 ```
+
 ```{r transform curves retract,results='hold'}
 t = 1
-test = transform_curves(test,spring_constant = 0.3188,useCurve = 'retract',threads = t)
+test2 = transform_curves(test,spring_constant = 0.3188,useCurve = 'retract',threads = t)
 ```
+
 ## Examine the object after transformation
 
 We can see that now we have curves transformed.
@@ -129,12 +134,176 @@ print(names(test@retractCurves))
 print(names(test@approachCurves))
 ```
 
-The calculated sensitivity, baseline, and input spring constant is not saved as columns in the metadata. Note the curves with baseline/sensitivity undetermined will be NA in the corresponding cell.
+The calculated sensitivity, baseline, and input spring constant is now saved as columns in the metadata. Note the curves with baseline/sensitivity undetermined will be NA in the corresponding cell.
 
 ```{r show metadata after transformation}
 view_df(test@metadata,'metadata after curve transformation')
 ```
 
-```{r save image,eval=FALSE}
-save.image(file = "")
+
+## Single curve transformation
+
+### Sensitivity calculation
+
+To demonstrate how each single curve is transformed, we take the approach part of "180424_fc_mica_loc1.001" as an example. The function "calc_sensitivity", adapted from fdafm (Zhang et al., 2021), is designed to automatically to calculate the sensitivity value. Note that the function returns two outputs -- the sensitivity value, and the subset of data points used to calculate the sensitivity value (the second element of the returned list, which is a named dataframe named senscal_segment).
+
+```{r single curve sensitivity analysis}
+sc.1.name = '180424_fc_mica_loc1.001'
+sc.1.raw = test@rawCurves[[sc.1.name]]
+
+x = sc.1.raw$Calc_Ramp_Ex_nm
+y = sc.1.raw$Defl_V_Ex
+res = calc_sensitivity(end = 200,intv = 4,x = x,y = y)
+sc.1.raw$`Region used for Sensitivity calculation` = "FALSE"
+sc.1.raw$`Region used for Sensitivity calculation`[1:nrow(res$senscal_segment)] <- 'TRUE'
+
+ggplot(sc.1.raw, aes(x = Calc_Ramp_Ex_nm, y = Defl_V_Ex)) +
+  geom_point(aes(
+    color = case_when(
+      `Region used for Sensitivity calculation` == TRUE ~ "Sensitivity region",
+      TRUE ~ "Other"
+    )
+  ), size = 1.5) +
+  scale_color_manual(
+    values = c(
+      "Sensitivity region" = "hotpink",
+      "Baseline region" = "orange",
+      "Other" = "grey70"
+    ),
+    name = "Region"
+  ) +
+  labs(
+    x = "Calc_Ramp_Ex (nm)",
+    y = "Defl_V_Ex (V)",
+    title = "AFM Force Curve Regions"
+  ) +
+  theme_minimal(base_size = 14)
 ```
+
+To analyze the sensitivity value for all curves in the object at once, we can run function "analyze_sensitivity." The function internally executes "calc_sensitivity" for each curve separately, and record the sensitivity value of each curve in a metadata column named "sensitivity_V_nm_<dir>", where dir is the selected curve portion via useCurve argument (either "approach" or "retract"). 
+
+Curves that failed in sensitivity calculation will have an 'NA' in their corresponding cells. The segment of each raw curve used for sensitivity calculation is saved in the object's slot named "senscal_segment".
+
+```{r analyze sensitivity in batch}
+test = analyze_sensitivity(test,useCurve = 'approach',threads = 1)
+test = analyze_sensitivity(test,useCurve = 'retract',threads = 1)
+view_df(test@metadata,'metadata with sensitivity values added as columns')
+```
+
+### Baseline offsets
+
+Similarly, the offset voltage of each curve can be estimated using the find_baseline() function. We assume that the far-right region of every curve corresponds to the probe being fully detached from the substrate and therefore free from interaction forces. The mean of the first N points (defined by the least_length argument, default = 150) in this region is calculated as the baseline offset value.
+
+Some curves exhibit undulating or unstable baselines. Such abnormal curves—identified by a slope greater than slp_threshold (default = 0.001) and a standard deviation greater than std_threshold (default = 0.005)—are considered unreliable and are omitted from subsequent analyses.
+
+Similar as the "cal_sensitivity" function, "find_baseline" also returns two outputs -- the offset value, and the subset of data points used to calculate the offset value (the second element of the returned list, which is a named dataframe named baseline_segment).
+
+
+```{r single curve baseline calculation}
+
+res.b = find_baseline(x = x, y = y, least_length = 150, sensitivity = res$sensitivity,slp_threshold = 0.001,std_threshold = 0.005)
+sc.1.raw$`Region used for baseline offset calculation` = 'TRUE'
+sc.1.raw$`Region used for baseline offset calculation`[1:(length(sc.1.raw$Defl_V_Ex)-150)] = 'FALSE'
+
+ggplot(sc.1.raw, aes(x = Calc_Ramp_Ex_nm, y = Defl_V_Ex)) +
+  geom_point(aes(
+    color = case_when(
+      `Region used for baseline offset calculation` == TRUE ~ "Baseline region",
+      TRUE ~ "Other"
+    )
+  ), size = 1.5) +
+  scale_color_manual(
+    values = c(
+      "Sensitivity region" = "hotpink",
+      "Baseline region" = "orange",
+      "Other" = "grey70"
+    ),
+    name = "Region"
+  ) +
+  labs(
+    x = "Calc_Ramp_Ex (nm)",
+    y = "Defl_V_Ex (V)",
+    title = "AFM Force Curve Regions"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+
+To analyze the baseline offset for each curve in an fdObj, we use the analyze_baseline() function. This function internally calls find_baseline() for each curve and records the computed baseline offset values in the metadata columns "baseline_V_approach" and "baseline_V_retract", along with the length of the baseline segment defined by the user.
+
+Curves that fail baseline calculation are assigned NA in these metadata columns. Since baseline estimation requires a valid sensitivity value, any curve that fails sensitivity calculation will also fail baseline calculation. The portions of each raw curve used for baseline offset estimation are stored in the baseline_segment slot of the object.
+
+```{r analyze baseline in batch}
+test = analyze_baseline(test,useCurve = 'approach',least_length = 150)
+test = analyze_baseline(test,useCurve = 'retract',least_length = 150)
+view_df(test@metadata,'metadata with baseline values added as columns')
+```
+
+
+# Transformation of a raw curve
+
+Now, with the sensitivity and baseline offset values calculated, we are ready to transform the curve with function transform_a_curve.
+
+```{r single curve transform,fig.height=6,fig.width=16}
+sc.1.tr = transform_a_curve(x = x, y= y, baseline = res.b$baseline, sensitivity = res$sensitivity,
+                             spring_constant = 0.3188, senscal_seg_x = res$senscal_segment$x,
+                             senscal_seg_y = res$senscal_segment$y)
+p1 = ggplot(sc.1.raw, aes(x = Calc_Ramp_Ex_nm, y = Defl_V_Ex)) +
+  geom_point(aes(
+    color = case_when(
+      `Region used for Sensitivity calculation` == TRUE ~ "Sensitivity region",
+      `Region used for baseline offset calculation` == TRUE ~ "Baseline region",
+      TRUE ~ "Other"
+    )
+  ), size = 1.5) +
+  scale_color_manual(
+    values = c(
+      "Sensitivity region" = "hotpink",
+      "Baseline region" = "orange",
+      "Other" = "grey70"
+    ),
+    name = "Region"
+  ) +
+  labs(
+    x = "Calc_Ramp_Ex (nm)",
+    y = "Defl_V_Ex (V)",
+    title = "AFM Force Curve Regions"
+  ) +
+  theme_minimal(base_size = 14) + 
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  geom_vline(xintercept = 0, color = "black", linewidth = 0.5)
+
+sc.1.tr$`Region used for Sensitivity calculation` = "FALSE"
+sc.1.tr$`Region used for Sensitivity calculation`[1:nrow(res$senscal_segment)] <- 'TRUE'
+sc.1.tr$`Region used for baseline offset calculation` = 'TRUE'
+sc.1.tr$`Region used for baseline offset calculation`[1:(length(sc.1.raw$Defl_V_Ex)-150)] = 'FALSE'
+
+
+p2 = ggplot(sc.1.tr, aes(x = separation_distance_nm, y = force_nN)) +
+  geom_point(aes(
+    color = case_when(
+      `Region used for Sensitivity calculation` == TRUE ~ "Sensitivity region",
+      `Region used for baseline offset calculation` == TRUE ~ "Baseline region",
+      TRUE ~ "Other"
+    )
+  ), size = 1.5) +
+  scale_color_manual(
+    values = c(
+      "Sensitivity region" = "hotpink",
+      "Baseline region" = "orange",
+      "Other" = "grey70"
+    ),
+    name = "Region"
+  ) +
+  labs(
+    x = "Separation distance (nm)",
+    y = "force (nN)",
+    title = "AFM Force Curve Regions"
+  ) +
+  theme_minimal(base_size = 14) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  geom_vline(xintercept = 0, color = "black", linewidth = 0.5)
+
+plot_grid(p1,p2)
+```
+

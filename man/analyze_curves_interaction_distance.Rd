@@ -27,7 +27,7 @@ analyze_curves_interaction_distance(
 
 \item{threads}{Integer. Number of parallel workers (default \code{1}).}
 
-\item{baseline_span}{Either a single integer ≥ 1, or the string "automatic".
+\item{baseline_span}{Either a single integer >= 1, or the string "automatic".
 When "automatic", per-curve baseline spans are read from
 \code{fdObj@metadata$baseline_span_<useCurve>}.}
 
