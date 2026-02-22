@@ -995,7 +995,7 @@ analyze_curves_interaction_distance <- function(
 #'     \item{\code{separation_distance_nm}}{Numeric x-coordinates (nm). Values < 0 are clamped to 0.}
 #'     \item{\code{force_nN}}{Numeric y-coordinates (nN).}
 #'   }
-#' @param noise_cutoff Numeric. Noise threshold for energy calculation (default: 0). Only areas where |force| > noise_cutoff are included in energy calculation.
+#' @param noise_cutoff Numeric. Noise threshold for energy calculation (default: 0). Only areas where |force| > noise_cutoff are included in energy calculation. Negative values are converted using \code{abs(noise_cutoff)}.
 #'
 #' @return A named numeric vector of length 2:
 #' \describe{
@@ -1014,6 +1014,8 @@ analyze_curves_interaction_distance <- function(
 #' @seealso area_trapezoid, area_triangle, crossing_x0
 #' @export
 analyze_a_curve_area <- function(curve_df, noise_cutoff = 0) {
+  noise_cutoff <- abs(noise_cutoff)
+
   # ---- Universal input check (adapted to this function's return type) ----
   if (!is.data.frame(curve_df) ||
       !all(c("separation_distance_nm", "force_nN") %in% names(curve_df))) {
