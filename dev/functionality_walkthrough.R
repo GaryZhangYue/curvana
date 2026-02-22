@@ -32,7 +32,7 @@ test.pmon = extract(test,by_col = list(bacteria = 'pmon2'))
 # test: combine --------
 test.combine.1 = combineFdObj(test.paeru,test.pmon)
 test.combine.1@metadata
-test.combine.2 = combineFdObj(test.paeru,test.paeru2) # should return error
+#test.combine.2 = combineFdObj(test.paeru,test.paeru2) # should return error
 
 # test: plot_deflection_curves --------
 plot_deflection_curves(test,split_curves_by = 'bacteria')
@@ -325,8 +325,14 @@ test = analyze_curves_interaction_distance(test,useCurve = 'retract',baseline_sp
 res_sd
 
 # test analyze_a_curve_area
+## default noise threshold
 analyze_a_curve_area(test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`)
+## custom noise threshold = 1
+analyze_a_curve_area(test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`,  noise_cutoff= 1)
+## default noise threshold
 analyze_a_curve_area(test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`)
+## custom noise threshold = 1
+analyze_a_curve_area(test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`,  noise_cutoff= 3)
 
 
 test_curve1 = test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`
@@ -342,5 +348,7 @@ cowplot::plot_grid(p1,p2)
 # test analyze_curves_energy
 test = analyze_curves_energy(fdObj = test,useCurve = "retract",threads = 2)
 View(test@metadata)
+test2 = analyze_curves_energy(fdObj = test,useCurve = "retract",threads = 2, noise_cutoff=1)
+View(test2@metadata)
 test = analyze_curves_energy(fdObj = test,useCurve = "approach",threads = 2)
 View(test@metadata)

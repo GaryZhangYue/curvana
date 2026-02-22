@@ -978,12 +978,13 @@ analyze_curves_interaction_distance <- function(
 #' Analyze the adhesive and repulsive areas of a single AFM curve (data.frame input)
 #'
 #' Calculates the total areas above (\emph{repulsive}) and below (\emph{adhesive})
-#' the x-axis for one curve supplied as a data.frame with columns
+#' the noise threshold for one curve supplied as a data.frame with columns
 #' \code{separation_distance_nm} (x) and \code{force_nN} (y).
 #'
 #' The computation proceeds in the given point order (no sorting). Segments entirely
-#' on one side of the x-axis are integrated as trapezoids, and segments that cross
-#' the x-axis are split at the interpolated x-intercept and integrated as two triangles.
+#' above the positive noise threshold or below the negative noise threshold are integrated 
+#' as trapezoids, and segments that cross the noise thresholds are split at the interpolated 
+#' crossing point and integrated as triangles. Areas within the noise band (-noise_cutoff to +noise_cutoff) are ignored.
 #'
 #' As a practical fix for small transformation offsets near the origin, any
 #' \code{separation_distance_nm < 0} are clamped to 0 before integration.
@@ -994,11 +995,12 @@ analyze_curves_interaction_distance <- function(
 #'     \item{\code{separation_distance_nm}}{Numeric x-coordinates (nm). Values < 0 are clamped to 0.}
 #'     \item{\code{force_nN}}{Numeric y-coordinates (nN).}
 #'   }
+#' @param noise_cutoff Numeric. Noise threshold for energy calculation (default: 0). Only areas where |force| > noise_cutoff are included in energy calculation.
 #'
 #' @return A named numeric vector of length 2:
 #' \describe{
-#'   \item{adhesive_area}{Total positive area where \code{y < 0}.}
-#'   \item{repulsive_area}{Total positive area where \code{y > 0}.}
+#'   \item{adhesive_area}{Total positive area where \code{y < -noise_cutoff}.}
+#'   \item{repulsive_area}{Total positive area where \code{y > noise_cutoff}.}
 #' }
 #'
 #' @examples
@@ -1007,10 +1009,11 @@ analyze_curves_interaction_distance <- function(
 #'   force_nN               = c( 0.50 , 0, 0.30, -0.20, 0.10)
 #' )
 #' analyze_a_curve_area(df)
+#' analyze_a_curve_area(df, noise_cutoff = 0.1)  # Only count forces > 0.1 nN in magnitude
 #'
 #' @seealso area_trapezoid, area_triangle, crossing_x0
 #' @export
-analyze_a_curve_area <- function(curve_df) {
+analyze_a_curve_area <- function(curve_df, noise_cutoff = 0) {
   # ---- Universal input check (adapted to this function's return type) ----
   if (!is.data.frame(curve_df) ||
       !all(c("separation_distance_nm", "force_nN") %in% names(curve_df))) {
@@ -1046,42 +1049,86 @@ analyze_a_curve_area <- function(curve_df) {
     # Skip zero-width segments (possible after clamping/backtracking)
     if (x1 == x2) next
 
-    # Both strictly above → repulsive trapezoid
-    if (y1 > 0 && y2 > 0) {
-      repulsive_area <- repulsive_area + area_trapezoid(x1, y1, x2, y2)
+    # Both above noise cutoff → repulsive trapezoid
+    if (y1 > noise_cutoff && y2 > noise_cutoff) {
+      repulsive_area <- repulsive_area + area_trapezoid(x1, y1 - noise_cutoff, x2, y2 - noise_cutoff)
       next
     }
 
-    # Both strictly below → adhesive trapezoid
-    if (y1 < 0 && y2 < 0) {
-      adhesive_area  <- adhesive_area  + area_trapezoid(x1, y1, x2, y2)
+    # Both below negative noise cutoff → adhesive trapezoid
+    if (y1 < -noise_cutoff && y2 < -noise_cutoff) {
+      adhesive_area  <- adhesive_area  + area_trapezoid(x1, y1 + noise_cutoff, x2, y2 + noise_cutoff)
       next
     }
 
-    # One endpoint on axis → single triangle
-    if (y1 == 0 && y2 != 0) {
-      # Triangle between (x1, 0) and (x2, y2); x0 = x1
-      if (y2 > 0) repulsive_area <- repulsive_area + area_triangle(x2, y2, x1)
-      else        adhesive_area  <- adhesive_area  + area_triangle(x2, y2, x1)
-      next
-    }
-    if (y2 == 0 && y1 != 0) {
-      # Triangle between (x1, y1) and (x2, 0); x0 = x2
-      if (y1 > 0) repulsive_area <- repulsive_area + area_triangle(x1, y1, x2)
-      else        adhesive_area  <- adhesive_area  + area_triangle(x1, y1, x2)
+    # Both within noise band (-noise_cutoff to +noise_cutoff) → skip entirely (no area counted)
+    if (abs(y1) <= noise_cutoff && abs(y2) <= noise_cutoff) {
       next
     }
 
-    # True sign change → split at x0 and add two triangles
-    x0 <- crossing_x0(x1, y1, x2, y2)
-    if (is.na(x0)) next  # safety
+    # One endpoint on positive noise cutoff
+    if (y1 == noise_cutoff && y2 > noise_cutoff) {
+      repulsive_area <- repulsive_area + area_triangle(x2, y2 - noise_cutoff, x1)
+      next
+    }
+    if (y2 == noise_cutoff && y1 > noise_cutoff) {
+      repulsive_area <- repulsive_area + area_triangle(x1, y1 - noise_cutoff, x2)
+      next
+    }
 
-    if (y1 > 0 && y2 < 0) {
-      repulsive_area <- repulsive_area + area_triangle(x1, y1, x0)
-      adhesive_area  <- adhesive_area  + area_triangle(x2, y2, x0)
-    } else if (y1 < 0 && y2 > 0) {
-      adhesive_area  <- adhesive_area  + area_triangle(x1, y1, x0)
-      repulsive_area <- repulsive_area + area_triangle(x2, y2, x0)
+    # One endpoint on negative noise cutoff 
+    if (y1 == -noise_cutoff && y2 < -noise_cutoff) {
+      adhesive_area <- adhesive_area + area_triangle(x2, y2 + noise_cutoff, x1)
+      next
+    }
+    if (y2 == -noise_cutoff && y1 < -noise_cutoff) {
+      adhesive_area <- adhesive_area + area_triangle(x1, y1 + noise_cutoff, x2)
+      next
+    }
+
+    # Handle crossings through noise cutoff boundaries
+    # NOTE: Area within the noise band (-noise_cutoff to +noise_cutoff) is NEVER included
+    # Crossing from above noise_cutoff to below -noise_cutoff (or vice versa)
+    if ((y1 > noise_cutoff && y2 < -noise_cutoff) || (y1 < -noise_cutoff && y2 > noise_cutoff)) {
+      # Find crossing at positive noise cutoff
+      x_pos <- x1 + (x2 - x1) * (noise_cutoff - y1) / (y2 - y1)
+      # Find crossing at negative noise cutoff  
+      x_neg <- x1 + (x2 - x1) * (-noise_cutoff - y1) / (y2 - y1)
+      
+      if (y1 > noise_cutoff) {
+        # y1 positive, y2 negative - only count areas outside noise band
+        repulsive_area <- repulsive_area + area_triangle(x1, y1 - noise_cutoff, x_pos)
+        adhesive_area <- adhesive_area + area_triangle(x2, y2 + noise_cutoff, x_neg)
+      } else {
+        # y1 negative, y2 positive - only count areas outside noise band
+        adhesive_area <- adhesive_area + area_triangle(x1, y1 + noise_cutoff, x_neg)
+        repulsive_area <- repulsive_area + area_triangle(x2, y2 - noise_cutoff, x_pos)
+      }
+      next
+    }
+
+    # Crossing from above noise_cutoff to within noise band (only count area outside noise band)
+    if (y1 > noise_cutoff && abs(y2) <= noise_cutoff) {
+      x_cross <- x1 + (x2 - x1) * (noise_cutoff - y1) / (y2 - y1)
+      repulsive_area <- repulsive_area + area_triangle(x1, y1 - noise_cutoff, x_cross)
+      next
+    }
+    if (y2 > noise_cutoff && abs(y1) <= noise_cutoff) {
+      x_cross <- x1 + (x2 - x1) * (noise_cutoff - y1) / (y2 - y1)
+      repulsive_area <- repulsive_area + area_triangle(x2, y2 - noise_cutoff, x_cross)
+      next
+    }
+
+    # Crossing from below -noise_cutoff to within noise band (only count area outside noise band)
+    if (y1 < -noise_cutoff && abs(y2) <= noise_cutoff) {
+      x_cross <- x1 + (x2 - x1) * (-noise_cutoff - y1) / (y2 - y1)
+      adhesive_area <- adhesive_area + area_triangle(x1, y1 + noise_cutoff, x_cross)
+      next
+    }
+    if (y2 < -noise_cutoff && abs(y1) <= noise_cutoff) {
+      x_cross <- x1 + (x2 - x1) * (-noise_cutoff - y1) / (y2 - y1)
+      adhesive_area <- adhesive_area + area_triangle(x2, y2 + noise_cutoff, x_cross)
+      next
     }
   }
 
@@ -1094,8 +1141,8 @@ analyze_a_curve_area <- function(curve_df) {
 #' and stores the resulting energies (areas under the force–distance curve) in
 #' the metadata as:
 #' \itemize{
-#'   \item \code{adhesive_energy_aJ_<dir>} — total area where \code{y < 0}
-#'   \item \code{repulsive_energy_aJ_<dir>} — total area where \code{y > 0}
+#'   \item \code{adhesive_energy_aJ_<dir>} — total area where \code{y < -noise_cutoff}
+#'   \item \code{repulsive_energy_aJ_<dir>} — total area where \code{y > noise_cutoff}
 #' }
 #' where \code{<dir>} is \code{"approach"} or \code{"retract"}.
 #'
@@ -1115,12 +1162,13 @@ analyze_a_curve_area <- function(curve_df) {
 #' @param useCurve Character; must be one of \code{c("retract", "approach")}.
 #' @param threads Integer. Number of parallel workers (default \code{1}). Uses
 #'   \pkg{future}+\pkg{future.apply} when \code{threads > 1}.
+#' @param noise_cutoff Numeric. Noise threshold for energy calculation (default: 0). Only areas where |force| > noise_cutoff are included in energy calculation.
 #'
 #' @return The updated \code{fdObj} with two new metadata columns:
 #' \code{adhesive_energy_aJ_<dir>} and \code{repulsive_energy_aJ_<dir>}.
 #' @seealso analyze_a_curve_area, analyze_curves_adhesive_force
 #' @export
-analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), threads = 1) {
+analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), threads = 1, noise_cutoff = 0) {
   if (!inherits(fdObj, "fdObj"))
     stop("fdObj must be of class 'fdObj'")
 
@@ -1147,14 +1195,20 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
         nrow(df) == 0) {
       return(c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_))
     }
-    analyze_a_curve_area(df)
+    analyze_a_curve_area(df, noise_cutoff = noise_cutoff)
   }
 
   res_list <- if (threads > 1) {
     old_plan <- future::plan()
     on.exit(future::plan(old_plan), add = TRUE)
     future::plan(future::multisession, workers = threads)
-    future.apply::future_lapply(curve_names, run_one)
+    future.apply::future_lapply(curve_names, run_one, 
+                                 future.globals = list(
+                                   run_one = run_one,
+                                   curve_list = curve_list,
+                                   noise_cutoff = noise_cutoff
+                                 ),
+                                 future.packages = "curvana")
   } else {
     lapply(curve_names, run_one)
   }
