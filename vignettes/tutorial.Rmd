@@ -111,12 +111,12 @@ After these parameters are obtained, the function applies them to transform each
 
 ```{r transform curves approach,warning=TRUE, message=TRUE,results='hold', echo=TRUE}
 t = 1
-test2 = transform_curves(test,spring_constant = 0.3188,useCurve = 'approach',threads = t)
+test = transform_curves(test,spring_constant = 0.3188,useCurve = 'approach',threads = t)
 ```
 
 ```{r transform curves retract,results='hold'}
 t = 1
-test2 = transform_curves(test,spring_constant = 0.3188,useCurve = 'retract',threads = t)
+test = transform_curves(test,spring_constant = 0.3188,useCurve = 'retract',threads = t)
 ```
 
 ## Examine the object after transformation
@@ -180,7 +180,7 @@ ggplot(sc.1.raw, aes(x = Calc_Ramp_Ex_nm, y = Defl_V_Ex)) +
   theme_minimal(base_size = 14)
 ```
 
-To analyze the sensitivity value for all curves in the object at once, we can run function "analyze_sensitivity." The function internally executes "calc_sensitivity" for each curve separately, and record the sensitivity value of each curve in a metadata column named "sensitivity_V_nm_<dir>", where dir is the selected curve portion via useCurve argument (either "approach" or "retract"). 
+To analyze the sensitivity value for all curves in the object at once, we can run function "analyze_sensitivity." The function internally executes "calc_sensitivity" for each curve separately, and record the sensitivity value of each curve in a metadata column named "sensitivity_V_nm_dir", where dir is the selected curve portion via useCurve argument (either "approach" or "retract"). 
 
 Curves that failed in sensitivity calculation will have an 'NA' in their corresponding cells. The segment of each raw curve used for sensitivity calculation is saved in the object's slot named "senscal_segment".
 
@@ -240,7 +240,7 @@ view_df(test@metadata,'metadata with baseline values added as columns')
 ```
 
 
-# Transformation of a raw curve
+## Transformation of a raw curve
 
 Now, with the sensitivity and baseline offset values calculated, we are ready to transform the curve with function transform_a_curve.
 
@@ -305,5 +305,66 @@ p2 = ggplot(sc.1.tr, aes(x = separation_distance_nm, y = force_nN)) +
   geom_vline(xintercept = 0, color = "black", linewidth = 0.5)
 
 plot_grid(p1,p2)
+```
+
+# Analytical metrics calculation
+
+After curve transformation, we can calculate analytical metrics such as adhesive force, interaction energy and distance.
+
+## Adhesive force
+
+### Wrapper function for batch analysis
+
+The adhesive force is calculated as the minimum force value in a curve, which represents the maximum attractive force between the AFM probe and the sample surface. The "analyze_curves_adhesive_force" function identifies this minimum force value and the separation distance at which it occurs, and records it in a new metadata column named "adhesive_force_nN_retract"/"adhesive_force_nN_approach" and another column named "adhesive_sep_nm_retract"/"adhesive_sep_nm_approach", depending on the selected curve portion via useCurve argument (either "approach" or "retract"). Curves that fail transformation will have NA in this column.
+
+```{r calculate adhesive force}
+test = analyze_curves_adhesive_force(test,useCurve = 'approach',threads = 1)
+test = analyze_curves_adhesive_force(test,useCurve = 'retract',threads = 1)
+view_df(test@metadata,'metadata with adhesive force values added as columns')   
+```
+
+### Single curve analysis
+To demonstrate how the adhesive force is calculated for a single curve, we use the transformed retract curve of "180424_fc_mica_loc1.001" as an example. The function "analyze_a_curve_adhesive_force" identifies the minimum force value in the curve and the corresponding separation distance, and returns these values in a named vector.
+
+```{r single curve adhesive force calculation}
+sc.1.tr = test@retractCurves$`180424_fc_mica_loc1.001`
+res.af = analyze_a_curve_adhesive_force(sc.1.tr)
+
+print(res.af)
+```
+
+## Interaction energy
+
+In AFM force spectroscopy, interaction energy is quantified by calculating the area under the curve. The analyze_a_curve_area() function computes adhesive energy (area below the negative noise threshold and above the curve inside Quadrant IV, representing bond-breaking energy) and repulsive energy (area above the positive noise threshold and under the curve inside Quadrant I, representing compression energy). A noise threshold is applied to filter out thermal fluctuations and instrumental noise, which would otherwise artificially inflate energy measurements. By excluding force values within the noise band, the function ensures that only biologically or physically meaningful interactions are counted, yielding more accurate energies.
+
+### Wrapper function for batch analysis
+
+The wrapper function "analyze_curves_energy" applies this analysis to all curves in an fdObj, and records the calculated adhesive energy and repulsive energy in new metadata columns named "adhesive_energy_fJ_retract"/"adhesive_energy_fJ_approach" and "repulsive_energy_fJ_retract"/"repulsive_energy_fJ_approach", depending on the selected curve portion via useCurve argument (either "approach" or "retract"). Curves that fail transformation will have NA in these columns.
+
+```{r calculate interaction energy}
+test = analyze_curves_energy(test,useCurve = 'approach',noise_cutoff = 0.5,threads = 1)
+test = analyze_curves_energy(test,useCurve = 'retract',noise_cutoff = 0.5,threads = 1)
+view_df(test@metadata,'metadata with energy values added as columns') 
+```
+
+### Single curve analysis
+
+To demonstrate how the interaction energy is calculated for a single curve, we use the transformed retract curve of "180424_fv_pmon2_loc1-18-22.spm" as an example. The function "analyze_a_curve_energy" computes the adhesive energy and repulsive energy based on the area under the curve, applying a noise cutoff to exclude insignificant fluctuations.
+
+```{r single curve interaction energy calculation}
+pmon.1.tr = test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
+res.energy.noise_cutoff_at_0.5 = analyze_a_curve_area(pmon.1.tr,noise_cutoff = 0.5)
+print(res.energy.noise_cutoff_at_0.5)
+
+pmon.1.tr = test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
+res.energy.noise_cutoff_at_5 = analyze_a_curve_area(pmon.1.tr,noise_cutoff = 5)
+print(res.energy.noise_cutoff_at_5)
+```
+
+```{r plot interaction energy with noise band, fig.height=6, fig.width=12}
+p_0.5 <- plot_force_curve_energy(pmon.1.tr, noise_cutoff = 0.5)
+p_5 <- plot_force_curve_energy(pmon.1.tr, noise_cutoff = 5)
+
+plot_grid(p_0.5, p_5, ncol = 2)
 ```
 
