@@ -323,3 +323,130 @@ crossing_x0 <- function(x1, y1, x2, y2) {
   }
 }
 
+#' Plot a transformed force curve with energy regions highlighted
+#'
+#' Creates a ggplot visualization of a force-distance curve with colored
+#' regions indicating adhesive (blue) and repulsive (coral) energy areas
+#' based on a noise cutoff threshold. Internally calls \code{analyze_a_curve_area()}
+#' to calculate the energy values displayed in the plot subtitle.
+#'
+#' @param curve_df A data frame containing the transformed force curve with
+#'   columns \code{separation_distance_nm} and \code{force_nN}.
+#' @param noise_cutoff Numeric. The force threshold (in nanoNewtons) for
+#'   separating signal from noise. Adhesive and repulsive regions are those
+#'   exceeding this threshold in magnitude. Default is 0.5.
+#' @param title Character. Title for the plot. Default is
+#'   "Interaction Energy Calculation with Noise Threshold".
+#' @param base_size Numeric. Base font size for the plot. Default is 14.
+#' @param point_size Numeric. Size of points on the curve. Default is 2.
+#' @param alpha_ribbon Numeric. Transparency of the colored ribbon areas (0-1).
+#'   Default is 0.3.
+#' @param show_legend Logical. Whether to show the legend. Default is TRUE.
+#'
+#' @return A ggplot2 object showing the force curve with colored regions
+#'   and energy values in the subtitle.
+#'
+#' @details
+#' The function:
+#' \enumerate{
+#'   \item Calls \code{analyze_a_curve_area()} with the provided \code{noise_cutoff}
+#'   \item Creates a region classification (Baseline, Adhesive, Repulsive)
+#'   \item Visualizes the noise threshold as a grey band
+#'   \item Colors adhesive regions (force < -noise_cutoff) in steelblue
+#'   \item Colors repulsive regions (force > noise_cutoff) in coral
+#'   \item Displays calculated energy values in the plot subtitle
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Load example data
+#' data(curvana_sample)
+#' curve <- curvana_sample@retractCurves[[1]]
+#' curve_transformed <- transform_a_curve(curve)
+#' 
+#' # Plot with default noise cutoff (0.5 nN)
+#' plot_force_curve_energy(curve_transformed)
+#' 
+#' # Plot with larger noise cutoff (5 nN)
+#' plot_force_curve_energy(curve_transformed, noise_cutoff = 5)
+#' 
+#' # Customize appearance
+#' plot_force_curve_energy(curve_transformed, noise_cutoff = 1.0, 
+#'                        title = "My Custom Title", base_size = 12)
+#' }
+#'
+#' @seealso [analyze_a_curve_area()], [transform_a_curve()]
+#' @export
+#' @importFrom ggplot2 ggplot aes geom_ribbon geom_hline geom_point geom_path
+#' @importFrom ggplot2 scale_color_manual labs annotate theme_minimal theme element_blank element_rect element_text
+#'
+plot_force_curve_energy <- function(curve_df,
+                                     noise_cutoff = 0.5,
+                                     title = "Interaction Energy Calculation with Noise Threshold",
+                                     base_size = 14,
+                                     point_size = 2,
+                                     alpha_ribbon = 0.3,
+                                     show_legend = TRUE) {
+  
+  # Calculate energy using the internal function
+  energy_result <- analyze_a_curve_area(curve_df, noise_cutoff = noise_cutoff)
+  
+  # Prepare data for plotting (sort by separation distance)
+  plot_data <- curve_df[order(curve_df$separation_distance_nm), ]
+  
+  # Create region classifications
+  plot_data$region <- "Baseline"
+  plot_data$region[plot_data$force_nN > noise_cutoff] <- "Repulsive"
+  plot_data$region[plot_data$force_nN < -noise_cutoff] <- "Adhesive"
+  
+  # Separate data for ribbon layers
+  repulsive_data <- plot_data[plot_data$force_nN > noise_cutoff, ]
+  adhesive_data <- plot_data[plot_data$force_nN < -noise_cutoff, ]
+  
+  # Create the plot
+  p <- ggplot(plot_data, aes(x = separation_distance_nm, y = force_nN)) +
+    # Grey background for noise band
+    annotate("rect", xmin = -Inf, xmax = Inf, 
+             ymin = -noise_cutoff, ymax = noise_cutoff,
+             alpha = 0.08, fill = "grey50") +
+    # Shaded regions for energy calculation
+    geom_ribbon(data = repulsive_data, 
+                aes(ymin = noise_cutoff, ymax = force_nN),
+                fill = "coral", alpha = alpha_ribbon, color = NA) +
+    geom_ribbon(data = adhesive_data, 
+                aes(ymin = force_nN, ymax = -noise_cutoff),
+                fill = "steelblue", alpha = alpha_ribbon, color = NA) +
+    # Threshold lines
+    geom_hline(yintercept = noise_cutoff, color = "red", 
+               linetype = "dashed", linewidth = 0.7) +
+    geom_hline(yintercept = -noise_cutoff, color = "red", 
+               linetype = "dashed", linewidth = 0.7) +
+    geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+    # Curve rendering
+    geom_point(aes(color = region), size = point_size, alpha = 0.8) +
+    geom_path(aes(color = region), linewidth = 0.6, alpha = 0.8) +
+    # Color mapping
+    scale_color_manual(
+      values = c("Adhesive" = "steelblue", "Repulsive" = "coral", "Baseline" = "grey70"),
+      name = "Region"
+    ) +
+    # Labels and title
+    labs(
+      x = "Separation distance (nm)",
+      y = "Force (nN)",
+      title = title,
+      subtitle = sprintf("Adhesive energy = %.2f aJ | Repulsive energy = %.2f aJ",
+                         energy_result["adhesive_area"],
+                         energy_result["repulsive_area"])
+    ) +
+    # Annotation for noise cutoff value
+    annotate("text", x = Inf, y = noise_cutoff,
+             label = sprintf("Noise cutoff = %.1f nN", noise_cutoff),
+             hjust = 1.1, vjust = -0.5, size = 3.5, color = "red") +
+    # Theme
+    theme_minimal(base_size = base_size) +
+    theme(legend.position = if (show_legend) "bottom" else "none")
+  
+  return(p)
+}
+
