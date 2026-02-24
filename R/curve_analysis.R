@@ -811,7 +811,8 @@ analyze_a_curve_interaction_distance <- function(
     y_scan >  threshold
   }
 
-  hit <- which(hit_mask)[1L]
+  hit <- if (y_direction == "negative") which(hit_mask)[1L] else which(!hit_mask)[1L]
+  
   if (is.na(hit)) return(c(distance = NA_real_, threshold = threshold))
 
   c(distance = x[scan_idx[hit]], threshold = threshold)
