@@ -16,7 +16,8 @@ Imports:
     future,
     future.apply,
     dplyr,
-    ggplot2
+    ggplot2,
+    ggrepel
 RoxygenNote: 7.3.2
 Suggests: 
     knitr,

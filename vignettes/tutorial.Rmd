@@ -368,3 +368,83 @@ p_5 <- plot_force_curve_energy(pmon.1.tr, noise_cutoff = 5)
 plot_grid(p_0.5, p_5, ncol = 2)
 ```
 
+## Interaction distance
+
+The interaction distance is calculated as the separation distance at which the force curve first crosses a defined noise threshold, indicating the onset of significant interaction between the AFM probe and the sample surface. The "analyze_a_curve_interaction_distance" function identifies this point and returns the corresponding separation distance as the interaction distance.
+
+### Wrapper function for batch analysis
+
+The wrapper function "analyze_curves_interaction_distance" applies this analysis to all curves in an fdObj, and records the calculated interaction distance in a new metadata column named "interaction_distance_nm_retract"/"interaction_distance_nm_approach", depending on the selected curve portion via useCurve argument (either "approach" or "retract"). Curves that fail transformation will have NA in this column.
+
+Here we set the noise threshold as 10 times of the standard deviation of the force values in the baseline region of each curve, which is a commonly used method to define the noise level in AFM force spectroscopy. Users can adjust the multiplier or use other methods via threshold_method argument to choose how the force cutoff is set from baseline noise—using scaled spread (sd, mad, iqr), directional quantiles (quantile), absolute-force quantile (abs_quantile), or a user-specified constant (fixed), with sd as the default.
+
+In this call, baseline_span = "automatic" uses each curve’s stored baseline window from test@metadata$baseline_span_retract, y_direction = "negative" detects rupture-like (negative-force) excursions, and x_direction = "left" scans from the baseline side right-to-left to find the first threshold-crossing point.
+
+
+```{r calculate interaction distance}
+test = analyze_curves_interaction_distance(test,useCurve = 'retract',baseline_span = 'automatic',
+                                           y_direction = "negative", x_direction = "left",
+                                           multiplier = 10, threshold_method = "sd",
+                                           threads = 1)
+
+view_df(test@metadata,'metadata with interaction distance values added as columns')
+```
+
+similarly, we can calculate the interaction distance for the approach curves by changing the useCurve argument to "approach", and setting y_direction to "positive" to detect repulsive interaction
+
+```{r calculate interaction distance for approach curves}
+test = analyze_curves_interaction_distance(test,useCurve = 'approach',baseline_span = 'automatic',
+                                           y_direction = "positive", x_direction = "right",
+                                           multiplier = 10, threshold_method = "sd",
+                                           threads = 1)
+view_df(test@metadata,'metadata with interaction distance values for approach curves added as columns')
+```
+
+
+### Single curve analysis
+
+To demonstrate how the interaction distance is calculated for a single curve, we use the transformed retract curve of "180424_fv_pmon2_loc1-18-22.spm" as an example. The function "analyze_a_curve_interaction_distance" identifies the point where the force curve first crosses the defined noise threshold and returns the corresponding separation distance as the interaction distance.
+
+
+```{r single curve interaction distance calculation}
+pmon.1.tr = test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
+res.interaction_distance = analyze_a_curve_interaction_distance(pmon.1.tr,baseline_span = 100, y_direction = "negative", x_direction = "left", multiplier = 10, threshold_method = "sd")
+
+print(res.interaction_distance)
+plot_force_curve_interaction_distance(pmon.1.tr, baseline_span = 100, y_direction = "negative", x_direction = "left",  multiplier = 10, threshold_method = "sd")
+```
+
+
+Similarly, we can calculate the interaction distance for the approach curve by changing the y_direction to "positive" and x_direction to "right" to detect repulsive interaction and scan from the baseline side left-to-right to find the first threshold-crossing point.
+
+```{r single curve interaction distance calculation for approach curve}
+pmon.1.approach = test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`
+res.interaction_distance.approach = analyze_a_curve_interaction_distance(pmon.1.approach,baseline_span = 100, y_direction = "positive", x_direction = "right", multiplier = 10, threshold_method = "sd")
+
+print(res.interaction_distance.approach)
+plot_force_curve_interaction_distance(pmon.1.approach, baseline_span = 100, y_direction = "positive", x_direction = "right", multiplier = 10, threshold_method = "sd")
+
+```
+
+
+# Visualization of analytical metrics
+```{r single curve plot metrics}
+curve_name = '180424_fv_pmon2_loc1-18-22.spm'
+
+plot_curve_metrics(
+  fdobj = test,
+  curve_name = curve_name,
+  useCurve = 'retract',
+  repulsive_energy = TRUE,
+  adhesive_energy = TRUE,
+  annotate_adhesive_force = TRUE,
+  annotate_interaction_distance = TRUE,
+  noise_cutoff = 0.5,
+  interaction_type = 'auto',
+  annotation_text_size = 5,
+  interaction_label_color_rupture = 'purple4',
+  interaction_label_color_repulsive = 'darkorange3',
+  interaction_label_fill = 'white'
+)
+  ```
+

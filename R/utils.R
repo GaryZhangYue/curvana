@@ -450,3 +450,499 @@ plot_force_curve_energy <- function(curve_df,
   return(p)
 }
 
+
+#' Plot a transformed force curve with interaction distance annotations
+#'
+#' Creates a ggplot visualization of a transformed force-distance curve and
+#' annotates the interaction threshold and detected interaction distance.
+#' Internally calls \code{analyze_a_curve_interaction_distance()}.
+#'
+#' @param curve_df A data frame containing the transformed force curve with
+#'   columns \code{separation_distance_nm} and \code{force_nN}.
+#' @param baseline_span Either a single integer >= 1, or the string
+#'   \code{"automatic"}. Passed to
+#'   \code{analyze_a_curve_interaction_distance()}.
+#' @param y_direction Character. \code{"negative"} (rupture) or
+#'   \code{"positive"} (repulsive). Passed to
+#'   \code{analyze_a_curve_interaction_distance()}.
+#' @param x_direction Character. \code{"left"} or \code{"right"}. Direction
+#'   to scan from baseline. Passed to
+#'   \code{analyze_a_curve_interaction_distance()}.
+#' @param threshold_method Threshold method passed to
+#'   \code{analyze_a_curve_interaction_distance()}.
+#' @param multiplier Numeric. Threshold multiplier for spread-based methods.
+#' @param mad_constant Numeric. MAD scaling constant.
+#' @param q_low Numeric quantile used by \code{threshold_method = "quantile"}
+#'   for \code{y_direction = "negative"}.
+#' @param q_high Numeric quantile used by \code{threshold_method = "quantile"}
+#'   for \code{y_direction = "positive"}.
+#' @param q_abs Numeric quantile used by
+#'   \code{threshold_method = "abs_quantile"}.
+#' @param fixed_threshold Numeric threshold (nN) when
+#'   \code{threshold_method = "fixed"}.
+#' @param title Character. Plot title.
+#' @param base_size Numeric. Base font size for the plot.
+#' @param line_color Character. Color of the curve line.
+#' @param line_width Numeric. Width of the curve line.
+#' @param point_size Numeric. Size of the highlighted interaction point.
+#' @param show_positive_threshold Logical. If \code{TRUE}, draw a dotted line at
+#'   \code{+threshold} as reference.
+#'
+#' @return A ggplot2 object with threshold and interaction-distance annotations.
+#' @export
+#' @importFrom ggplot2 ggplot aes geom_path geom_hline geom_vline geom_point
+#' @importFrom ggplot2 annotate labs theme_minimal
+plot_force_curve_interaction_distance <- function(
+    curve_df,
+    baseline_span,
+    y_direction = c("negative", "positive"),
+    x_direction = c("left", "right"),
+    threshold_method = c("sd", "mad", "iqr", "quantile", "abs_quantile", "fixed"),
+    multiplier = 3,
+    mad_constant = 1.4826,
+    q_low = 0.01,
+    q_high = 0.99,
+    q_abs = 0.99,
+    fixed_threshold = NULL,
+    title = "Single-Curve Interaction Distance",
+    base_size = 14,
+    line_color = "grey40",
+    line_width = 0.7,
+    point_size = 2,
+    show_positive_threshold = TRUE
+) {
+  y_direction <- match.arg(y_direction)
+  x_direction <- match.arg(x_direction)
+  threshold_method <- match.arg(threshold_method)
+
+  result <- analyze_a_curve_interaction_distance(
+    curve_df = curve_df,
+    baseline_span = baseline_span,
+    y_direction = y_direction,
+    x_direction = x_direction,
+    threshold_method = threshold_method,
+    multiplier = multiplier,
+    mad_constant = mad_constant,
+    q_low = q_low,
+    q_high = q_high,
+    q_abs = q_abs,
+    fixed_threshold = fixed_threshold
+  )
+
+  distance_nm <- unname(result["distance"])
+  threshold_nN <- unname(result["threshold"])
+  threshold_line <- if (y_direction == "negative") -threshold_nN else threshold_nN
+
+  p <- ggplot(curve_df, aes(x = separation_distance_nm, y = force_nN)) +
+    geom_path(color = line_color, linewidth = line_width) +
+    geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+    geom_hline(yintercept = threshold_line, color = "red", linetype = "dashed", linewidth = 0.7) +
+    labs(
+      x = "Separation distance (nm)",
+      y = "Force (nN)",
+      title = title,
+      subtitle = ifelse(
+        is.na(distance_nm),
+        sprintf("Threshold = %.3f nN | No threshold crossing detected", threshold_nN),
+        sprintf("Interaction distance = %.2f nm | Threshold = %.3f nN", distance_nm, threshold_nN)
+      )
+    ) +
+    theme_minimal(base_size = base_size) +
+    annotate(
+      "text",
+      x = Inf,
+      y = threshold_line,
+      label = sprintf("Threshold = %.3f nN", threshold_nN),
+      hjust = 1.05,
+      vjust = -0.5,
+      color = "red",
+      size = 4
+    )
+
+  if (isTRUE(show_positive_threshold)) {
+    p <- p + geom_hline(yintercept = abs(threshold_nN), color = "red", linetype = "dotted", linewidth = 0.5, alpha = 0.6)
+  }
+
+  if (!is.na(distance_nm)) {
+    p <- p +
+      geom_vline(xintercept = distance_nm, color = "dodgerblue4", linetype = "dashed", linewidth = 0.7) +
+      geom_point(
+        data = data.frame(separation_distance_nm = distance_nm, force_nN = threshold_line),
+        aes(x = separation_distance_nm, y = force_nN),
+        color = "dodgerblue4",
+        size = point_size,
+        inherit.aes = FALSE
+      ) +
+      annotate(
+        "text",
+        x = distance_nm,
+        y = min(curve_df$force_nN, na.rm = TRUE),
+        label = sprintf("Distance = %.2f nm", distance_nm),
+        vjust = -0.5,
+        color = "dodgerblue4",
+        size = 4
+      )
+  }
+
+  return(p)
+}
+
+
+#' Plot one transformed curve with selectable metric annotations
+#'
+#' High-level visualization helper that takes an \code{fdObj} and one curve name,
+#' then overlays selected analytical annotations (energy regions, adhesive force,
+#' and interaction distance/threshold) on the force-distance curve.
+#'
+#' @param fdobj An object of class \code{fdObj}.
+#' @param curve_name Character. Name of one curve to plot. Must match
+#'   \code{rownames(fdobj@metadata)}.
+#' @param useCurve Character. Either \code{"retract"} or \code{"approach"}.
+#' @param repulsive_energy Logical. If \code{TRUE}, shade repulsive-energy region
+#'   (force > noise cutoff).
+#' @param adhesive_energy Logical. If \code{TRUE}, shade adhesive-energy region
+#'   (force < -noise cutoff).
+#' @param annotate_adhesive_force Logical. If \code{TRUE}, mark adhesive force
+#'   point and annotate force + separation distance.
+#' @param annotate_interaction_distance Logical. If \code{TRUE}, annotate one
+#'   interaction distance and threshold.
+#' @param noise_cutoff Numeric scalar or metadata column name (character).
+#'   If character, the function looks up \code{fdobj@metadata[curve_name, noise_cutoff]}.
+#' @param interaction_type Character. \code{"rupture"}, \code{"repulsive"}, or
+#'   \code{"auto"}. Controls default interaction-distance column names and
+#'   threshold sign. When \code{"auto"}, rupture columns are tried first, then
+#'   repulsive columns.
+#' @param interaction_distance_col Optional metadata column name containing the
+#'   interaction distance to annotate for this curve.
+#' @param interaction_threshold_col Optional metadata column name containing the
+#'   interaction threshold (nN) to annotate for this curve.
+#' @param title Character. Plot title.
+#' @param base_size Numeric. Base theme text size.
+#' @param annotation_text_size Numeric. Text size used for annotation labels
+#'   (adhesive force, interaction threshold, interaction distance).
+#' @param interaction_label_color_rupture Character. Text color for rupture
+#'   interaction label box.
+#' @param interaction_label_color_repulsive Character. Text color for repulsive
+#'   interaction label box.
+#' @param interaction_label_fill Character. Fill color for interaction label box.
+#' @param ... Additional ggplot2 components to add to the plot (e.g.,
+#'   \code{theme()}, \code{scale_*()}, \code{coord_*()}, \code{labs()},
+#'   or extra \code{geom_*()} layers).
+#'
+#' @return A ggplot2 object.
+#' @export
+#' @importFrom ggplot2 ggplot aes geom_path geom_hline geom_ribbon geom_point
+#' @importFrom ggplot2 geom_segment geom_vline annotate labs theme_minimal
+plot_curve_metrics <- function(
+    fdobj,
+    curve_name,
+    useCurve = c("retract", "approach"),
+    repulsive_energy = TRUE,
+    adhesive_energy = TRUE,
+    annotate_adhesive_force = TRUE,
+    annotate_interaction_distance = TRUE,
+    noise_cutoff = 0.5,
+    interaction_type = c("rupture", "repulsive", "auto"),
+  adhesive_energy_col = NULL,
+  repulsive_energy_col = NULL,
+  adhesive_force_col = NULL,
+  adhesive_sep_col = NULL,
+    interaction_distance_col = NULL,
+    interaction_threshold_col = NULL,
+    title = NULL,
+    base_size = 14,
+    annotation_text_size = 3.3,
+    interaction_label_color_rupture = "purple4",
+    interaction_label_color_repulsive = "darkorange3",
+    interaction_label_fill = "white",
+    ...
+) {
+  if (!inherits(fdobj, "fdObj")) {
+    stop("fdobj must be an object of class 'fdObj'.")
+  }
+
+  useCurve <- match.arg(useCurve)
+  interaction_type <- match.arg(interaction_type)
+
+  metadata <- fdobj@metadata
+  if (!(curve_name %in% rownames(metadata))) {
+    stop("curve_name must match one rowname in fdobj@metadata.")
+  }
+
+  curve_list <- if (useCurve == "retract") fdobj@retractCurves else fdobj@approachCurves
+  if (!(curve_name %in% names(curve_list))) {
+    stop("curve_name not found in the selected curve slot.")
+  }
+
+  curve_df <- curve_list[[curve_name]]
+  if (is.null(curve_df) || nrow(curve_df) == 0) {
+    stop("Selected transformed curve is empty.")
+  }
+  if (!all(c("separation_distance_nm", "force_nN") %in% colnames(curve_df))) {
+    stop("Selected curve must contain columns 'separation_distance_nm' and 'force_nN'.")
+  }
+
+  resolve_numeric_or_column <- function(value_or_col, param_name) {
+    if (is.numeric(value_or_col) && length(value_or_col) == 1) {
+      return(as.numeric(value_or_col))
+    }
+
+    if (is.character(value_or_col) && length(value_or_col) == 1) {
+      if (value_or_col %in% colnames(metadata)) {
+        value <- metadata[curve_name, value_or_col]
+        value <- suppressWarnings(as.numeric(value))
+        if (is.na(value)) {
+          stop(sprintf("Metadata value for '%s' in column '%s' is NA/non-numeric.", curve_name, value_or_col))
+        }
+        return(value)
+      }
+
+      numeric_try <- suppressWarnings(as.numeric(value_or_col))
+      if (!is.na(numeric_try)) {
+        return(numeric_try)
+      }
+    }
+
+    stop(sprintf("%s must be a numeric scalar or a metadata column name.", param_name))
+  }
+
+  resolve_metadata_value <- function(col_name) {
+    if (is.null(col_name)) return(NA_real_)
+    if (!(col_name %in% colnames(metadata))) return(NA_real_)
+    suppressWarnings(as.numeric(metadata[curve_name, col_name]))
+  }
+
+  noise_value <- resolve_numeric_or_column(noise_cutoff, "noise_cutoff")
+
+  curve_df <- curve_df[order(curve_df$separation_distance_nm), ]
+  curve_df$region <- "Baseline"
+  curve_df$region[curve_df$force_nN > noise_value] <- "Repulsive"
+  curve_df$region[curve_df$force_nN < -noise_value] <- "Adhesive"
+
+  x_min <- min(curve_df$separation_distance_nm, na.rm = TRUE)
+  x_max <- max(curve_df$separation_distance_nm, na.rm = TRUE)
+  x_span <- x_max - x_min
+  if (!is.finite(x_span) || x_span <= 0) x_span <- 1
+  y_min <- min(curve_df$force_nN, na.rm = TRUE)
+  y_max <- max(curve_df$force_nN, na.rm = TRUE)
+  y_span <- y_max - y_min
+  if (!is.finite(y_span) || y_span <= 0) y_span <- 1
+
+  label_x_right <- x_max + 0.25 * x_span
+  x_offset <- 0.06 * x_span
+  y_offset <- 0.08 * y_span
+
+  if (is.null(title)) {
+    title <- sprintf("Curve metrics: %s (%s)", curve_name, useCurve)
+  }
+
+  default_adhesive_energy_col <- paste0("adhesive_energy_aJ_", useCurve)
+  default_repulsive_energy_col <- paste0("repulsive_energy_aJ_", useCurve)
+  default_adhesive_force_col <- paste0("adhesive_force_nN_", useCurve)
+  default_adhesive_sep_col <- paste0("adhesive_sep_nm_", useCurve)
+
+  adhesive_energy_col <- if (is.null(adhesive_energy_col)) default_adhesive_energy_col else adhesive_energy_col
+  repulsive_energy_col <- if (is.null(repulsive_energy_col)) default_repulsive_energy_col else repulsive_energy_col
+  adhesive_force_col <- if (is.null(adhesive_force_col)) default_adhesive_force_col else adhesive_force_col
+  adhesive_sep_col <- if (is.null(adhesive_sep_col)) default_adhesive_sep_col else adhesive_sep_col
+
+  adhesive_energy_val <- resolve_metadata_value(adhesive_energy_col)
+  repulsive_energy_val <- resolve_metadata_value(repulsive_energy_col)
+  adhesive_force_val <- resolve_metadata_value(adhesive_force_col)
+  adhesive_sep_val <- resolve_metadata_value(adhesive_sep_col)
+
+  p <- ggplot(curve_df, aes(x = separation_distance_nm, y = force_nN)) +
+    annotate("rect", xmin = -Inf, xmax = Inf, ymin = -noise_value, ymax = noise_value,
+             alpha = 0.08, fill = "grey50") +
+    geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+    geom_path(aes(color = region), linewidth = 0.7, alpha = 0.9) +
+    geom_point(aes(color = region), size = 1.8, alpha = 0.8) +
+    labs(
+      x = "Separation distance (nm)",
+      y = "Force (nN)",
+      title = title
+    ) +
+    theme_minimal(base_size = base_size) +
+    coord_cartesian(xlim = c(x_min, label_x_right), clip = "off") +
+    theme(plot.margin = ggplot2::margin(5.5, 80, 5.5, 5.5))
+
+  if (isTRUE(repulsive_energy) || isTRUE(adhesive_energy)) {
+    if (isTRUE(repulsive_energy)) {
+      repulsive_data <- curve_df[curve_df$force_nN > noise_value, ]
+      p <- p + geom_ribbon(
+        data = repulsive_data,
+        aes(ymin = noise_value, ymax = force_nN),
+        fill = "coral",
+        alpha = 0.3,
+        color = NA
+      )
+    }
+
+    if (isTRUE(adhesive_energy)) {
+      adhesive_data <- curve_df[curve_df$force_nN < -noise_value, ]
+      p <- p + geom_ribbon(
+        data = adhesive_data,
+        aes(ymin = force_nN, ymax = -noise_value),
+        fill = "steelblue",
+        alpha = 0.3,
+        color = NA
+      )
+    }
+
+    subtitle_parts <- character(0)
+    if (isTRUE(adhesive_energy) && !is.na(adhesive_energy_val)) {
+      subtitle_parts <- c(subtitle_parts, sprintf("Adhesive energy = %.2f", adhesive_energy_val))
+    }
+    if (isTRUE(repulsive_energy) && !is.na(repulsive_energy_val)) {
+      subtitle_parts <- c(subtitle_parts, sprintf("Repulsive energy = %.2f", repulsive_energy_val))
+    }
+    if (length(subtitle_parts) > 0) {
+      p <- p + labs(subtitle = paste(subtitle_parts, collapse = " | "))
+    }
+  }
+
+  if (isTRUE(annotate_adhesive_force)) {
+    if (!is.na(adhesive_force_val) && !is.na(adhesive_sep_val)) {
+      adhesive_label_x <- adhesive_sep_val
+      adhesive_label_y <- adhesive_force_val - y_offset
+
+      p <- p +
+        geom_point(
+          data = data.frame(separation_distance_nm = adhesive_sep_val, force_nN = adhesive_force_val),
+          aes(x = separation_distance_nm, y = force_nN),
+          color = "red",
+          size = 3,
+          inherit.aes = FALSE
+        ) +
+        geom_segment(
+          data = data.frame(
+            x = adhesive_sep_val,
+            y = adhesive_force_val,
+            xend = adhesive_label_x,
+            yend = adhesive_label_y
+          ),
+          aes(x = x, y = y, xend = xend, yend = yend),
+          inherit.aes = FALSE,
+          color = "red",
+          linewidth = 0.4
+        ) +
+        annotate(
+          "label",
+          x = adhesive_label_x,
+          y = adhesive_label_y,
+          label = sprintf("Adhesive force = %.2f nN\nSeparation = %.2f nm", adhesive_force_val, adhesive_sep_val),
+          color = "red",
+          fill = "white",
+          size = annotation_text_size
+        )
+    }
+  }
+
+  if (isTRUE(annotate_interaction_distance)) {
+    preferred_types <- if (interaction_type == "auto") c("rupture", "repulsive") else interaction_type
+
+    interaction_distance <- NA_real_
+    interaction_threshold <- NA_real_
+    active_type <- preferred_types[1]
+
+    if (!is.null(interaction_distance_col) || !is.null(interaction_threshold_col)) {
+      distance_col_to_use <- if (is.null(interaction_distance_col)) paste0(active_type, "_distance_nm_", useCurve) else interaction_distance_col
+      threshold_col_to_use <- if (is.null(interaction_threshold_col)) paste0(active_type, "_threshold_nN_", useCurve) else interaction_threshold_col
+      interaction_distance <- resolve_metadata_value(distance_col_to_use)
+      interaction_threshold <- resolve_metadata_value(threshold_col_to_use)
+    } else {
+      for (tp in preferred_types) {
+        distance_candidate <- resolve_metadata_value(paste0(tp, "_distance_nm_", useCurve))
+        threshold_candidate <- resolve_metadata_value(paste0(tp, "_threshold_nN_", useCurve))
+        if (!is.na(distance_candidate) || !is.na(threshold_candidate)) {
+          interaction_distance <- distance_candidate
+          interaction_threshold <- threshold_candidate
+          active_type <- tp
+          break
+        }
+      }
+    }
+
+    if (!is.na(interaction_distance)) {
+      p <- p + geom_vline(
+        xintercept = interaction_distance,
+        color = "dodgerblue4",
+        linetype = "dashed",
+        linewidth = 0.7
+      )
+    }
+
+    type_label <- if (active_type == "rupture") "Rupture" else "Repulsive"
+    interaction_label_color <- if (active_type == "rupture") interaction_label_color_rupture else interaction_label_color_repulsive
+    interaction_y <- if (!is.na(interaction_threshold)) {
+      if (active_type == "rupture") -abs(interaction_threshold) else abs(interaction_threshold)
+    } else {
+      NA_real_
+    }
+
+    if (!is.na(interaction_threshold)) {
+      p <- p + geom_hline(
+        yintercept = interaction_y,
+        color = "purple4",
+        linetype = "dashed",
+        linewidth = 0.7
+      )
+    }
+
+    if (!is.na(interaction_distance) && !is.na(interaction_threshold)) {
+      p <- p + annotate(
+        "point",
+        x = interaction_distance,
+        y = interaction_y,
+        color = "dodgerblue4",
+        size = 2
+      )
+    }
+
+    if (!is.na(interaction_distance) || !is.na(interaction_threshold)) {
+      interaction_label <- c()
+      if (!is.na(interaction_distance)) {
+        interaction_label <- c(interaction_label, sprintf("%s distance = %.2f nm", type_label, interaction_distance))
+      }
+      if (!is.na(interaction_threshold)) {
+        interaction_label <- c(interaction_label, sprintf("%s threshold = %.3f nN", type_label, interaction_threshold))
+      }
+
+      point_x <- if (!is.na(interaction_distance)) interaction_distance else min(curve_df$separation_distance_nm, na.rm = TRUE)
+      point_y <- if (!is.na(interaction_y)) interaction_y else min(curve_df$force_nN, na.rm = TRUE)
+
+      label_x <- point_x + x_offset
+      label_y <- point_y + y_offset
+      if (active_type == "rupture") {
+        label_y <- max(label_y, 0 + 0.05 * y_span)
+      }
+
+      p <- p +
+        geom_segment(
+          data = data.frame(x = point_x, y = point_y, xend = label_x, yend = label_y),
+          aes(x = x, y = y, xend = xend, yend = yend),
+          inherit.aes = FALSE,
+          color = interaction_label_color,
+          linewidth = 0.4
+        ) +
+        annotate(
+          "label",
+          x = label_x,
+          y = label_y,
+          label = paste(interaction_label, collapse = "\n"),
+          color = interaction_label_color,
+          fill = interaction_label_fill,
+          hjust = 0,
+          size = annotation_text_size
+        )
+    }
+  }
+
+  extra_layers <- list(...)
+  if (length(extra_layers) > 0) {
+    p <- p + extra_layers
+  }
+
+  return(p)
+}
+
