@@ -24,7 +24,7 @@ knitr::opts_chunk$set(warning = T, message = T,echo = T)
 
 # Introduction
 
-This tutorial demonstrates the full analytical workflow of the **curvana** R package, from raw AFM deflection–displacement curves to quantitative force–distance curves and analytical metrics, such as adhesive force, interaction energy and distance.  
+This tutorial demonstrates the full analytical workflow of the **curvana** R package, from raw AFM deflection–displacement curves to quantitative force–distance curves and analytical metrics, such as adhesive force, interaction energy and rupture and repulsive distance.  
 
 # Preparation 
 
@@ -36,11 +36,12 @@ invisible(suppressPackageStartupMessages({
     lapply(packages_to_load, library, character.only = TRUE)
 }))
 source(system.file("tutorial_helpers.R", package = "curvana"))
+devtools::load_all()
 ```
 
 ## Load demo data
 
-All examples below use the demo dataset provided in `extdata/` inside the package. To use your own dataset, you can pass the path to the directory holding the data to the "folder" argument. Note that users can increase the threads to enable parallel processing for loading a large folder (e.g., > 100 curves), which will dramatically reduce the computational time. Here we use 1 thread, as we only have a small demo dataset.
+All examples below use the demo dataset provided in `extdata/` inside the package. To use your own dataset, you can pass the path to the directory holding the data to the "folder" argument. Note that users can increase the threads to enable parallel processing for loading a large folder (e.g., > 1000 curves), which will dramatically reduce the computational time. Here we use 1 thread, as we only have a small demo dataset.
 
 At this step, we initialize the fdObj named "test" by importing the demo data directory "extdata/" using the "createFdObjFromFolder" function. An fdObj is the core data container in curvana, designed to store atomic force microscopy (AFM) force–distance curve data, including raw approach and retract curves, transformed data, associated metadata for downstream analysis, and the analytical metrics generated.
 
@@ -49,17 +50,40 @@ By default, createFdObjFromFolder will read all files in the designated folder w
 Users working with non-standard input files can specify column headers with corresponding arguments. User may also use the "suffix" argument to specify files to import by specifying filename suffix, or by providing a metadata dataframe whose row names match the input file names. Please note that the input files have to be tab-delimited files. See package manual for detailed usage.
 
 ```{r load data}
-folder = system.file("extdata", package = "curvana")
+#folder = system.file("extdata", package = "curvana")
+#test = createFdObjFromFolder(folder = folder, threads = t)
+input.path = "../curvana_test/demo"
 t = 1
-test = createFdObjFromFolder(folder = folder, threads = t)
+test.input = createFdObjFromFolder(folder = input.path, threads = t)
 ```
 
 Let's take a quick look at the fdObj (named test) we created. We can see that we imported 14 raw curves. Non of them are transformed yet, and "filename" is the only column in the metadata slot.
 
 ```{r show init fdobj}
-print(test)
+print(test.input)
+view_df(test.input@metadata,'metadata')
+```
+
+Now, lets create groups of curves based on the file names. Alternatively, users can also provide a metadata dataframe with columns of interest (e.g., date, bacteria group, location) to create the fdObj using the metadata argument in createFdObjFromFolder function.
+
+```{r edit metadata}
+test <- test.input
+test@metadata <- test@metadata %>% 
+  mutate(surface = sub("_.*","",filename),
+  
+  surface = case_when(
+
+            surface == 'F' ~ 'fluorinated',
+            surface == 'P' ~ 'PEG',
+            surface == 'silicon' ~ 'silicon',
+            surface == 'Z' ~ 'zwitterionic',
+            TRUE ~ surface
+  ),
+          region = sub(".*?_([0-9]+)\\.spm.*", "\\1", filename)
+  )
 view_df(test@metadata,'metadata')
 ```
+
 
 ## Manipulate the fdObj object
 
@@ -111,6 +135,7 @@ After these parameters are obtained, the function applies them to transform each
 
 ```{r transform curves approach,warning=TRUE, message=TRUE,results='hold', echo=TRUE}
 t = 1
+test.raw = test
 test = transform_curves(test,spring_constant = 0.3188,useCurve = 'approach',threads = t)
 ```
 
@@ -134,7 +159,7 @@ print(names(test@retractCurves))
 print(names(test@approachCurves))
 ```
 
-The calculated sensitivity, baseline, and input spring constant is now saved as columns in the metadata. Note the curves with baseline/sensitivity undetermined will be NA in the corresponding cell.
+The calculated sensitivity, baseline, and input spring constant is now saved as columns in the metadata. Note the curves with baseline/sensitivity undetermined will be missing in the corresponding cell.
 
 ```{r show metadata after transformation}
 view_df(test@metadata,'metadata after curve transformation')
@@ -145,29 +170,24 @@ view_df(test@metadata,'metadata after curve transformation')
 
 ### Sensitivity calculation
 
-To demonstrate how each single curve is transformed, we take the approach part of "180424_fc_mica_loc1.001" as an example. The function "calc_sensitivity", adapted from fdafm (Zhang et al., 2021), is designed to automatically to calculate the sensitivity value. Note that the function returns two outputs -- the sensitivity value, and the subset of data points used to calculate the sensitivity value (the second element of the returned list, which is a named dataframe named senscal_segment).
+To demonstrate how each single curve is transformed, we take the retract part of "180424_fv_pmon2_loc1-18-22.spm" as an example. The function "calc_sensitivity", adapted from fdafm (Zhang et al., 2021), is designed to automatically to calculate the sensitivity value. Note that the function returns two outputs -- the sensitivity value, and the subset of data points used to calculate the sensitivity value (the second element of the returned list, which is a named dataframe named senscal_segment).
 
 ```{r single curve sensitivity analysis}
-sc.1.name = '180424_fc_mica_loc1.001'
-sc.1.raw = test@rawCurves[[sc.1.name]]
 
-x = sc.1.raw$Calc_Ramp_Ex_nm
-y = sc.1.raw$Defl_V_Ex
+pm.name = '180424_fv_pmon2_loc1-18-22.spm'
+pm.raw = test@rawCurves[[pm.name]]
+
+x = pm.raw$Calc_Ramp_Rt_nm
+y = pm.raw$Defl_V_Rt
 res = calc_sensitivity(end = 200,intv = 4,x = x,y = y)
-sc.1.raw$`Region used for Sensitivity calculation` = "FALSE"
-sc.1.raw$`Region used for Sensitivity calculation`[1:nrow(res$senscal_segment)] <- 'TRUE'
+pm.raw$`Region used for Sensitivity calculation` = case_when(pm.raw$Calc_Ramp_Rt_nm %in% res$senscal_segment$x ~ "Sensitivity region", TRUE ~ "Other")
 
-ggplot(sc.1.raw, aes(x = Calc_Ramp_Ex_nm, y = Defl_V_Ex)) +
+ggplot(pm.raw, aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt)) +
   geom_point(aes(
-    color = case_when(
-      `Region used for Sensitivity calculation` == TRUE ~ "Sensitivity region",
-      TRUE ~ "Other"
-    )
-  ), size = 1.5) +
+    color = `Region used for Sensitivity calculation`  ), size = 1.5) +
   scale_color_manual(
     values = c(
       "Sensitivity region" = "hotpink",
-      "Baseline region" = "orange",
       "Other" = "grey70"
     ),
     name = "Region"
@@ -185,8 +205,8 @@ To analyze the sensitivity value for all curves in the object at once, we can ru
 Curves that failed in sensitivity calculation will have an 'NA' in their corresponding cells. The segment of each raw curve used for sensitivity calculation is saved in the object's slot named "senscal_segment".
 
 ```{r analyze sensitivity in batch}
-test = analyze_sensitivity(test,useCurve = 'approach',threads = 1)
-test = analyze_sensitivity(test,useCurve = 'retract',threads = 1)
+test2 = analyze_sensitivity(test2,useCurve = 'approach',threads = 1)
+test2 = analyze_sensitivity(test2,useCurve = 'retract',threads = 1)
 view_df(test@metadata,'metadata with sensitivity values added as columns')
 ```
 
@@ -202,21 +222,14 @@ Similar as the "cal_sensitivity" function, "find_baseline" also returns two outp
 ```{r single curve baseline calculation}
 
 res.b = find_baseline(x = x, y = y, least_length = 150, sensitivity = res$sensitivity,slp_threshold = 0.001,std_threshold = 0.005)
-sc.1.raw$`Region used for baseline offset calculation` = 'TRUE'
-sc.1.raw$`Region used for baseline offset calculation`[1:(length(sc.1.raw$Defl_V_Ex)-150)] = 'FALSE'
+pm.raw$`Region used for baseline offset calculation` = case_when(pm.raw$Calc_Ramp_Rt_nm %in% res.b$segment$x ~ "Baseline region", TRUE ~ "Non-baseline region")
 
-ggplot(sc.1.raw, aes(x = Calc_Ramp_Ex_nm, y = Defl_V_Ex)) +
-  geom_point(aes(
-    color = case_when(
-      `Region used for baseline offset calculation` == TRUE ~ "Baseline region",
-      TRUE ~ "Other"
-    )
-  ), size = 1.5) +
+ggplot(pm.raw, aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt)) +
+  geom_point(aes(color = `Region used for baseline offset calculation`), size = 1.5) +
   scale_color_manual(
     values = c(
-      "Sensitivity region" = "hotpink",
       "Baseline region" = "orange",
-      "Other" = "grey70"
+      "Non-baseline region" = "grey70"
     ),
     name = "Region"
   ) +
@@ -234,9 +247,9 @@ To analyze the baseline offset for each curve in an fdObj, we use the analyze_ba
 Curves that fail baseline calculation are assigned NA in these metadata columns. Since baseline estimation requires a valid sensitivity value, any curve that fails sensitivity calculation will also fail baseline calculation. The portions of each raw curve used for baseline offset estimation are stored in the baseline_segment slot of the object.
 
 ```{r analyze baseline in batch}
-test = analyze_baseline(test,useCurve = 'approach',least_length = 150)
-test = analyze_baseline(test,useCurve = 'retract',least_length = 150)
-view_df(test@metadata,'metadata with baseline values added as columns')
+test2 = analyze_baseline(test2,useCurve = 'approach',least_length = 150)
+test2 = analyze_baseline(test2,useCurve = 'retract',least_length = 150)
+view_df(test2@metadata,'metadata with baseline values added as columns')
 ```
 
 
@@ -245,14 +258,15 @@ view_df(test@metadata,'metadata with baseline values added as columns')
 Now, with the sensitivity and baseline offset values calculated, we are ready to transform the curve with function transform_a_curve.
 
 ```{r single curve transform,fig.height=6,fig.width=16}
-sc.1.tr = transform_a_curve(x = x, y= y, baseline = res.b$baseline, sensitivity = res$sensitivity,
+pm.transformed = transform_a_curve(x = x, y= y, baseline = res.b$baseline, sensitivity = res$sensitivity,
                              spring_constant = 0.3188, senscal_seg_x = res$senscal_segment$x,
                              senscal_seg_y = res$senscal_segment$y)
-p1 = ggplot(sc.1.raw, aes(x = Calc_Ramp_Ex_nm, y = Defl_V_Ex)) +
+
+p1 = ggplot(pm.raw, aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt)) +
   geom_point(aes(
     color = case_when(
-      `Region used for Sensitivity calculation` == TRUE ~ "Sensitivity region",
-      `Region used for baseline offset calculation` == TRUE ~ "Baseline region",
+      `Region used for Sensitivity calculation` == 'Sensitivity region' ~ "Sensitivity region",
+      `Region used for baseline offset calculation` == 'Baseline region' ~ "Baseline region",
       TRUE ~ "Other"
     )
   ), size = 1.5) +
@@ -273,17 +287,13 @@ p1 = ggplot(sc.1.raw, aes(x = Calc_Ramp_Ex_nm, y = Defl_V_Ex)) +
   geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
   geom_vline(xintercept = 0, color = "black", linewidth = 0.5)
 
-sc.1.tr$`Region used for Sensitivity calculation` = "FALSE"
-sc.1.tr$`Region used for Sensitivity calculation`[1:nrow(res$senscal_segment)] <- 'TRUE'
-sc.1.tr$`Region used for baseline offset calculation` = 'TRUE'
-sc.1.tr$`Region used for baseline offset calculation`[1:(length(sc.1.raw$Defl_V_Ex)-150)] = 'FALSE'
 
-
-p2 = ggplot(sc.1.tr, aes(x = separation_distance_nm, y = force_nN)) +
+pm.transformed = cbind(pm.transformed, pm.raw[,c('Region used for Sensitivity calculation','Region used for baseline offset calculation')])
+p2 = ggplot(pm.transformed, aes(x = separation_distance_nm, y = force_nN)) +
   geom_point(aes(
     color = case_when(
-      `Region used for Sensitivity calculation` == TRUE ~ "Sensitivity region",
-      `Region used for baseline offset calculation` == TRUE ~ "Baseline region",
+      `Region used for Sensitivity calculation` == "Sensitivity region" ~ "Sensitivity region",
+      `Region used for baseline offset calculation` == "Baseline region" ~ "Baseline region",
       TRUE ~ "Other"
     )
   ), size = 1.5) +
@@ -446,5 +456,5 @@ plot_curve_metrics(
   interaction_label_color_repulsive = 'darkorange3',
   interaction_label_fill = 'white'
 )
-  ```
+```
 
