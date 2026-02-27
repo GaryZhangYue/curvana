@@ -470,13 +470,13 @@ plot_force_curve_energy <- function(curve_df,
 #'   \code{analyze_a_curve_interaction_distance()}.
 #' @param multiplier Numeric. Threshold multiplier for spread-based methods.
 #' @param mad_constant Numeric. MAD scaling constant.
-#' @param q_low Numeric quantile used by \code{threshold_method = "quantile"}
-#'   for \code{y_direction = "negative"}.
-#' @param q_high Numeric quantile used by \code{threshold_method = "quantile"}
-#'   for \code{y_direction = "positive"}.
-#' @param q_abs Numeric quantile used by
-#'   \code{threshold_method = "abs_quantile"}.
-#' @param fixed_threshold Numeric threshold (nN) when
+#' @param quantile_low Numeric lower quantile used by
+#'   \code{threshold_method = "quantile"}.
+#' @param quantile_high Numeric upper quantile used by
+#'   \code{threshold_method = "quantile"}.
+#' @param fixed_low Numeric lower threshold (nN) when
+#'   \code{threshold_method = "fixed"}.
+#' @param fixed_high Numeric upper threshold (nN) when
 #'   \code{threshold_method = "fixed"}.
 #' @param title Character. Plot title.
 #' @param base_size Numeric. Base font size for the plot.
@@ -495,13 +495,13 @@ plot_force_curve_interaction_distance <- function(
     baseline_span,
     y_direction = c("negative", "positive"),
     x_direction = c("left", "right"),
-    threshold_method = c("sd", "mad", "iqr", "quantile", "abs_quantile", "fixed"),
+    threshold_method = c("sd", "mad", "quantile", "fixed"),
     multiplier = 3,
     mad_constant = 1.4826,
-    q_low = 0.01,
-    q_high = 0.99,
-    q_abs = 0.99,
-    fixed_threshold = NULL,
+    quantile_low = 0.25,
+    quantile_high = 0.75,
+    fixed_low = NULL,
+    fixed_high = NULL,
     title = "Single-Curve Interaction Distance",
     base_size = 14,
     line_color = "grey40",
@@ -521,10 +521,10 @@ plot_force_curve_interaction_distance <- function(
     threshold_method = threshold_method,
     multiplier = multiplier,
     mad_constant = mad_constant,
-    q_low = q_low,
-    q_high = q_high,
-    q_abs = q_abs,
-    fixed_threshold = fixed_threshold
+    quantile_low = quantile_low,
+    quantile_high = quantile_high,
+    fixed_low = fixed_low,
+    fixed_high = fixed_high
   )
 
   distance_nm <- unname(result["distance"])
