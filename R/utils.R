@@ -391,9 +391,7 @@ plot_force_curve_energy <- function(curve_df,
   # Calculate energy using the internal function
   energy_result <- analyze_a_curve_area(curve_df, noise_cutoff = noise_cutoff)
   
-  # Prepare data for plotting (sort by separation distance)
-  plot_data <- curve_df[order(curve_df$separation_distance_nm), ]
-  
+  plot_data <- curve_df
   # Create region classifications
   plot_data$region <- "Baseline"
   plot_data$region[plot_data$force_nN > noise_cutoff] <- "Repulsive"
@@ -435,13 +433,13 @@ plot_force_curve_energy <- function(curve_df,
       x = "Separation distance (nm)",
       y = "Force (nN)",
       title = title,
-      subtitle = sprintf("Adhesive energy = %.2f aJ | Repulsive energy = %.2f aJ",
-                         energy_result["adhesive_area"],
-                         energy_result["repulsive_area"])
+      subtitle = sprintf("Adhesive energy = %.3g aJ\nRepulsive energy = %.3g aJ",
+             energy_result["adhesive_area"],
+             energy_result["repulsive_area"])
     ) +
     # Annotation for noise cutoff value
     annotate("text", x = Inf, y = noise_cutoff,
-             label = sprintf("Noise cutoff = %.1f nN", noise_cutoff),
+             label = sprintf("Noise cutoff = %.3g nN", noise_cutoff),
              hjust = 1.1, vjust = -0.5, size = 3.5, color = "red") +
     # Theme
     theme_minimal(base_size = base_size) +
@@ -543,8 +541,8 @@ plot_force_curve_interaction_distance <- function(
       title = title,
       subtitle = ifelse(
         is.na(distance_nm),
-        sprintf("Threshold = %.3f nN | No threshold crossing detected", threshold_nN),
-        sprintf("Interaction distance = %.2f nm | Threshold = %.3f nN", distance_nm, threshold_nN)
+        sprintf("Threshold = %s nN | No threshold crossing detected", as.character(threshold_nN)),
+        sprintf("Interaction distance = %s nm | Threshold = %s nN", as.character(distance_nm), as.character(threshold_nN))
       )
     ) +
     theme_minimal(base_size = base_size) +
@@ -552,7 +550,7 @@ plot_force_curve_interaction_distance <- function(
       "text",
       x = Inf,
       y = threshold_line,
-      label = sprintf("Threshold = %.3f nN", threshold_nN),
+      label = sprintf("Threshold = %.3g nN", threshold_nN),
       hjust = 1.05,
       vjust = -0.5,
       color = "red",
@@ -577,7 +575,7 @@ plot_force_curve_interaction_distance <- function(
         "text",
         x = distance_nm,
         y = min(curve_df$force_nN, na.rm = TRUE),
-        label = sprintf("Distance = %.2f nm", distance_nm),
+        label = sprintf("Distance = %.3g nm", distance_nm),
         vjust = -0.5,
         color = "dodgerblue4",
         size = 4
@@ -714,7 +712,6 @@ plot_curve_metrics <- function(
 
   noise_value <- resolve_numeric_or_column(noise_cutoff, "noise_cutoff")
 
-  curve_df <- curve_df[order(curve_df$separation_distance_nm), ]
   curve_df$region <- "Baseline"
   curve_df$region[curve_df$force_nN > noise_value] <- "Repulsive"
   curve_df$region[curve_df$force_nN < -noise_value] <- "Adhesive"
@@ -791,10 +788,10 @@ plot_curve_metrics <- function(
 
     subtitle_parts <- character(0)
     if (isTRUE(adhesive_energy) && !is.na(adhesive_energy_val)) {
-      subtitle_parts <- c(subtitle_parts, sprintf("Adhesive energy = %.2f", adhesive_energy_val))
+      subtitle_parts <- c(subtitle_parts, sprintf("Adhesive energy = %.3g", adhesive_energy_val))
     }
     if (isTRUE(repulsive_energy) && !is.na(repulsive_energy_val)) {
-      subtitle_parts <- c(subtitle_parts, sprintf("Repulsive energy = %.2f", repulsive_energy_val))
+      subtitle_parts <- c(subtitle_parts, sprintf("Repulsive energy = %.3g", repulsive_energy_val))
     }
     if (length(subtitle_parts) > 0) {
       p <- p + labs(subtitle = paste(subtitle_parts, collapse = " | "))
@@ -830,7 +827,7 @@ plot_curve_metrics <- function(
           "label",
           x = adhesive_label_x,
           y = adhesive_label_y,
-          label = sprintf("Adhesive force = %.2f nN\nSeparation = %.2f nm", adhesive_force_val, adhesive_sep_val),
+          label = sprintf("Adhesive force = %.3g nN\nSeparation = %.3g nm", adhesive_force_val, adhesive_sep_val),
           color = "red",
           fill = "white",
           size = annotation_text_size
@@ -902,10 +899,10 @@ plot_curve_metrics <- function(
     if (!is.na(interaction_distance) || !is.na(interaction_threshold)) {
       interaction_label <- c()
       if (!is.na(interaction_distance)) {
-        interaction_label <- c(interaction_label, sprintf("%s distance = %.2f nm", type_label, interaction_distance))
+        interaction_label <- c(interaction_label, sprintf("%s distance = %.3g nm", type_label, interaction_distance))
       }
       if (!is.na(interaction_threshold)) {
-        interaction_label <- c(interaction_label, sprintf("%s threshold = %.3f nN", type_label, interaction_threshold))
+        interaction_label <- c(interaction_label, sprintf("%s threshold = %.3g nN", type_label, interaction_threshold))
       }
 
       point_x <- if (!is.na(interaction_distance)) interaction_distance else min(curve_df$separation_distance_nm, na.rm = TRUE)
