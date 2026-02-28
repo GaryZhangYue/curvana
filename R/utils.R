@@ -130,6 +130,10 @@ plot_deflection_curves <- function(fdobj,
 #' @param color_map Named vector of colors (optional).
 #' @param point_size Size of points (default = 0.5).
 #' @param alpha Transparency of points (default = 0.6).
+#' @param xlim Optional numeric vector of length 2 for x-axis limits.
+#' @param ylim Optional numeric vector of length 2 for y-axis limits.
+#' @param ... Additional ggplot2 layers/settings to add to the plot
+#'   (e.g., \code{theme(...)}, \code{scale_*()}, \code{labs(...)}).
 #'
 #' @return A ggplot2 object showing the force-distance relationships from AFM curves.
 #' @export
@@ -140,7 +144,10 @@ plot_fd_curves <- function(fdobj,
                            split_curves_by = NULL,
                            color_map = NULL,
                            point_size = 0.5,
-                           alpha = 0.6) {
+                           alpha = 0.6,
+                           xlim = NULL,
+                           ylim = NULL,
+                           ...) {
   if (!inherits(fdobj, "fdObj")) stop("fdobj must be of class 'fdObj'")
   if (!curve %in% c("approach", "retract", "both")) {
     stop("curve must be one of 'approach', 'retract', or 'both'")
@@ -234,6 +241,21 @@ plot_fd_curves <- function(fdobj,
       strip.background = element_rect(fill = "#f0f0f0"),
       strip.text = element_text(face = "bold")
     )
+
+  if (!is.null(xlim) || !is.null(ylim)) {
+    if (!is.null(xlim) && (!is.numeric(xlim) || length(xlim) != 2)) {
+      stop("xlim must be NULL or a numeric vector of length 2.")
+    }
+    if (!is.null(ylim) && (!is.numeric(ylim) || length(ylim) != 2)) {
+      stop("ylim must be NULL or a numeric vector of length 2.")
+    }
+    p <- p + ggplot2::coord_cartesian(xlim = xlim, ylim = ylim)
+  }
+
+  extra_layers <- list(...)
+  if (length(extra_layers) > 0) {
+    p <- p + extra_layers
+  }
 
   # count and print the number of curves expected and to be printed
   n_samples <- length(fdobj@rawCurves)
@@ -332,9 +354,10 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #'
 #' @param curve_df A data frame containing the transformed force curve with
 #'   columns \code{separation_distance_nm} and \code{force_nN}.
-#' @param noise_cutoff Numeric. The force threshold (in nanoNewtons) for
-#'   separating signal from noise. Adhesive and repulsive regions are those
-#'   exceeding this threshold in magnitude. Default is 0.5.
+#' @param noiseBand_low Numeric lower noise-band threshold (nN).
+#'   Adhesive region is where \code{force_nN < noiseBand_low}.
+#' @param noiseBand_high Numeric upper noise-band threshold (nN).
+#'   Repulsive region is where \code{force_nN > noiseBand_high}.
 #' @param title Character. Title for the plot. Default is
 #'   "Interaction Energy Calculation with Noise Threshold".
 #' @param base_size Numeric. Base font size for the plot. Default is 14.
@@ -349,11 +372,11 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #' @details
 #' The function:
 #' \enumerate{
-#'   \item Calls \code{analyze_a_curve_area()} with the provided \code{noise_cutoff}
+#'   \item Calls \code{analyze_a_curve_area()} with \code{noiseBand_low} and \code{noiseBand_high}
 #'   \item Creates a region classification (Baseline, Adhesive, Repulsive)
-#'   \item Visualizes the noise threshold as a grey band
-#'   \item Colors adhesive regions (force < -noise_cutoff) in steelblue
-#'   \item Colors repulsive regions (force > noise_cutoff) in coral
+#'   \item Visualizes the noise band as a grey region
+#'   \item Colors adhesive regions (force < noiseBand_low) in steelblue
+#'   \item Colors repulsive regions (force > noiseBand_high) in coral
 #'   \item Displays calculated energy values in the plot subtitle
 #' }
 #'
@@ -365,13 +388,13 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #' curve_transformed <- transform_a_curve(curve)
 #' 
 #' # Plot with default noise cutoff (0.5 nN)
-#' plot_force_curve_energy(curve_transformed)
+#' plot_force_curve_energy(curve_transformed, noiseBand_low = -0.5, noiseBand_high = 0.5)
 #' 
-#' # Plot with larger noise cutoff (5 nN)
-#' plot_force_curve_energy(curve_transformed, noise_cutoff = 5)
+#' # Plot with larger noise band
+#' plot_force_curve_energy(curve_transformed, noiseBand_low = -5, noiseBand_high = 5)
 #' 
 #' # Customize appearance
-#' plot_force_curve_energy(curve_transformed, noise_cutoff = 1.0, 
+#' plot_force_curve_energy(curve_transformed, noiseBand_low = -1.0, noiseBand_high = 1.0,
 #'                        title = "My Custom Title", base_size = 12)
 #' }
 #'
@@ -381,43 +404,54 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #' @importFrom ggplot2 scale_color_manual labs annotate theme_minimal theme element_blank element_rect element_text
 #'
 plot_force_curve_energy <- function(curve_df,
-                                     noise_cutoff = 0.5,
+                                     noiseBand_low = -0.5,
+                                     noiseBand_high = 0.5,
                                      title = "Interaction Energy Calculation with Noise Threshold",
                                      base_size = 14,
                                      point_size = 2,
                                      alpha_ribbon = 0.3,
                                      show_legend = TRUE) {
+  if (!is.numeric(noiseBand_low) || length(noiseBand_low) != 1 || is.na(noiseBand_low) || !(noiseBand_low < 0)) {
+    stop("noiseBand_low must be a single numeric value < 0.")
+  }
+  if (!is.numeric(noiseBand_high) || length(noiseBand_high) != 1 || is.na(noiseBand_high) || !(noiseBand_high > 0)) {
+    stop("noiseBand_high must be a single numeric value > 0.")
+  }
   
   # Calculate energy using the internal function
-  energy_result <- analyze_a_curve_area(curve_df, noise_cutoff = noise_cutoff)
+  energy_result <- analyze_a_curve_area(
+    curve_df,
+    noiseBand_low = noiseBand_low,
+    noiseBand_high = noiseBand_high
+  )
   
   plot_data <- curve_df
   # Create region classifications
   plot_data$region <- "Baseline"
-  plot_data$region[plot_data$force_nN > noise_cutoff] <- "Repulsive"
-  plot_data$region[plot_data$force_nN < -noise_cutoff] <- "Adhesive"
+  plot_data$region[plot_data$force_nN > noiseBand_high] <- "Repulsive"
+  plot_data$region[plot_data$force_nN < noiseBand_low] <- "Adhesive"
   
   # Separate data for ribbon layers
-  repulsive_data <- plot_data[plot_data$force_nN > noise_cutoff, ]
-  adhesive_data <- plot_data[plot_data$force_nN < -noise_cutoff, ]
+  repulsive_data <- plot_data[plot_data$force_nN > noiseBand_high, ]
+  adhesive_data <- plot_data[plot_data$force_nN < noiseBand_low, ]
   
   # Create the plot
   p <- ggplot(plot_data, aes(x = separation_distance_nm, y = force_nN)) +
     # Grey background for noise band
     annotate("rect", xmin = -Inf, xmax = Inf, 
-             ymin = -noise_cutoff, ymax = noise_cutoff,
+             ymin = noiseBand_low, ymax = noiseBand_high,
              alpha = 0.08, fill = "grey50") +
     # Shaded regions for energy calculation
     geom_ribbon(data = repulsive_data, 
-                aes(ymin = noise_cutoff, ymax = force_nN),
+                aes(ymin = noiseBand_high, ymax = force_nN),
                 fill = "coral", alpha = alpha_ribbon, color = NA) +
     geom_ribbon(data = adhesive_data, 
-                aes(ymin = force_nN, ymax = -noise_cutoff),
+                aes(ymin = force_nN, ymax = noiseBand_low),
                 fill = "steelblue", alpha = alpha_ribbon, color = NA) +
     # Threshold lines
-    geom_hline(yintercept = noise_cutoff, color = "red", 
+    geom_hline(yintercept = noiseBand_high, color = "red", 
                linetype = "dashed", linewidth = 0.7) +
-    geom_hline(yintercept = -noise_cutoff, color = "red", 
+    geom_hline(yintercept = noiseBand_low, color = "red", 
                linetype = "dashed", linewidth = 0.7) +
     geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
     # Curve rendering
@@ -437,14 +471,138 @@ plot_force_curve_energy <- function(curve_df,
              energy_result["adhesive_area"],
              energy_result["repulsive_area"])
     ) +
-    # Annotation for noise cutoff value
-    annotate("text", x = Inf, y = noise_cutoff,
-             label = sprintf("Noise cutoff = %.3g nN", noise_cutoff),
+    # Annotation for noise-band values
+    annotate("text", x = Inf, y = noiseBand_high,
+         label = sprintf("noiseBand_high = %.3g nN", noiseBand_high),
              hjust = 1.1, vjust = -0.5, size = 3.5, color = "red") +
+    annotate("text", x = Inf, y = noiseBand_low,
+         label = sprintf("noiseBand_low = %.3g nN", noiseBand_low),
+         hjust = 1.1, vjust = 1.3, size = 3.5, color = "red") +
     # Theme
     theme_minimal(base_size = base_size) +
     theme(legend.position = if (show_legend) "bottom" else "none")
   
+  return(p)
+}
+
+
+#' Plot a transformed force curve with annotated noise band
+#'
+#' Creates a ggplot visualization of one transformed force-distance curve and
+#' annotates lower/upper noise-band thresholds. Noise bands can be supplied
+#' directly via \code{noiseBand_low}/\code{noiseBand_high}, or computed on the
+#' fly using \code{analyze_a_curve_noise()} when \code{baseline_span} is
+#' provided.
+#'
+#' @param curve_df A data frame containing transformed curve columns
+#'   \code{separation_distance_nm} and \code{force_nN}.
+#' @param noiseBand_low Numeric scalar lower noise-band threshold (nN).
+#' @param noiseBand_high Numeric scalar upper noise-band threshold (nN).
+#' @param baseline_span Integer >= 1. If \code{noiseBand_low/high} are not
+#'   provided, this value is used to compute them with
+#'   \code{analyze_a_curve_noise()}.
+#' @param threshold_method Character scalar passed to
+#'   \code{analyze_a_curve_noise()} when computing bands. One of
+#'   \code{c("sd", "mad", "quantile", "fixed")}.
+#' @param multiplier Numeric >= 0 scaling multiplier for computed bands.
+#' @param mad_constant Numeric MAD scaling constant.
+#' @param quantile_low Numeric lower quantile for
+#'   \code{threshold_method = "quantile"}.
+#' @param quantile_high Numeric upper quantile for
+#'   \code{threshold_method = "quantile"}.
+#' @param fixed_low Numeric fixed lower threshold (nN) for
+#'   \code{threshold_method = "fixed"}.
+#' @param fixed_high Numeric fixed upper threshold (nN) for
+#'   \code{threshold_method = "fixed"}.
+#' @param title Character. Plot title.
+#' @param base_size Numeric. Base font size.
+#' @param line_color Character. Curve line color.
+#' @param line_width Numeric. Curve line width.
+#' @param show_points Logical. If \code{TRUE}, overlay points on curve.
+#' @param point_size Numeric. Point size when \code{show_points = TRUE}.
+#'
+#' @return A ggplot2 object with noise-band annotations.
+#' @export
+#' @importFrom ggplot2 ggplot aes geom_path geom_point geom_hline annotate labs theme_minimal
+plot_force_curve_noise_band <- function(
+    curve_df,
+    noiseBand_low = NULL,
+    noiseBand_high = NULL,
+    baseline_span = NULL,
+    threshold_method = c("sd", "mad", "quantile", "fixed"),
+    multiplier = 3,
+    mad_constant = 1.4826,
+    quantile_low = 0.25,
+    quantile_high = 0.75,
+    fixed_low = NULL,
+    fixed_high = NULL,
+    title = "Single-Curve Noise Band",
+    base_size = 14,
+    line_color = "grey40",
+    line_width = 0.7,
+    show_points = TRUE,
+    point_size = 1.6
+) {
+  threshold_method <- match.arg(threshold_method)
+
+  if (!is.data.frame(curve_df) ||
+      !all(c("separation_distance_nm", "force_nN") %in% names(curve_df)) ||
+      nrow(curve_df) == 0) {
+    stop("curve_df must be a non-empty data.frame with columns 'separation_distance_nm' and 'force_nN'.")
+  }
+
+  need_compute <- is.null(noiseBand_low) || is.null(noiseBand_high)
+  if (need_compute) {
+    if (is.null(baseline_span)) {
+      stop("Provide both noiseBand_low and noiseBand_high, or provide baseline_span to compute them.")
+    }
+    noise_res <- analyze_a_curve_noise(
+      curve_df = curve_df,
+      baseline_span = baseline_span,
+      threshold_method = threshold_method,
+      multiplier = multiplier,
+      mad_constant = mad_constant,
+      quantile_low = quantile_low,
+      quantile_high = quantile_high,
+      fixed_low = fixed_low,
+      fixed_high = fixed_high
+    )
+    noiseBand_low <- unname(noise_res[["noiseBand_low"]])
+    noiseBand_high <- unname(noise_res[["noiseBand_high"]])
+  }
+
+  if (!is.numeric(noiseBand_low) || length(noiseBand_low) != 1 || is.na(noiseBand_low)) {
+    stop("noiseBand_low must be a single non-NA numeric value.")
+  }
+  if (!is.numeric(noiseBand_high) || length(noiseBand_high) != 1 || is.na(noiseBand_high)) {
+    stop("noiseBand_high must be a single non-NA numeric value.")
+  }
+
+  p <- ggplot(curve_df, aes(x = separation_distance_nm, y = force_nN)) +
+    annotate("rect", xmin = -Inf, xmax = Inf, ymin = noiseBand_low, ymax = noiseBand_high,
+             alpha = 0.08, fill = "grey50") +
+    geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+    geom_hline(yintercept = noiseBand_low, color = "red", linetype = "dashed", linewidth = 0.7) +
+    geom_hline(yintercept = noiseBand_high, color = "red", linetype = "dashed", linewidth = 0.7) +
+    geom_path(color = line_color, linewidth = line_width) +
+    labs(
+      x = "Separation distance (nm)",
+      y = "Force (nN)",
+      title = title,
+      subtitle = sprintf("Noise band: [%.3g, %.3g] nN", noiseBand_low, noiseBand_high)
+    ) +
+    annotate("text", x = Inf, y = noiseBand_high,
+             label = sprintf("noiseBand_high = %.3g nN", noiseBand_high),
+             hjust = 1.05, vjust = -0.5, size = 3.5, color = "red") +
+    annotate("text", x = Inf, y = noiseBand_low,
+             label = sprintf("noiseBand_low = %.3g nN", noiseBand_low),
+             hjust = 1.05, vjust = 1.3, size = 3.5, color = "red") +
+    theme_minimal(base_size = base_size)
+
+  if (isTRUE(show_points)) {
+    p <- p + geom_point(size = point_size, alpha = 0.7, color = line_color)
+  }
+
   return(p)
 }
 

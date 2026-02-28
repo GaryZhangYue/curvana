@@ -150,6 +150,19 @@ The calculated sensitivity, baseline, and input spring constant is now saved as 
 view_df(test@metadata,'metadata after curve transformation')
 ```
 
+## Plot transformed curves
+
+To visualize the transformed curves, we can use the "plot_fd_curves" function. Here we plot the approach and retract curves in separate panels, and color code them by column "surface".
+
+```{r plot transformed curves, fig.height=7,fig.width=7}
+plot_fd_curves(test,group_curves_by = 'region', split_curves_by = 'surface',
+               alpha = 0.5,point_size = 0.5,
+               color_map = list(`1` = 'darkred',
+                                `2` = 'orange',
+                                `3` = 'steelblue'))
+```
+
+We can see that Fluorinated surface has the largest adhesion, which occurs mostly immediately after pulling probe off the surface. The other surfaces have smaller adhesion, but the magnitude of adhesion is smaller. All curves passed the transformation step have a baseline that is well aligned with the zero-force line with a relatively small fluctuation, which is important for accurate calculation of analytical metrics in later steps.
 
 ## Single curve transformation
 
@@ -309,6 +322,8 @@ After curve transformation, we can calculate analytical metrics such as adhesive
 
 ## Baseline noise-level determination
 
+### Wrapper function for batch analysis
+
 Before calculating analytical metrics, it is important to determine the baseline noise level so we can set force thresholds that exclude insignificant fluctuations. The function "analyze_a_curve_noise" estimates a lower and upper noise band from baseline force values. For batch analysis, "analyze_curves_noise" applies this to all transformed curves in an fdObj and writes the results into metadata columns \code{noiseBand_low_nN_<dir>} and \code{noiseBand_high_nN_<dir>} (where \code{<dir>} is \code{approach} or \code{retract}).
 
 Supported noise-band determination methods are standard deviation (\code{sd}), median absolute deviation (\code{mad}), quantile (\code{quantile}), and fixed (\code{fixed}). The \code{multiplier} parameter is used to multiply the chosen noise metric to define the noise band. The same stored noise-band columns are then reused by interaction-distance, interaction energy analysis, so thresholds are determined once and applied consistently across curves.
@@ -321,6 +336,19 @@ test = analyze_curves_noise(test,useCurve = 'approach',baseline_span = 'automati
 test = analyze_curves_noise(test,useCurve = 'retract',baseline_span = 'automatic',
                             threshold_method = 'sd',multiplier = 3,threads = 1)
 view_df(test@metadata,'metadata with baseline noise level values added as columns')
+```
+
+### Single curve analysis
+
+To demonstrate how the baseline noise level is calculated for a single curve, we use the above transformed retract curve as an example. The function "analyze_a_curve_noise" estimates the lower and upper noise bands based on the specified method and multiplier, using the baseline region of the curve, as discussed above. 
+
+Here we use the same parameters as in the batch analysis, which means the noise band will be set as 3 times of the standard deviation of the baseline force values. The function returns a named vector containing the calculated lower and upper noise band values.
+
+```{r single curve noise level calculation,fig.height=6,fig.width=8}
+res.noise = analyze_a_curve_noise(example1.transformed, baseline_span = 50, threshold_method = 'sd', multiplier = 3)
+print(res.noise)
+plot_force_curve_noise_band(example1.transformed, noiseBand_low = res.noise[["noiseBand_low"]], noiseBand_high = res.noise[["noiseBand_high"]])
+
 ```
 
 
@@ -357,8 +385,8 @@ The wrapper function "analyze_curves_energy" applies this analysis to all curves
 Note that for curves that are over-corrected, which has a portion of curve near the contact region extgends to the negative side of x axis (i.e., having negative separation distance), the function will automatically clamp all negative x to zero before energy calculation
 
 ```{r calculate interaction energy}
-test = analyze_curves_energy(test,useCurve = 'approach',noise_cutoff = 0.5,threads = 1)
-test = analyze_curves_energy(test,useCurve = 'retract',noise_cutoff = 0.5,threads = 1)
+test = analyze_curves_energy(test,useCurve = 'approach',threads = 1)
+test = analyze_curves_energy(test,useCurve = 'retract',noise_cutoff = 0.5)
 view_df(test@metadata,'metadata with energy values added as columns') 
 ```
 
@@ -366,30 +394,19 @@ view_df(test@metadata,'metadata with energy values added as columns')
 
 To demonstrate how the interaction energy is calculated for a single curve, we use the above transformed retract curve as an example. The function "analyze_a_curve_energy" computes the adhesive energy and repulsive energy based on the area under the curve, applying a noise cutoff to exclude insignificant fluctuations.
 
-As we can see from the transformed curve, curve has a slight undulating baseline, which can be caused by thermal noise or instrumental drift. If we set a noise cutoff of 0.01 nN, the function will only count the area under the curve that is below -0.01 nN as adhesive energy, and only count the area above 0.01 nN as repulsive energy. If we set a higher noise cutoff of 0.05 nN, the function will only count the area under the curve that is below -0.05 nN as adhesive energy, and only count the area above 0.05 nN as repulsive energy. As a result, we can see that with a higher noise cutoff, both the calculated adhesive energy and repulsive energy are lower than those calculated with a lower noise cutoff.
+To avoid counting noise as part of the interaction energy, we set noise cutoff with the computed noise band. The function will calculate the area under the curve that is below the negative noise cutoff and above the curve in Quadrant IV as adhesive energy, and calculate the area above the positive noise cutoff and under the curve in Quadrant I as repulsive energy. The calculated adhesive energy and repulsive energy are returned in a named vector.
 
-```{r single curve interaction energy calculation, fig.height=6, fig.width=12}
-analyze_a_curve_area(example1.transformed,noise_cutoff = 0.01)
-analyze_a_curve_area(example1.transformed,noise_cutoff = 0.05)
+Note that the shaded area is for demonstration only, which does not necessarily represent the actual area used for energy calculation, as the function intrapolates the curve to find the exact points where the curve crosses the noise cutoff, which may not be exactly the same as the area shaded in the plot.
 
-p1 <- plot_force_curve_energy(example1.transformed, noise_cutoff = 0.01)
-p2 <- plot_force_curve_energy(example1.transformed, noise_cutoff = 0.05)
+```{r single curve interaction energy calculation, fig.height=6, fig.width=8}
+analyze_a_curve_area(example1.transformed, noiseBand_low = res.noise[['noiseBand_low']], noiseBand_high = res.noise[['noiseBand_high']])
 
-plot_grid(p1, p2, ncol = 2)
+plot_force_curve_energy(example1.transformed, noiseBand_low = res.noise[['noiseBand_low']], noiseBand_high = res.noise[['noiseBand_high']])
+
 ```
 
-Practically, we can define the noise band region based on the force values of the baseline region. Here, we calculate the standard deviation of the force values in the baseline region, and set the noise cutoff as 2 times of this standard deviation.
 
-```{r single curve interaction energy calculation with baseline noise cutoff, fig.height=6, fig.width=12}
-baseline_noise_sd = sd(example1.transformed$force_nN[example1.transformed$`Region used for baseline offset calculation` == 'Baseline region'])
-noise_cutoff = 2 * baseline_noise_sd
-analyze_a_curve_area(example1.transformed, noise_cutoff = noise_cutoff)
-plot_force_curve_energy(example1.transformed, noise_cutoff = noise_cutoff)
-```
-
-<start from here; check if we can use a column to set noise band for interaction distance and energy calculation>>
-<noise determination should have its own function, which essentially use what is used in interaction distance finding function to deterine noise cutoff based on baseline noise. Then the noise cutoff can be used for both energy calculation and interaction distance calculation, so that the two metrics are calculated based on the same noise threshold.>
-
+<restart from here. the interaction energy part should be done. see if the interaction distance part is right.>
 ## Interaction distance
 
 The interaction distance is calculated as the separation distance at which the force curve first crosses a defined noise threshold, indicating the onset of significant interaction between the AFM probe and the sample surface. The "analyze_a_curve_interaction_distance" function identifies this point and returns the corresponding separation distance as the interaction distance.
@@ -425,17 +442,10 @@ To demonstrate how the interaction distance is calculated for a single curve, we
 
 
 ```{r single curve interaction distance calculation}
-pmon.1.tr = test@retractCurves$`180424_fv_pmon2_loc1-18-22.spm`
-noise_band.tr = analyze_a_curve_noise(pmon.1.tr, baseline_span = 100, threshold_method = "sd", multiplier = 10)
-res.interaction_distance = analyze_a_curve_interaction_distance(
-  pmon.1.tr,
-  baseline_span = 100,
-  y_direction = "negative",
-  x_direction = "left",
-  noiseBand_low = noise_band.tr[["noiseBand_low"]]
-)
+res.interaction_distance = analyze_a_curve_interaction_distance(pmon.1.tr,baseline_span = 100, y_direction = "negative", x_direction = "left", multiplier = 10, threshold_method = "sd")
 
 print(res.interaction_distance)
+plot_force_curve_interaction_distance(pmon.1.tr, baseline_span = 100, y_direction = "negative", x_direction = "left",  multiplier = 10, threshold_method = "sd")
 ```
 
 
@@ -443,16 +453,10 @@ Similarly, we can calculate the interaction distance for the approach curve by c
 
 ```{r single curve interaction distance calculation for approach curve}
 pmon.1.approach = test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`
-noise_band.approach = analyze_a_curve_noise(pmon.1.approach, baseline_span = 100, threshold_method = "sd", multiplier = 10)
-res.interaction_distance.approach = analyze_a_curve_interaction_distance(
-  pmon.1.approach,
-  baseline_span = 100,
-  y_direction = "positive",
-  x_direction = "right",
-  noiseBand_high = noise_band.approach[["noiseBand_high"]]
-)
+res.interaction_distance.approach = analyze_a_curve_interaction_distance(pmon.1.approach,baseline_span = 100, y_direction = "positive", x_direction = "right", multiplier = 10, threshold_method = "sd")
 
 print(res.interaction_distance.approach)
+plot_force_curve_interaction_distance(pmon.1.approach, baseline_span = 100, y_direction = "positive", x_direction = "right", multiplier = 10, threshold_method = "sd")
 
 ```
 
