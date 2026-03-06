@@ -129,7 +129,8 @@ plot_deflection_curves <- function(fdobj,
 #' @param split_curves_by Metadata column to facet by (optional).
 #' @param color_map Named vector of colors (optional).
 #' @param point_size Size of points (default = 0.5).
-#' @param alpha Transparency of points (default = 0.6).
+#' @param point_alpha Transparency of points (default = 0.6).
+#' @param line_alpha Transparency of curve lines (default = 0.5).
 #' @param xlim Optional numeric vector of length 2 for x-axis limits.
 #' @param ylim Optional numeric vector of length 2 for y-axis limits.
 #' @param ... Additional ggplot2 layers/settings to add to the plot
@@ -144,7 +145,8 @@ plot_fd_curves <- function(fdobj,
                            split_curves_by = NULL,
                            color_map = NULL,
                            point_size = 0.5,
-                           alpha = 0.6,
+                           point_alpha = 0.6,
+                           line_alpha = 0.5,
                            xlim = NULL,
                            ylim = NULL,
                            ...) {
@@ -162,6 +164,15 @@ plot_fd_curves <- function(fdobj,
   }
   if (!is.null(split_curves_by) && !(split_curves_by %in% colnames(meta))) {
     stop("split_curves_by must be a column in metadata")
+  }
+  if (!is.null(color_map)) {
+    if (is.list(color_map)) {
+      color_map <- unlist(color_map, use.names = TRUE)
+    }
+    if (!is.atomic(color_map) || is.null(names(color_map))) {
+      stop("color_map must be a named atomic vector (e.g., c('1' = 'darkred', '2' = 'orange')).")
+    }
+    color_map <- as.character(color_map)
   }
 
   # Build plotting dataframe
@@ -210,11 +221,23 @@ plot_fd_curves <- function(fdobj,
   # Base plot
   if (!is.null(group_curves_by)) {
     p <- ggplot(plot_df, aes(x = separation_distance_nm, y = force_nN)) +
-      geom_point(aes(color = .data[[group_curves_by]]), size = point_size, alpha = alpha) +
+      geom_line(
+        aes(color = .data[[group_curves_by]], group = interaction(sample, segment)),
+        alpha = line_alpha,
+        linewidth = 0.35,
+        show.legend = FALSE
+      ) +
+      geom_point(aes(color = .data[[group_curves_by]]), size = point_size, alpha = point_alpha) +
       labs(x = "Separation Distance (nm)", y = "Force (nN)", color = group_curves_by)
   } else {
     p <- ggplot(plot_df, aes(x = separation_distance_nm, y = force_nN)) +
-      geom_point(size = point_size, alpha = alpha) +
+      geom_line(
+        aes(group = interaction(sample, segment)),
+        alpha = line_alpha,
+        linewidth = 0.35,
+        color = "grey50"
+      ) +
+      geom_point(size = point_size, alpha = point_alpha) +
       labs(x = "Separation Distance (nm)", y = "Force (nN)")
   }
 

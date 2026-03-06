@@ -24,7 +24,7 @@ knitr::opts_chunk$set(warning = T, message = T,echo = T)
 
 # Introduction
 
-This tutorial demonstrates the full analytical workflow of the **curvana** R package, from raw AFM deflection–displacement curves to quantitative force–distance curves and analytical metrics, such as adhesive force, interaction energy and rupture and repulsive distance.  
+This tutorial demonstrates the full analytical workflow of the **curvana** R package, from raw AFM deflection–displacement curves to transformed force–distance curves and their analytical metrics, such as adhesive force, interaction energy and rupture and repulsive distance.  
 
 # Preparation 
 
@@ -41,23 +41,23 @@ devtools::load_all()
 
 ## Load demo data
 
-All examples below use the demo dataset provided in `extdata/` inside the package. To use your own dataset, you can pass the path to the directory holding the data to the "folder" argument. Note that users can increase the threads to enable parallel processing for loading a large folder (e.g., > 1000 curves), which will dramatically reduce the computational time. Here we use 1 thread, as we only have a small demo dataset.
+All examples below use the demo dataset provided in `extdata/` inside the package. To use your own dataset, you can pass the path to the directory holding the data to the "folder" argument. Note that users can increase the threads to enable parallel processing for loading a large folder (e.g., > 5000 curves), which will dramatically reduce the computational time.
 
 At this step, we initialize the fdObj named "test" by importing the demo data directory "extdata/" using the "createFdObjFromFolder" function. An fdObj is the core data container in curvana, designed to store atomic force microscopy (AFM) force–distance curve data, including raw approach and retract curves, transformed data, associated metadata for downstream analysis, and the analytical metrics generated.
 
 By default, createFdObjFromFolder will read all files in the designated folder with suffix ".txt", and expect each file has paired approach and retract deflection-dislocation raw curve data with standard column names (i.e., Calc_Ramp_Ex_nm, Defl_V_Ex, Calc_Ramp_Rt_nm, Defl_V_Rt). 
 
-Users working with non-standard input files can specify column headers with corresponding arguments. User may also use the "suffix" argument to specify files to import by specifying filename suffix, or by providing a metadata dataframe whose row names match the input file names. Please note that the input files have to be tab-delimited files. See package manual for detailed usage.
+Users working with non-standard input files can specify column headers. User may also use the "suffix" argument to specify files to import by specifying filename suffix, or by providing a metadata dataframe whose row names match the input file names. Please note that the input files have to be tab-delimited files. See package manual for detailed usage.
 
 ```{r load data}
 #folder = system.file("extdata", package = "curvana")
 #test = createFdObjFromFolder(folder = folder, threads = t)
-input.path = "../curvana_test/demo"
+input.path = "../../curvana_test/demo"
 t = 1
 test.input = createFdObjFromFolder(folder = input.path, threads = t)
 ```
 
-Let's take a quick look at the fdObj (named test) we created. We can see that we imported 14 raw curves. Non of them are transformed yet, and "filename" is the only column in the metadata slot.
+Let's take a quick look at the fdObj (named test) we created. We can see that we imported 768 raw curves. Non of them are transformed yet, and "filename" is the only column in the metadata slot.
 
 ```{r show init fdobj}
 print(test.input)
@@ -66,7 +66,7 @@ view_df(test.input@metadata,'metadata')
 
 ## Manipulate the fdObj object
 
-The demo data set has measurements made on different surface at different regions. Let's group them in the metadata. Alternatively, users can also provide a metadata dataframe with columns of interest (e.g., date, bacteria group, location) to create the fdObj using the metadata argument in createFdObjFromFolder function.
+The demo dataset has measurements made on different surface at different regions. Let's group them in the metadata. 
 
 ```{r edit metadata}
 test <- test.input
@@ -81,6 +81,7 @@ test@metadata <- test@metadata %>%
          region = sub(".*?_([0-9]+)\\.spm.*", "\\1", filename)
   )
 view_df(test@metadata,'metadata')
+test_beforeTransform <- test
 ```
 
 It is also possible to extract specific samples from an fdObj either by providing their sample names (i.e., row names in the metadata) or by subsetting the object based on conditions applied to metadata columns.
@@ -101,7 +102,7 @@ test.combine.1 = combineFdObj(test.peg,test.silicon)
 
 It is important to inspect the raw curves before formal analysis. We can use the "plot_deflection_curves" function to plot curves in batch. Here, we split curves into sub-panels by column "surface", and color code them by column "region".
 
-```{r plot deflection curves, fig.height=7,fig.width=7}
+```{r plot deflection curves, fig.height=12,fig.width=10}
 plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'region',
                        alpha = 0.5,point_size = 0.5,
                        color_map = list(`1` = 'darkred',
@@ -117,15 +118,15 @@ One advantage of curvana is that each step of the data analysis is modularized, 
 
 At this step, we calculate the baseline and sensitivity of each raw AFM curve and transform the deflection-dislocation data into calibrated force–distance curves. The wrapper function transform_curves() automates this process by internally calling analyze_sensitivity() and analyze_baseline() to estimate the sensitivity and baseline values when their corresponding columns are not yet present in the metadata.
 
-To transform a curve, the spring constant of the AFM probe is required to convert deflection (V) to force (nN). The transform_curves() function accepts either a single numeric value, applied to all curves and stored in metadata$spring_constant, or a metadata column name containing per-curve spring constants. These values are then used with the computed baseline and sensitivity to generate the final force–distance curves.
+To transform a curve, the spring constant of the AFM probe is required to convert deflection (V) to force (nN). The transform_curves() function accepts either a single numeric value, applied to all curves and stored in metadata$spring_constant, or a metadata column name containing per-curve spring constants. These values are then used with the computed baseline and sensitivity to generate the final force–distance curves.After these parameters are obtained, the function applies them to transform each curve into its calibrated form. All arguments accepted by analyze_sensitivity() and analyze_baseline() can be passed directly to transform_curves(), allowing full control over the analysis parameters. 
 
-After these parameters are obtained, the function applies them to transform each curve into its calibrated form. All arguments accepted by analyze_sensitivity() and analyze_baseline() can be passed directly to transform_curves(), allowing full control over the analysis parameters. Here we set the spring constant to 0.08 N/m for all curves, and set the least length of of the curve for baseline calculation to 50, which means the function will use the last 50 points of each curve to calculate the baseline offset. We also set the slope threshold to 0.01 and standard deviation threshold to 0.01 for filtering out curves with unstable baseline. For sensitivity calculation, as we have a small contact region, we set end = 20 to only use the first 20 points of the curve to calculate sensitivity.
+Here we set the spring constant to 0.08 N/m for all curves, and set the least length of of the curve for baseline calculation to 200, which means the function will use the last 200 points of each curve to calculate the baseline offset. We also set the slope threshold to 0.01 and standard deviation threshold to 0.01 for filtering out curves with unstable baseline. For sensitivity calculation, as we have a small contact region, we set end = 20 to only use the first 20 points of the curve to calculate sensitivity.
 
 ```{r transform curves approach,warning=TRUE, message=TRUE,results='hold', echo=TRUE}
 t = 1
 # test_beforeTransform -> test
-test = transform_curves(test,spring_constant = 0.08,useCurve = 'approach',threads = t, least_length = 50, slp_threshold = 0.01, std_threshold = 0.01, end = 20)
-test = transform_curves(test,spring_constant = 0.08,useCurve = 'retract',threads = t, least_length = 50, slp_threshold = 0.01, std_threshold = 0.01, end = 20)
+test = transform_curves(test,spring_constant = 0.08,useCurve = 'approach',threads = t, least_length = 200, slp_threshold = 0.01, std_threshold = 0.01, end = 20)
+test = transform_curves(test,spring_constant = 0.08,useCurve = 'retract',threads = t, least_length = 200, slp_threshold = 0.01, std_threshold = 0.01, end = 20)
 ```
 
 
@@ -154,15 +155,15 @@ view_df(test@metadata,'metadata after curve transformation')
 
 To visualize the transformed curves, we can use the "plot_fd_curves" function. Here we plot the approach and retract curves in separate panels, and color code them by column "surface".
 
-```{r plot transformed curves, fig.height=7,fig.width=7}
+```{r plot transformed curves, fig.height=12,fig.width=10}
 plot_fd_curves(test,group_curves_by = 'region', split_curves_by = 'surface',
-               alpha = 0.5,point_size = 0.5,
+               point_alpha = 0.5,line_alpha = 0.3, point_size = 0.5,
                color_map = list(`1` = 'darkred',
                                 `2` = 'orange',
                                 `3` = 'steelblue'))
 ```
 
-We can see that Fluorinated surface has the largest adhesion, which occurs mostly immediately after pulling probe off the surface. The other surfaces have smaller adhesion, but the magnitude of adhesion is smaller. All curves passed the transformation step have a baseline that is well aligned with the zero-force line with a relatively small fluctuation, which is important for accurate calculation of analytical metrics in later steps.
+We can see that Fluorinated surface has the largest adhesion, which occurs mostly immediately after pulling probe off the surface. The other surfaces also have adhesion, but the magnitude of adhesion is smaller. All curves passed the transformation step have a baseline that is well aligned with the zero-force line with a relatively small fluctuation, which is important for accurate calculation of analytical metrics in later steps.
 
 ## Single curve transformation
 
@@ -170,17 +171,17 @@ We can see that Fluorinated surface has the largest adhesion, which occurs mostl
 
 To demonstrate how each single curve is transformed, we take the retract part of "silicon_wafer_2.spm-2658_ForceCurveIndex_36.spm" as an example. The function "calc_sensitivity", adapted from fdafm (Zhang et al., 2021), is designed to automatically to calculate the sensitivity value. Note that the function returns two outputs -- the sensitivity value, and the subset of data points used to calculate the sensitivity value (the second element of the returned list, which is a named dataframe named senscal_segment).
 
-For sensitivity calculation, as mentioned above, we set end = 20 to only use the first 20 points of the curve to calculate sensitivity, because for this experiment we have a short contact region in the curve.
+For sensitivity calculation, as mentioned above, we set end = 20 to only use the first 20 points of the curve to calculate sensitivity. This is because for this experiment we have a short contact region in the curve.
 
 ```{r single curve sensitivity analysis}
 
-example1.name = 'silicon_wafer_2.spm-2658_ForceCurveIndex_36.spm	'
+example1.name = 'silicon_wafer_2.spm-2658_ForceCurveIndex_36.spm'
 example1.raw = test@rawCurves[[example1.name]]
 
 x = example1.raw$Calc_Ramp_Rt_nm
 y = example1.raw$Defl_V_Rt
-res = calc_sensitivity(end = 20, x = x, y = y)
-example1.raw$`Region used for Sensitivity calculation` = case_when(example1.raw$Calc_Ramp_Rt_nm %in% res$senscal_segment$x ~ "Sensitivity region", TRUE ~ "Other")
+res.sens = calc_sensitivity(end = 20, x = x, y = y)
+example1.raw$`Region used for Sensitivity calculation` = case_when(example1.raw$Calc_Ramp_Rt_nm %in% res.sens$senscal_segment$x ~ "Sensitivity region", TRUE ~ "Other")
 
 ggplot(example1.raw, aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt)) +
   geom_point(aes(
@@ -213,15 +214,15 @@ view_df(test2@metadata,'metadata with sensitivity values added as columns')
 ### Baseline offsets
 
 
-Similarly, the offset voltage of each curve can be estimated using the find_baseline() function. We assume that the far-right region of every curve corresponds to the probe being fully detached from the substrate and therefore free from interaction forces. The mean of the the last N points (defined by the least_length argument) in this region is calculated as the baseline offset value that will be used in later steps to move the curve up or down to align with the zero-force line. Here we set the least length of of the curve to 50. We set slope threshold to 0.01 and standard deviation threshold to 0.01, meaning the curve will be discarded if the last 50 points has a standard deviation of y-value greater than 0.01 or its linear regression  has a slope greater than 0.01.
+Similarly, the offset voltage of each curve can be estimated using the find_baseline() function. We assume that the far-right region of every curve corresponds to the probe being fully detached from the surface and therefore free from interaction forces. The mean of the y values of the last N points (defined by the least_length argument) in this region is calculated as the baseline offset value that will be used in later steps to move the curve up or down to align with the zero-force line (i.e., x axis). Here we set the least length of the curves to 200. We set slope threshold to 0.01 and standard deviation threshold to 0.01, meaning the curve will be discarded if the last 200 points has a standard deviation of y-value greater than 0.01 or its linear regression has a slope greater than 0.01.
 
-Similar as the "cal_sensitivity" function, "find_baseline" also returns two outputs -- the offset value, and the subset of data points used to calculate the offset value (the second element of the returned list, which is a named dataframe named baseline_segment).
+Similar as the "cal_sensitivity" function, "find_baseline" also returns two outputs -- the offset value , and the subset of data points used to calculate the offset value .
 
 
 ```{r single curve baseline calculation}
 
-res.b = find_baseline(x = x, y = y,  sensitivity = res$sensitivity, least_length = 50,slp_threshold = 0.01,std_threshold = 0.01)
-example1.raw$`Region used for baseline offset calculation` = case_when(example1.raw$Calc_Ramp_Rt_nm %in% res.b$segment$x ~ "Baseline region", TRUE ~ "Non-baseline region")
+res.base = find_baseline(x = x, y = y,  sensitivity = res.sens$sensitivity, least_length = 200,slp_threshold = 0.01,std_threshold = 0.01)
+example1.raw$`Region used for baseline offset calculation` = case_when(example1.raw$Calc_Ramp_Rt_nm %in% res.base$segment$x ~ "Baseline region", TRUE ~ "Non-baseline region")
 
 ggplot(example1.raw, aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt)) +
   geom_point(aes(color = `Region used for baseline offset calculation`), size = 1.5) +
@@ -241,13 +242,13 @@ ggplot(example1.raw, aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt)) +
 ```
 
 
-To analyze the baseline offset for each curve in an fdObj, we use the analyze_baseline() function. This function internally calls find_baseline() for each curve and records the computed baseline offset values in the metadata columns "baseline_V_approach" and "baseline_V_retract", along with the length of the baseline segment defined by the user. The portions of each raw curve used for baseline offset estimation are stored in the baseline_segment slot of the object.
+To analyze the baseline offset for each curve in an fdObj, we use the analyze_baseline() function. This function internally calls find_baseline() for each curve and records the computed baseline offset values in the metadata columns "baseline_V_dir", along with the length of the baseline segment defined by the user. The portions of each raw curve used for baseline offset estimation are stored in the baseline_segment slot of the object.
 
 Curves can exhibit undulating or unstable baselines. Such abnormal curves—identified by a slope greater than slp_threshold and a standard deviation greater than std_threshold—are considered unreliable and are omitted from subsequent analyses. Curves that fail baseline calculation are assigned NA in these metadata columns. The analyze_baseline function will automatically look up the sensitivity columns generated in analyze_sensitivity. Since baseline estimation requires a valid sensitivity value, any curve that fails sensitivity calculation (i.e., does not have a numeric sensitivity value in the corresponding metadata column) will also fail baseline calculation. 
 
 ```{r analyze baseline in batch}
-test2 = analyze_baseline(test2,useCurve = 'approach',least_length = 50,slp_threshold = 0.01,std_threshold = 0.01)
-test2 = analyze_baseline(test2,useCurve = 'retract', least_length = 50,slp_threshold = 0.01,std_threshold = 0.01)
+test2 = analyze_baseline(test2,useCurve = 'approach',least_length = 200,slp_threshold = 0.01,std_threshold = 0.01)
+test2 = analyze_baseline(test2,useCurve = 'retract', least_length = 200,slp_threshold = 0.01,std_threshold = 0.01)
 view_df(test2@metadata,'metadata with baseline values added as columns')
 ```
 
@@ -257,9 +258,9 @@ view_df(test2@metadata,'metadata with baseline values added as columns')
 Now, with the sensitivity and baseline offset values calculated, we are ready to transform the curve with function transform_a_curve. senscal_seg_x and senscal_seg_y are the x and y values of the segment used for sensitivity calculation, which also will be used for curve transformation. 
 
 ```{r single curve transform,fig.height=6,fig.width=16}
-example1.transformed = transform_a_curve(x = x, y= y, baseline = res.b$baseline, sensitivity = res$sensitivity,
-                             spring_constant = 0.08, senscal_seg_x = res$senscal_segment$x,
-                             senscal_seg_y = res$senscal_segment$y)
+example1.transformed = transform_a_curve(x = x, y= y, baseline = res.base$baseline, sensitivity = res.sens$sensitivity,
+                             spring_constant = 0.08, senscal_seg_x = res.sens$senscal_segment$x,
+                             senscal_seg_y = res.sens$senscal_segment$y)
 
 p1 = ggplot(example1.raw, aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt)) +
   geom_point(aes(
@@ -280,7 +281,7 @@ p1 = ggplot(example1.raw, aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt)) +
   labs(
     x = "Calc_Ramp_Ex (nm)",
     y = "Defl_V_Ex (V)",
-    title = "AFM Force Curve Regions"
+    title = "Raw curve"
   ) +
   theme_minimal(base_size = 14) + 
   geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
@@ -307,7 +308,7 @@ p2 = ggplot(example1.transformed, aes(x = separation_distance_nm, y = force_nN))
   labs(
     x = "Separation distance (nm)",
     y = "force (nN)",
-    title = "AFM Force Curve Regions"
+    title = "Transformed curve"
   ) +
   theme_minimal(base_size = 14) +
   geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
@@ -324,17 +325,17 @@ After curve transformation, we can calculate analytical metrics such as adhesive
 
 ### Wrapper function for batch analysis
 
-Before calculating analytical metrics, it is important to determine the baseline noise level so we can set force thresholds that exclude insignificant fluctuations. The function "analyze_a_curve_noise" estimates a lower and upper noise band from baseline force values. For batch analysis, "analyze_curves_noise" applies this to all transformed curves in an fdObj and writes the results into metadata columns \code{noiseBand_low_nN_<dir>} and \code{noiseBand_high_nN_<dir>} (where \code{<dir>} is \code{approach} or \code{retract}).
+Before calculating analytical metrics, it is important to determine the baseline noise level so we can set a threshold to exclude insignificant fluctuations in metric calculations. The function "analyze_a_curve_noise" estimates a lower and upper noise band from baseline force values. For batch analysis, "analyze_curves_noise" applies this to all transformed curves in an fdObj and writes the results into metadata columns \code{noiseBand_low_nN} and \code{noiseBand_high_nN}.
 
-Supported noise-band determination methods are standard deviation (\code{sd}), median absolute deviation (\code{mad}), quantile (\code{quantile}), and fixed (\code{fixed}). The \code{multiplier} parameter is used to multiply the chosen noise metric to define the noise band. The same stored noise-band columns are then reused by interaction-distance, interaction energy analysis, so thresholds are determined once and applied consistently across curves.
+Supported noise-band determination methods are standard deviation (\code{sd}), median absolute deviation (\code{mad}), quantile (\code{quantile}), and fixed (\code{fixed}). The \code{multiplier} parameter is used to multiply the chosen noise metric to define the noise band. The noise-band are then reused by interaction-distance and interaction energy analysis, so thresholds are determined once and applied consistently across curves.
 
-Here we use the standard deviation method with a multiplier of 3, which means the noise band will be set as 3 times of the standard deviation of the baseline force values. Curves that fail transformation will have NA in these metadata columns.
+Here we set noise band as the region ranging from the minimum and maximum of the force in the baseline region.
 
 ```{r calculate baseline noise level}
 test = analyze_curves_noise(test,useCurve = 'approach',baseline_span = 'automatic',
-                            threshold_method = 'sd',multiplier = 3,threads = 1) 
+                            threshold_method = 'quantile', multiplier = 1,quantile_low = 0,quantile_high = 1) 
 test = analyze_curves_noise(test,useCurve = 'retract',baseline_span = 'automatic',
-                            threshold_method = 'sd',multiplier = 3,threads = 1)
+                            threshold_method = 'quantile', multiplier = 1,quantile_low = 0,quantile_high = 1)
 view_df(test@metadata,'metadata with baseline noise level values added as columns')
 ```
 
@@ -342,10 +343,10 @@ view_df(test@metadata,'metadata with baseline noise level values added as column
 
 To demonstrate how the baseline noise level is calculated for a single curve, we use the above transformed retract curve as an example. The function "analyze_a_curve_noise" estimates the lower and upper noise bands based on the specified method and multiplier, using the baseline region of the curve, as discussed above. 
 
-Here we use the same parameters as in the batch analysis, which means the noise band will be set as 3 times of the standard deviation of the baseline force values. The function returns a named vector containing the calculated lower and upper noise band values.
+Here we use the same parameters as in the batch analysis, which means the noise band will be the region ranging from the minimum and maximum of the force in the baseline region. The function returns a named vector containing the calculated lower and upper noise band values.
 
 ```{r single curve noise level calculation,fig.height=6,fig.width=8}
-res.noise = analyze_a_curve_noise(example1.transformed, baseline_span = 50, threshold_method = 'sd', multiplier = 3)
+res.noise = analyze_a_curve_noise(example1.transformed, baseline_span = 200, threshold_method = 'quantile', multiplier = 1,quantile_low = 0,quantile_high = 1)
 print(res.noise)
 plot_force_curve_noise_band(example1.transformed, noiseBand_low = res.noise[["noiseBand_low"]], noiseBand_high = res.noise[["noiseBand_high"]])
 
@@ -356,7 +357,7 @@ plot_force_curve_noise_band(example1.transformed, noiseBand_low = res.noise[["no
 
 ### Wrapper function for batch analysis
 
-The adhesive force is calculated as the minimum force value in a curve, which represents the maximum attractive force between the AFM probe and the sample surface. The "analyze_curves_adhesive_force" function identifies this minimum force value and the separation distance at which it occurs, and records it in a new metadata column named "adhesive_force_nN_retract"/"adhesive_force_nN_approach" and another column named "adhesive_sep_nm_retract"/"adhesive_sep_nm_approach", depending on the selected curve portion via useCurve argument (either "approach" or "retract"). Curves that fail transformation will have NA in this column.
+The adhesive force is calculated as the highest negative force value in a curve, which represents the maximum adhesive force between the AFM probe and the sample surface. The "analyze_curves_adhesive_force" function identifies this value and the separation distance at which it occurs, and records the force in the metadata column named "adhesive_force_nN" and the distance in column "adhesive_sep_nm". Curves that fail transformation will have NA in this column.
 
 ```{r calculate adhesive force}
 test = analyze_curves_adhesive_force(test,useCurve = 'approach',threads = 1)
@@ -366,7 +367,7 @@ view_df(test@metadata,'metadata with adhesive force values added as columns')
 
 ### Single curve analysis
 
-To demonstrate how the adhesive force is calculated for a single curve, we use the above transformed retract curve as an example. The function "analyze_a_curve_adhesive_force" identifies the minimum force value in the curve and the corresponding separation distance, and returns these values in a named vector.
+The function "analyze_a_curve_adhesive_force" identifies the loweset negative force value in the curve and the corresponding separation distance, and returns these values in a named vector.
 
 ```{r single curve adhesive force calculation}
 res.af = analyze_a_curve_adhesive_force(example1.transformed)
@@ -376,46 +377,42 @@ print(res.af)
 
 ## Interaction energy
 
-In AFM force spectroscopy, interaction energy is quantified by calculating the area under the curve. The analyze_a_curve_area() function computes adhesive energy (area below the negative noise threshold and above the curve inside Quadrant IV, representing bond-breaking energy) and repulsive energy (area above the positive noise threshold and under the curve inside Quadrant I, representing compression energy). A noise threshold is applied to filter out thermal fluctuations and instrumental noise, which would otherwise artificially inflate energy measurements. By excluding force values within the noise band, the function ensures that only biologically or physically meaningful interactions are counted, yielding more accurate energies.
+In AFM force spectroscopy, interaction energy is quantified by calculating the area under the curve. The analyze_a_curve_area() function computes adhesive energy (area below the negative noise threshold and above the curve inside Quadrant IV, representing bond-breaking energy) and repulsive energy (area above the positive noise threshold and under the curve inside Quadrant I). A noise band is applied to filter out thermal fluctuations and instrumental noise, which would otherwise artificially inflate energy measurements. By excluding force values within the noise band, the function ensures that only biologically or physically meaningful interactions are counted, yielding more accurate energies.
 
 ### Wrapper function for batch analysis
 
-The wrapper function "analyze_curves_energy" applies this analysis to all curves in an fdObj, and records the calculated adhesive energy and repulsive energy in new metadata columns named "adhesive_energy_fJ_retract"/"adhesive_energy_fJ_approach" and "repulsive_energy_fJ_retract"/"repulsive_energy_fJ_approach", depending on the selected curve portion via useCurve argument (either "approach" or "retract"). Curves that fail transformation will have NA in these columns.
+The wrapper function "analyze_curves_energy" applies this analysis to all curves in an fdObj, and records the calculated adhesive and repulsive energy in metadata (columns adhesive_energy_fJ and repulsive_energy_fJ). Curves that fail transformation will have NA in these columns. The function will automatically look up the metadata in the object to find the pre-determined noise band (columns noiseBand_low_nN and noiseBand_high_nN)
 
-Note that for curves that are over-corrected, which has a portion of curve near the contact region extgends to the negative side of x axis (i.e., having negative separation distance), the function will automatically clamp all negative x to zero before energy calculation
+Note that for curves that are over-corrected, which have a portion of curve near the contact region extends to the negative side of y axis (i.e., having negative separation distance), the function will automatically correct all negative x to zero before energy calculation
 
 ```{r calculate interaction energy}
 test = analyze_curves_energy(test,useCurve = 'approach',threads = 1)
-test = analyze_curves_energy(test,useCurve = 'retract',noise_cutoff = 0.5)
+test = analyze_curves_energy(test,useCurve = 'retract',threads = 1)
+
 view_df(test@metadata,'metadata with energy values added as columns') 
 ```
 
 ### Single curve analysis
 
-To demonstrate how the interaction energy is calculated for a single curve, we use the above transformed retract curve as an example. The function "analyze_a_curve_energy" computes the adhesive energy and repulsive energy based on the area under the curve, applying a noise cutoff to exclude insignificant fluctuations.
-
-To avoid counting noise as part of the interaction energy, we set noise cutoff with the computed noise band. The function will calculate the area under the curve that is below the negative noise cutoff and above the curve in Quadrant IV as adhesive energy, and calculate the area above the positive noise cutoff and under the curve in Quadrant I as repulsive energy. The calculated adhesive energy and repulsive energy are returned in a named vector.
-
-Note that the shaded area is for demonstration only, which does not necessarily represent the actual area used for energy calculation, as the function intrapolates the curve to find the exact points where the curve crosses the noise cutoff, which may not be exactly the same as the area shaded in the plot.
+The function "analyze_a_curve_energy" computes the adhesive energy and repulsive energy based on the area under the curve, applying a noise cutoff to exclude insignificant fluctuations. To avoid counting noise as part of the interaction energy, we set noise cutoff with the computed noise band. 
 
 ```{r single curve interaction energy calculation, fig.height=6, fig.width=8}
 analyze_a_curve_area(example1.transformed, noiseBand_low = res.noise[['noiseBand_low']], noiseBand_high = res.noise[['noiseBand_high']])
 
-plot_force_curve_energy(example1.transformed, noiseBand_low = res.noise[['noiseBand_low']], noiseBand_high = res.noise[['noiseBand_high']])
+# plot_force_curve_energy(example1.transformed, noiseBand_low = res.noise[['noiseBand_low']], noiseBand_high = res.noise[['noiseBand_high']])
 
 ```
 
 
-<restart from here. the interaction energy part should be done. see if the interaction distance part is right.>
 ## Interaction distance
 
 The interaction distance is calculated as the separation distance at which the force curve first crosses a defined noise threshold, indicating the onset of significant interaction between the AFM probe and the sample surface. The "analyze_a_curve_interaction_distance" function identifies this point and returns the corresponding separation distance as the interaction distance.
 
 ### Wrapper function for batch analysis
 
-The wrapper function "analyze_curves_interaction_distance" applies this analysis to all curves in an fdObj and reads threshold values directly from metadata noise-band columns generated by "analyze_curves_noise". For negative-direction detection it uses \code{noiseBand_low_nN_<dir>}; for positive-direction detection it uses \code{noiseBand_high_nN_<dir>}.
+The wrapper function "analyze_curves_interaction_distance" applies this analysis to all curves in an fdObj and looks up the noise cutoff values directly from metadata noise-band columns generated by "analyze_curves_noise".
 
-In this call, \code{baseline_span = "automatic"} uses each curve’s stored baseline window from \code{test@metadata$baseline_span_retract}, \code{y_direction = "negative"} detects rupture-like (negative-force) excursions, and \code{x_direction = "left"} scans from the baseline side right-to-left to find the first threshold-crossing point.
+In this call, \code{baseline_span = "automatic"} uses each curve’s stored baseline window from \code{test@metadata$baseline_span_retract}, \code{y_direction = "negative"} detects rupture-like (negative-force) excursions, and \code{x_direction = "left"} scans from the baseline side right-to-left to find the first threshold-crossing point. In other words, this setting searches the data point from the curve where the adhesive force subsided.
 
 
 ```{r calculate interaction distance}
@@ -423,46 +420,95 @@ test = analyze_curves_interaction_distance(test,useCurve = 'retract',baseline_sp
                                            y_direction = "negative", x_direction = "left",
                                            threads = 1)
 
-view_df(test@metadata,'metadata with interaction distance values added as columns')
+view_df(test@metadata,'metadata with rupture length')
 ```
 
-similarly, we can calculate the interaction distance for the approach curves by changing the useCurve argument to "approach", and setting y_direction to "positive" to detect repulsive interaction
+Similarly, in some cases, it might also be informative to know where the curve enters the repulsive region. To do this, we can set y_direction to positive, x_direction to right. In this setting, the function searches from left to right the last data point before the curve enters the noise band from the repulsive region.
 
 ```{r calculate interaction distance for approach curves}
-test = analyze_curves_interaction_distance(test,useCurve = 'approach',baseline_span = 'automatic',
+test = analyze_curves_interaction_distance(test,useCurve = 'retract',baseline_span = 'automatic',
                                            y_direction = "positive", x_direction = "right",
                                            threads = 1)
-view_df(test@metadata,'metadata with interaction distance values for approach curves added as columns')
+view_df(test@metadata,'metadata with repulsive distance')
 ```
 
 
 ### Single curve analysis
 
-To demonstrate how the interaction distance is calculated for a single curve, we use the transformed retract curve of "180424_fv_pmon2_loc1-18-22.spm" as an example. The function "analyze_a_curve_interaction_distance" identifies the point where the force curve first crosses the defined noise threshold and returns the corresponding separation distance as the interaction distance.
+The function "analyze_a_curve_interaction_distance" identifies the point where the force curve first crosses the defined noise threshold and returns the corresponding separation distance.
 
-
-```{r single curve interaction distance calculation}
-res.interaction_distance = analyze_a_curve_interaction_distance(pmon.1.tr,baseline_span = 100, y_direction = "negative", x_direction = "left", multiplier = 10, threshold_method = "sd")
-
-print(res.interaction_distance)
-plot_force_curve_interaction_distance(pmon.1.tr, baseline_span = 100, y_direction = "negative", x_direction = "left",  multiplier = 10, threshold_method = "sd")
-```
-
-
-Similarly, we can calculate the interaction distance for the approach curve by changing the y_direction to "positive" and x_direction to "right" to detect repulsive interaction and scan from the baseline side left-to-right to find the first threshold-crossing point.
+Rupture length:
 
 ```{r single curve interaction distance calculation for approach curve}
-pmon.1.approach = test@approachCurves$`180424_fv_pmon2_loc1-18-22.spm`
-res.interaction_distance.approach = analyze_a_curve_interaction_distance(pmon.1.approach,baseline_span = 100, y_direction = "positive", x_direction = "right", multiplier = 10, threshold_method = "sd")
+res.rupturedis = analyze_a_curve_interaction_distance(example1.transformed,baseline_span = 200, y_direction = "negative", x_direction = "left",noiseBand_low = res.noise[['noiseBand_low']],noiseBand_high = res.noise[['noiseBand_high']])
 
-print(res.interaction_distance.approach)
-plot_force_curve_interaction_distance(pmon.1.approach, baseline_span = 100, y_direction = "positive", x_direction = "right", multiplier = 10, threshold_method = "sd")
-
+print(res.rupturedis)
+ggplot(example1.transformed, aes(x = separation_distance_nm, y = force_nN)) +
+  geom_point()+
+    geom_vline(xintercept = res.rupturedis[['distance']], color = "dodgerblue4", linetype = "dashed", linewidth = 0.7) +
+    geom_hline(yintercept = res.rupturedis[['threshold']], color = "red", linetype = "dashed", linewidth = 0.7) +
+    labs(
+      x = "Separation distance (nm)",
+      y = "Force (nN)"
+      ) +
+    annotate(
+      "text",
+      x = Inf,
+      y = res.rupturedis[['threshold']],
+      label = sprintf("Threshold = %.3g nN", res.rupturedis[['threshold']]),
+      hjust = 1,
+      vjust = 1.5,
+      color = "red",
+      size = 5
+    ) +
+  annotate(
+      "text",
+      x = res.rupturedis[['distance']]+100,
+      y = res.rupturedis[['threshold']],
+      label = sprintf("Rupture length = %.3g nm", res.rupturedis[['distance']]),
+      vjust = -1.5,
+      color = "dodgerblue4",
+      size = 5
+    )
 ```
 
+Repulsive distance:
 
+```{r single curve repulsive distance}
+res.repuldis = analyze_a_curve_interaction_distance(example1.transformed,baseline_span = 200, y_direction = "positive", x_direction = "right",noiseBand_low = res.noise[['noiseBand_low']],noiseBand_high = res.noise[['noiseBand_high']])
+
+print(res.repuldis)
+ggplot(example1.transformed, aes(x = separation_distance_nm, y = force_nN)) +
+  geom_point()+
+    geom_vline(xintercept = res.repuldis[['distance']], color = "dodgerblue4", linetype = "dashed", linewidth = 0.7) +
+    geom_hline(yintercept = res.repuldis[['threshold']], color = "red", linetype = "dashed", linewidth = 0.7) +
+    labs(
+      x = "Separation distance (nm)",
+      y = "Force (nN)"
+      ) +
+    annotate(
+      "text",
+      x = Inf,
+      y = res.repuldis[['threshold']],
+      label = sprintf("Threshold = %.3g nN", res.repuldis[['threshold']]),
+      hjust = 1,
+      vjust = -1.2,
+      color = "red",
+      size = 5
+    ) +
+  annotate(
+      "text",
+      x = res.repuldis[['distance']]+110,
+      y = res.repuldis[['threshold']],
+      label = sprintf("Repulsive distance = %.3g nm", res.repuldis[['distance']]),
+      vjust = -1.5,
+      color = "dodgerblue4",
+      size = 5
+    )
+```
 # Visualization of analytical metrics
-```{r single curve plot metrics}
+
+```{r single curve plot metrics,eval=FALSE}
 curve_name = '180424_fv_pmon2_loc1-18-22.spm'
 
 plot_curve_metrics(

@@ -21,7 +21,7 @@
 #' calc_sensitivity(end = 80, intv = 10, x = x, y = y)
 #'
 #' @export
-calc_sensitivity <- function(end, intv, x, y) {
+calc_sensitivity <- function(end, intv=4, x, y) {
   sens_x <- numeric()
   sens_y <- numeric()
 
@@ -683,7 +683,7 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 #'   - force_nN (numeric): y values (force, nN)
 #' @param baseline_span Integer >= 1. Number of last points used as the baseline window.
 #' @param threshold_method Character scalar controlling how baseline noise bands are estimated.
-#'   One of 
+#'   One of
 #'   \\code{c("sd", "mad", "quantile", "fixed")} (default \\code{"sd"}):
 #'   \\itemize{
 #'     \\item \\code{"sd"}: symmetric bands from baseline SD, i.e. \\eqn{\\pm\\,sd(y_{base})\\times multiplier}.
@@ -922,7 +922,7 @@ analyze_curves_noise <- function(
 #' Scanning can proceed from right-to-left (default) or left-to-right.
 #' When y-direction is negative, the function looks for the first point where force < -noise_cutoff (i.e., the curve enters the adhesive region).
 #' When y-direction is positive, it looks for the last point where force > noise_cutoff (i.e., the curve exits the repulsive region).
-#' 
+#'
 #' @param curve_df data.frame with columns:
 #'   - separation_distance_nm (numeric): x values (distance, nm)
 #'   - force_nN (numeric): y values (force, nN)
@@ -1007,7 +1007,7 @@ analyze_a_curve_interaction_distance <- function(
   }
 
   hit <- if (y_direction == "negative") which(hit_mask)[1L] else which(!hit_mask)[1L]
-  
+
   if (is.na(hit)) return(c(distance = NA_real_, threshold = threshold))
 
   c(distance = x[scan_idx[hit]], threshold = threshold)
@@ -1207,8 +1207,8 @@ analyze_curves_interaction_distance <- function(
 #' \code{separation_distance_nm} (x) and \code{force_nN} (y).
 #'
 #' The computation proceeds in the given point order (no sorting). Segments entirely
-#' above the positive noise threshold or below the negative noise threshold are integrated 
-#' as trapezoids, and segments that cross the noise thresholds are split at the interpolated 
+#' above the positive noise threshold or below the negative noise threshold are integrated
+#' as trapezoids, and segments that cross the noise thresholds are split at the interpolated
 #' crossing point and integrated as triangles. Areas within the noise band (-noise_cutoff to +noise_cutoff) are ignored.
 #'
 #' As a practical fix for small transformation offsets near the origin, any
@@ -1319,7 +1319,7 @@ analyze_a_curve_area <- function(curve_df, noiseBand_low = -.Machine$double.eps,
       next
     }
 
-    # One endpoint on lower noise band 
+    # One endpoint on lower noise band
     if (y1 == noiseBand_low && y2 < noiseBand_low) {
       adhesive_area <- adhesive_area + area_triangle(x2, y2 - noiseBand_low, x1)
       next
@@ -1334,7 +1334,7 @@ analyze_a_curve_area <- function(curve_df, noiseBand_low = -.Machine$double.eps,
     if ((y1 > noiseBand_high && y2 < noiseBand_low) || (y1 < noiseBand_low && y2 > noiseBand_high)) {
       x_pos <- x1 + (x2 - x1) * (noiseBand_high - y1) / (y2 - y1)
       x_neg <- x1 + (x2 - x1) * (noiseBand_low - y1) / (y2 - y1)
-      
+
       if (y1 > noiseBand_high) {
         repulsive_area <- repulsive_area + area_triangle(x1, y1 - noiseBand_high, x_pos)
         adhesive_area <- adhesive_area + area_triangle(x2, y2 - noiseBand_low, x_neg)
@@ -1471,7 +1471,7 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
     old_plan <- future::plan()
     on.exit(future::plan(old_plan), add = TRUE)
     future::plan(future::multisession, workers = threads)
-    future.apply::future_lapply(curve_names, run_one, 
+    future.apply::future_lapply(curve_names, run_one,
                                  future.globals = list(
                                    run_one = run_one,
                                    curve_list = curve_list,
