@@ -52,7 +52,7 @@ Users working with non-standard input files can specify column headers. User may
 ```{r load data}
 #folder = system.file("extdata", package = "curvana")
 #test.input = createFdObjFromFolder(folder = folder, threads = t)
-input.path = "../curvana_test/demo"
+input.path = "../../curvana_test/demo"
 t = 1
 test.input = createFdObjFromFolder(folder = input.path, threads = t)
 ```
@@ -452,11 +452,11 @@ print(res.repuldis)
 
 # Visualization of analytical metrics
 
-```{r single curve plot metrics,figure.fig.height=6, figure.fig.width=10}
+```{r single curve plot metrics,fig.height=8, fig.width=18}
 plot_curve_metrics(
   fdobj = test,
   curve_name = example1.name,
-  useCurve = "retract",plot_raw = T
+  useCurve = "retract",plot_raw = T,base_size = 15,annotation_text_size = 4
 )
 ```
 
@@ -464,7 +464,7 @@ plot_curve_metrics(
 
 ## Violin plot of selected metrics by surface
 
-```{r summary statistics of metrics}
+```{r summary statistics of metrics, fig.height=6, fig.width=12}
 f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
 f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_sep_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
 f3 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
@@ -499,7 +499,7 @@ plot_metric_violin(
 
 ## PCA biplot of selected metrics
 
-```{r pca biplot of metrics, fig.height=6, fig.width=8}
+```{r pca biplot of metrics, fig.height=8, fig.width=10}
 pca_features <- c(
   "adhesive_force_nN_retract",
   "adhesive_sep_nm_retract",

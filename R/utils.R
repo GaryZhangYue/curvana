@@ -689,7 +689,7 @@ plot_curve_metrics <- function(
   }
 
   if (is.null(title)) {
-    title <- sprintf("Curve metrics: %s (%s)", curve_name, useCurve)
+    title <- sprintf("Transformed curve: \n%s \n(%s)", curve_name, useCurve)
   }
 
   p <- ggplot(curve_df, aes(x = separation_distance_nm, y = force_nN)) +
@@ -756,16 +756,16 @@ plot_curve_metrics <- function(
     subtitle_parts <- c(subtitle_parts, sprintf("Repulsive energy = %.3g aJ", repulsive_energy_val))
   }
   if (length(subtitle_parts) > 0) {
-    p <- p + labs(subtitle = paste(subtitle_parts, collapse = " | "))
+    p <- p + labs(subtitle = paste(subtitle_parts, collapse = "\n"))
   }
 
   if (isTRUE(annotate_adhesive_force) && is.finite(adhesive_force_val) && is.finite(adhesive_sep_val)) {
     adhesive_label_x <- adhesive_sep_val + x_offset
-    adhesive_label_y <- adhesive_force_val - y_offset
+    adhesive_label_y <- (-1)*adhesive_force_val - y_offset
 
     p <- p +
       geom_point(
-        data = data.frame(separation_distance_nm = adhesive_sep_val, force_nN = adhesive_force_val),
+        data = data.frame(separation_distance_nm = adhesive_sep_val, force_nN = (-1)*adhesive_force_val),
         aes(x = separation_distance_nm, y = force_nN),
         color = "red",
         size = 3,
@@ -774,7 +774,7 @@ plot_curve_metrics <- function(
       geom_segment(
         data = data.frame(
           x = adhesive_sep_val,
-          y = adhesive_force_val,
+          y = (-1)*adhesive_force_val,
           xend = adhesive_label_x,
           yend = adhesive_label_y
         ),
@@ -873,11 +873,13 @@ plot_curve_metrics <- function(
       labs(
         x = raw_x_col,
         y = raw_y_col,
-        title = sprintf("Raw curve: %s (%s)", curve_name, useCurve)
+        title = sprintf("Raw curve: \n%s \n(%s)", curve_name, useCurve),
       ) +
       ggplot2::theme_classic(base_size = base_size) +
       theme(legend.position = "top")
-
+    if (length(subtitle_parts) > 0) {
+      p_raw <- p_raw + labs(subtitle = paste(rep('\n', length(subtitle_parts)), collapse = ""))
+    }
     if (!is.null(xlim) || !is.null(ylim)) {
       p_raw <- p_raw + coord_cartesian(xlim = xlim, ylim = ylim)
     }
