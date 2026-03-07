@@ -51,8 +51,8 @@ Users working with non-standard input files can specify column headers. User may
 
 ```{r load data}
 #folder = system.file("extdata", package = "curvana")
-#test = createFdObjFromFolder(folder = folder, threads = t)
-input.path = "../../curvana_test/demo"
+#test.input = createFdObjFromFolder(folder = folder, threads = t)
+input.path = "../curvana_test/demo"
 t = 1
 test.input = createFdObjFromFolder(folder = input.path, threads = t)
 ```
@@ -174,7 +174,7 @@ To demonstrate how each single curve is transformed, we take the retract part of
 For sensitivity calculation, as mentioned above, we set end = 20 to only use the first 20 points of the curve to calculate sensitivity. This is because for this experiment we have a short contact region in the curve.
 
 ```{r single curve sensitivity analysis}
-
+#example1.name = '180424_fv_pmon2_loc1-18-22.spm'
 example1.name = 'silicon_wafer_2.spm-2658_ForceCurveIndex_36.spm'
 example1.raw = test@rawCurves[[example1.name]]
 
@@ -348,7 +348,6 @@ Here we use the same parameters as in the batch analysis, which means the noise 
 ```{r single curve noise level calculation,fig.height=6,fig.width=8}
 res.noise = analyze_a_curve_noise(example1.transformed, baseline_span = 200, threshold_method = 'quantile', multiplier = 1,quantile_low = 0,quantile_high = 1)
 print(res.noise)
-plot_force_curve_noise_band(example1.transformed, noiseBand_low = res.noise[["noiseBand_low"]], noiseBand_high = res.noise[["noiseBand_high"]])
 
 ```
 
@@ -371,7 +370,6 @@ The function "analyze_a_curve_adhesive_force" identifies the loweset negative fo
 
 ```{r single curve adhesive force calculation}
 res.af = analyze_a_curve_adhesive_force(example1.transformed)
-
 print(res.af)
 ```
 
@@ -398,9 +396,6 @@ The function "analyze_a_curve_energy" computes the adhesive energy and repulsive
 
 ```{r single curve interaction energy calculation, fig.height=6, fig.width=8}
 analyze_a_curve_area(example1.transformed, noiseBand_low = res.noise[['noiseBand_low']], noiseBand_high = res.noise[['noiseBand_high']])
-
-# plot_force_curve_energy(example1.transformed, noiseBand_low = res.noise[['noiseBand_low']], noiseBand_high = res.noise[['noiseBand_high']])
-
 ```
 
 
@@ -443,33 +438,7 @@ Rupture length:
 res.rupturedis = analyze_a_curve_interaction_distance(example1.transformed,baseline_span = 200, y_direction = "negative", x_direction = "left",noiseBand_low = res.noise[['noiseBand_low']],noiseBand_high = res.noise[['noiseBand_high']])
 
 print(res.rupturedis)
-ggplot(example1.transformed, aes(x = separation_distance_nm, y = force_nN)) +
-  geom_point()+
-    geom_vline(xintercept = res.rupturedis[['distance']], color = "dodgerblue4", linetype = "dashed", linewidth = 0.7) +
-    geom_hline(yintercept = res.rupturedis[['threshold']], color = "red", linetype = "dashed", linewidth = 0.7) +
-    labs(
-      x = "Separation distance (nm)",
-      y = "Force (nN)"
-      ) +
-    annotate(
-      "text",
-      x = Inf,
-      y = res.rupturedis[['threshold']],
-      label = sprintf("Threshold = %.3g nN", res.rupturedis[['threshold']]),
-      hjust = 1,
-      vjust = 1.5,
-      color = "red",
-      size = 5
-    ) +
-  annotate(
-      "text",
-      x = res.rupturedis[['distance']]+100,
-      y = res.rupturedis[['threshold']],
-      label = sprintf("Rupture length = %.3g nm", res.rupturedis[['distance']]),
-      vjust = -1.5,
-      color = "dodgerblue4",
-      size = 5
-    )
+
 ```
 
 Repulsive distance:
@@ -478,53 +447,116 @@ Repulsive distance:
 res.repuldis = analyze_a_curve_interaction_distance(example1.transformed,baseline_span = 200, y_direction = "positive", x_direction = "right",noiseBand_low = res.noise[['noiseBand_low']],noiseBand_high = res.noise[['noiseBand_high']])
 
 print(res.repuldis)
-ggplot(example1.transformed, aes(x = separation_distance_nm, y = force_nN)) +
-  geom_point()+
-    geom_vline(xintercept = res.repuldis[['distance']], color = "dodgerblue4", linetype = "dashed", linewidth = 0.7) +
-    geom_hline(yintercept = res.repuldis[['threshold']], color = "red", linetype = "dashed", linewidth = 0.7) +
-    labs(
-      x = "Separation distance (nm)",
-      y = "Force (nN)"
-      ) +
-    annotate(
-      "text",
-      x = Inf,
-      y = res.repuldis[['threshold']],
-      label = sprintf("Threshold = %.3g nN", res.repuldis[['threshold']]),
-      hjust = 1,
-      vjust = -1.2,
-      color = "red",
-      size = 5
-    ) +
-  annotate(
-      "text",
-      x = res.repuldis[['distance']]+110,
-      y = res.repuldis[['threshold']],
-      label = sprintf("Repulsive distance = %.3g nm", res.repuldis[['distance']]),
-      vjust = -1.5,
-      color = "dodgerblue4",
-      size = 5
-    )
+
 ```
+
 # Visualization of analytical metrics
 
-```{r single curve plot metrics,eval=FALSE}
-curve_name = '180424_fv_pmon2_loc1-18-22.spm'
-
+```{r single curve plot metrics,figure.fig.height=6, figure.fig.width=10}
 plot_curve_metrics(
   fdobj = test,
-  curve_name = curve_name,
-  useCurve = 'retract',
-  repulsive_energy = TRUE,
-  adhesive_energy = TRUE,
-  annotate_adhesive_force = TRUE,
-  annotate_interaction_distance = TRUE,
-  noise_cutoff = 0.5,
-  interaction_type = 'auto',
-  annotation_text_size = 5,
-  interaction_label_color_rupture = 'purple4',
-  interaction_label_color_repulsive = 'darkorange3',
-  interaction_label_fill = 'white'
+  curve_name = example1.name,
+  useCurve = "retract",plot_raw = T
 )
 ```
 
+# Summary statistics of analytical metrics
+
+## Violin plot of selected metrics by surface
+
+```{r summary statistics of metrics}
+f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_sep_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f3 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f4 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f5 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f6 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+
+plot_grid(f1,f2,f3,f4,f5,f6, nrow = 2)
+
+
+```
+
+## Violin plot with statistical annotations
+
+```{r summary statistics with tests}
+plot_metric_violin(
+  df = test@metadata,
+  metric_name = "adhesive_force_nN_retract",
+  group_by = "surface",
+  color_by = "surface",
+  color_map = c(
+    PEG = "#1b9e77",
+    silicon = "#d95f02",
+    fluorinated = "#7570b3",
+    zwitterionic = "#e7298a"
+  ),
+  global_test = "anova",
+  pairwise_test = "t.test",
+  p_adjust_method = "BH"
+)
+```
+
+## PCA biplot of selected metrics
+
+```{r pca biplot of metrics, fig.height=6, fig.width=8}
+pca_features <- c(
+  "adhesive_force_nN_retract",
+  "adhesive_sep_nm_retract",
+  "adhesive_energy_aJ_retract",
+  "repulsive_energy_aJ_retract",
+  "rupture_distance_nm_retract",
+  "repulsive_distance_nm_retract"
+)
+
+plot_pca_biplot(
+  df = test@metadata,
+  include_columns = pca_features,
+  color_by = "surface",
+  color_map = c(
+    PEG = "#1b9e77",
+    silicon = "#d95f02",
+    fluorinated = "#7570b3",
+    zwitterionic = "#e7298a"
+  ),
+  arrow_scale = 1.1,
+  show_feature_labels = TRUE
+)
+```
+
+## Scaled feature heatmap with sample annotations
+
+The function `plot_complex_heatmap()` scales each selected feature by row (z-score),
+plots features as rows and samples as columns, and can annotate columns by up to
+two metadata variables.
+
+```{r complex heatmap of metrics, fig.height=7, fig.width=10}
+heatmap_features <- c(
+  "adhesive_force_nN_retract",
+  "adhesive_sep_nm_retract",
+  "adhesive_energy_aJ_retract",
+  "repulsive_energy_aJ_retract",
+  "rupture_distance_nm_retract",
+  "repulsive_distance_nm_retract"
+)
+
+  plot_complex_heatmap(
+    df = test@metadata,
+    include_columns = heatmap_features,
+    annotate_columns = c("surface", "region"),
+    annotation_colors = list(
+      surface = c(
+        PEG = "#1b9e77",
+        silicon = "#d95f02",
+        fluorinated = "#7570b3",
+        zwitterionic = "#e7298a"
+      )
+    ),
+    cluster_rows = TRUE,
+    cluster_columns = FALSE,
+    show_row_dend = TRUE,
+    show_column_dend = FALSE,
+    heatmap_name = "z-score",
+    show_column_names = FALSE
+  )
+```
