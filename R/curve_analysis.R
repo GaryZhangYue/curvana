@@ -530,8 +530,9 @@ transform_curves <- function(fdObj, spring_constant, useCurve = c("approach", "r
 #' Adhesive Force for a Single Transformed AFM Curve
 #'
 #' Computes the adhesive force as the most negative force value in a transformed curve
-#' and returns that value along with the separation distance at which it occurs.
-#'
+#' and returns that value along with the separation distance at which it occurs. Note that 
+#' the value will be negated. For example, if the most negative force is -2 nN, 
+#' the function will return 2 nN as the adhesive force.
 #' @param curve_df A data.frame with columns:
 #'   \itemize{
 #'     \item{\code{separation_distance_nm}}{Numeric tip-sample separation (nm).}
@@ -581,7 +582,7 @@ analyze_a_curve_adhesive_force <- function(curve_df) {
     return(c(adhesive_force_nN = 0, separation_distance_nm = NA_real_))
   }
 
-  c(adhesive_force_nN = unname(min_force),
+  c(adhesive_force_nN = unname(min_force)*(-1),
     separation_distance_nm = unname(sep[idx_min]))
 }
 
