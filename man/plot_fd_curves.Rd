@@ -11,7 +11,11 @@ plot_fd_curves(
   split_curves_by = NULL,
   color_map = NULL,
   point_size = 0.5,
-  alpha = 0.6
+  point_alpha = 0.6,
+  line_alpha = 0.5,
+  xlim = NULL,
+  ylim = NULL,
+  ...
 )
 }
 \arguments{
@@ -27,7 +31,16 @@ plot_fd_curves(
 
 \item{point_size}{Size of points (default = 0.5).}
 
-\item{alpha}{Transparency of points (default = 0.6).}
+\item{point_alpha}{Transparency of points (default = 0.6).}
+
+\item{line_alpha}{Transparency of curve lines (default = 0.5).}
+
+\item{xlim}{Optional numeric vector of length 2 for x-axis limits.}
+
+\item{ylim}{Optional numeric vector of length 2 for y-axis limits.}
+
+\item{...}{Additional ggplot2 layers/settings to add to the plot
+(e.g., \code{theme(...)}, \code{scale_*()}, \code{labs(...)}).}
 }
 \value{
 A ggplot2 object showing the force-distance relationships from AFM curves.

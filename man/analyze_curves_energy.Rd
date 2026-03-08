@@ -23,8 +23,8 @@ Applies \code{analyze_a_curve_area()} to each transformed curve in an \code{fdOb
 and stores the resulting energies (areas under the force–distance curve) in
 the metadata as:
 \itemize{
-  \item \code{adhesive_energy_aJ_<dir>} — total area where \code{y < 0}
-  \item \code{repulsive_energy_aJ_<dir>} — total area where \code{y > 0}
+  \item \code{adhesive_energy_aJ_<dir>} — total area where \code{y < noiseBand_low}
+  \item \code{repulsive_energy_aJ_<dir>} — total area where \code{y > noiseBand_high}
 }
 where \code{<dir>} is \code{"approach"} or \code{"retract"}.
 }
@@ -40,6 +40,16 @@ Behavior:
   \item If a curve is present/valid but yields no finite result, both energies are \code{NA}.
   \item If no transformed curves exist for the selected direction, both metadata columns are created and filled with \code{NA}.
 }
+
+
+This function assumes precomputed noise-band columns already exist in
+\code{fdObj@metadata} and uses them directly:
+\itemize{
+  \item \code{noiseBand_low_nN_<useCurve>}
+  \item \code{noiseBand_high_nN_<useCurve>}
+}
+Example for \code{useCurve = "retract"}:
+\code{noiseBand_low_nN_retract} and \code{noiseBand_high_nN_retract}.
 }
 \seealso{
 analyze_a_curve_area, analyze_curves_adhesive_force

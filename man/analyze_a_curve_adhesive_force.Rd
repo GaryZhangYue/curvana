@@ -24,7 +24,9 @@ returns \code{c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_)
 }
 \description{
 Computes the adhesive force as the most negative force value in a transformed curve
-and returns that value along with the separation distance at which it occurs.
+and returns that value along with the separation distance at which it occurs. Note that 
+the value will be negated. For example, if the most negative force is -2 nN, 
+the function will return 2 nN as the adhesive force.
 }
 \examples{
 df <- data.frame(

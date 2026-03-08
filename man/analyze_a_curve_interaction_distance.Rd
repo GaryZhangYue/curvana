@@ -9,13 +9,8 @@ analyze_a_curve_interaction_distance(
   baseline_span,
   y_direction = c("negative", "positive"),
   x_direction = c("left", "right"),
-  threshold_method = c("sd", "mad", "iqr", "quantile", "abs_quantile", "fixed"),
-  multiplier = 3,
-  mad_constant = 1.4826,
-  q_low = 0.01,
-  q_high = 0.99,
-  q_abs = 0.99,
-  fixed_threshold = NULL
+  noiseBand_low = NULL,
+  noiseBand_high = NULL
 )
 }
 \arguments{
@@ -26,32 +21,18 @@ analyze_a_curve_interaction_distance(
 \item{baseline_span}{Integer >= 1. Number of last points used as the baseline window.}
 
 \item{y_direction}{"negative" or "positive".
-- "negative": find first y < -threshold (rupture-like)
-- "positive": find first y >  threshold (repulsion-like)}
+- "negative": find first y < threshold (rupture-like; threshold is typically negative)
+- "positive": find first y > threshold (repulsion-like; threshold is typically positive)}
 
 \item{x_direction}{"left" or "right".
 - "left": scan from right to left (from just before baseline toward the origin)
 - "right": scan from left to right (from origin up to just before baseline)}
 
-\item{threshold_method}{One of
-c("sd","mad","iqr","quantile","abs_quantile","fixed"). Default "sd".
-- "sd":      threshold = multiplier * sd(baseline)
-- "mad":     threshold = multiplier * (mad(baseline) * mad_constant)
-- "iqr":     threshold = multiplier * IQR(baseline)
-- "quantile": for "negative" use |quantile(baseline, probs = q_low)|,
-              for "positive" use  quantile(baseline, probs = q_high)
-- "abs_quantile": threshold = quantile(abs(baseline), probs = q_abs)
-- "fixed":  threshold = fixed_threshold (in nN)}
+\item{noiseBand_low}{Numeric scalar threshold for negative-direction detection.
+Required when \code{y_direction = "negative"}.}
 
-\item{multiplier}{Numeric >= 0 used by "sd", "mad", "iqr". Default 3.}
-
-\item{mad_constant}{Scaling for MAD to be SD-equivalent. Default 1.4826.}
-
-\item{q_low, q_high}{Quantiles for "quantile" method. Defaults: 0.01, 0.99.}
-
-\item{q_abs}{Quantile for "abs_quantile". Default 0.99.}
-
-\item{fixed_threshold}{Numeric (nN) for "fixed" method. Default NULL.}
+\item{noiseBand_high}{Numeric scalar threshold for positive-direction detection.
+Required when \code{y_direction = "positive"}.}
 }
 \value{
 c(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
@@ -59,6 +40,8 @@ c(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
 \description{
 Detects the first significant deviation in force relative to a baseline window,
 marking rupture length (negative excursion) or repulsive distance (positive excursion).
-The cutoff can be based on SD, MAD, IQR, quantiles, absolute-quantiles, or a fixed value.
+This function uses user-provided noise-band thresholds directly.
 Scanning can proceed from right-to-left (default) or left-to-right.
+When y-direction is negative, the function looks for the first point where force < -noise_cutoff (i.e., the curve enters the adhesive region).
+When y-direction is positive, it looks for the last point where force > noise_cutoff (i.e., the curve exits the repulsive region).
 }

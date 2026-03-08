@@ -4,7 +4,7 @@
 \alias{calc_sensitivity}
 \title{Calculate Sensitivity from a Segment of AFM Data}
 \usage{
-calc_sensitivity(end, intv, x, y)
+calc_sensitivity(end, intv = 4, x, y)
 }
 \arguments{
 \item{end}{Integer. The maximum index to consider in the `x` and `y` vectors (i.e., up to which point to search).}

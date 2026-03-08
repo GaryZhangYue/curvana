@@ -4,7 +4,11 @@
 \alias{analyze_a_curve_area}
 \title{Analyze the adhesive and repulsive areas of a single AFM curve (data.frame input)}
 \usage{
-analyze_a_curve_area(curve_df)
+analyze_a_curve_area(
+  curve_df,
+  noiseBand_low = -.Machine$double.eps,
+  noiseBand_high = .Machine$double.eps
+)
 }
 \arguments{
 \item{curve_df}{A data frame with at least two columns:
@@ -12,23 +16,32 @@ analyze_a_curve_area(curve_df)
   \item{\code{separation_distance_nm}}{Numeric x-coordinates (nm). Values < 0 are clamped to 0.}
   \item{\code{force_nN}}{Numeric y-coordinates (nN).}
 }}
+
+\item{noiseBand_low}{Numeric lower noise-band threshold
+(default: \code{-.Machine$double.eps}).
+Adhesive area is counted where \code{force_nN < noiseBand_low}.}
+
+\item{noiseBand_high}{Numeric upper noise-band threshold
+(default: \code{.Machine$double.eps}).
+Repulsive area is counted where \code{force_nN > noiseBand_high}.}
 }
 \value{
 A named numeric vector of length 2:
 \describe{
-  \item{adhesive_area}{Total positive area where \code{y < 0}.}
-  \item{repulsive_area}{Total positive area where \code{y > 0}.}
+  \item{adhesive_area}{Total positive area where \code{y < noiseBand_low}.}
+  \item{repulsive_area}{Total positive area where \code{y > noiseBand_high}.}
 }
 }
 \description{
 Calculates the total areas above (\emph{repulsive}) and below (\emph{adhesive})
-the x-axis for one curve supplied as a data.frame with columns
+the noise threshold for one curve supplied as a data.frame with columns
 \code{separation_distance_nm} (x) and \code{force_nN} (y).
 }
 \details{
 The computation proceeds in the given point order (no sorting). Segments entirely
-on one side of the x-axis are integrated as trapezoids, and segments that cross
-the x-axis are split at the interpolated x-intercept and integrated as two triangles.
+above the positive noise threshold or below the negative noise threshold are integrated
+as trapezoids, and segments that cross the noise thresholds are split at the interpolated
+crossing point and integrated as triangles. Areas within the noise band (-noise_cutoff to +noise_cutoff) are ignored.
 
 As a practical fix for small transformation offsets near the origin, any
 \code{separation_distance_nm < 0} are clamped to 0 before integration.
@@ -40,6 +53,7 @@ df <- data.frame(
   force_nN               = c( 0.50 , 0, 0.30, -0.20, 0.10)
 )
 analyze_a_curve_area(df)
+analyze_a_curve_area(df, noiseBand_low = -0.1, noiseBand_high = 0.1)
 
 }
 \seealso{
