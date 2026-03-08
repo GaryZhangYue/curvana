@@ -559,7 +559,7 @@ plot_force_curve_energy <- function(curve_df,
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_hline geom_line geom_point
 #' @importFrom ggplot2 geom_segment geom_vline annotate labs theme_minimal scale_color_manual
-plot_curve_metrics <- function(
+plot_a_curve_metrics <- function(
     fdobj,
     curve_name,
     useCurve = c("retract", "approach"),
@@ -632,6 +632,9 @@ plot_curve_metrics <- function(
   rupture_threshold_val <- resolve_metadata_value(paste0("rupture_threshold_nN_", useCurve))
   repulsive_distance_val <- resolve_metadata_value(paste0("repulsive_distance_nm_", useCurve))
   repulsive_threshold_val <- resolve_metadata_value(paste0("repulsive_threshold_nN_", useCurve))
+  sensitivity_val <- resolve_metadata_value(paste0("sensitivity_V_nm_", useCurve))
+  spring_constant_val <- resolve_metadata_value("spring_constant")
+  baseline_V_val <- resolve_metadata_value(paste0("baseline_V_", useCurve))
 
   region_colors <- c(
     "Sensitivity region" = "green3",
@@ -695,7 +698,7 @@ plot_curve_metrics <- function(
   p <- ggplot(curve_df, aes(x = separation_distance_nm, y = force_nN)) +
     geom_vline(xintercept = 0, color = "black", linewidth = 0.5) +
     geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
-    geom_line(color = line_color, linewidth = line_size, alpha = line_alpha) +
+    geom_path(color = line_color, linewidth = line_size, alpha = line_alpha) +
     geom_point(aes(color = point_region), size = point_size, alpha = point_alpha, show.legend = TRUE) +
     scale_color_manual(values = region_colors, drop = FALSE, name = "Region") +
     labs(
@@ -748,13 +751,13 @@ plot_curve_metrics <- function(
   subtitle_parts <- character(0)
   if (isTRUE(annotate_adhesive_energy) && is.finite(adhesive_force_val)) {
     subtitle_parts <- c(subtitle_parts, sprintf("Adhesive force = %.3g nN", adhesive_force_val))
-  }
+  } else {subtitle_parts <- c(subtitle_parts,' ')}
   if (isTRUE(annotate_adhesive_energy) && is.finite(adhesive_energy_val)) {
     subtitle_parts <- c(subtitle_parts, sprintf("Adhesive energy = %.3g aJ", adhesive_energy_val))
-  }
+  } else {subtitle_parts <- c(subtitle_parts,' ')}
   if (isTRUE(annotate_repulsive_energy) && is.finite(repulsive_energy_val)) {
     subtitle_parts <- c(subtitle_parts, sprintf("Repulsive energy = %.3g aJ", repulsive_energy_val))
-  }
+  } else {subtitle_parts <- c(subtitle_parts,' ')}
   if (length(subtitle_parts) > 0) {
     p <- p + labs(subtitle = paste(subtitle_parts, collapse = "\n"))
   }
@@ -867,7 +870,7 @@ plot_curve_metrics <- function(
     p_raw <- ggplot(raw_df, aes(x = x, y = y)) +
       geom_vline(xintercept = 0, color = "black", linewidth = 0.5) +
       geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
-      geom_line(color = line_color, linewidth = line_size, alpha = line_alpha) +
+      geom_path(color = line_color, linewidth = line_size, alpha = line_alpha) +
       geom_point(aes(color = point_region), size = point_size, alpha = point_alpha, show.legend = TRUE) +
       scale_color_manual(values = region_colors, drop = FALSE, name = "Region") +
       labs(
@@ -877,9 +880,14 @@ plot_curve_metrics <- function(
       ) +
       ggplot2::theme_classic(base_size = base_size) +
       theme(legend.position = "top")
-    if (length(subtitle_parts) > 0) {
-      p_raw <- p_raw + labs(subtitle = paste(rep('\n', length(subtitle_parts)), collapse = ""))
-    }
+    raw_subtitle <- paste(
+      sprintf("Sensitivity (V/nm) = %s", if (is.finite(sensitivity_val)) sprintf("%.3g", sensitivity_val) else "NA"),
+      sprintf("Spring constant (N/nm) = %s", if (is.finite(spring_constant_val)) sprintf("%.3g", spring_constant_val) else "NA"),
+      sprintf("Baseline (V) = %s", if (is.finite(baseline_V_val)) sprintf("%.3g", baseline_V_val) else "NA"),
+      sep = "\n"
+    )
+    p_raw <- p_raw + labs(subtitle = raw_subtitle)
+
     if (!is.null(xlim) || !is.null(ylim)) {
       p_raw <- p_raw + coord_cartesian(xlim = xlim, ylim = ylim)
     }
@@ -892,6 +900,208 @@ plot_curve_metrics <- function(
   }
 
   return(p)
+}
+
+
+#' Plot and save curve metrics for all curves in an fdObj
+#'
+#' Iteratively runs \code{plot_a_curve_metrics()} over all entries in the
+#' selected transformed-curve slot (approach or retract) of an \code{fdObj}, and
+#' saves each plot to disk.
+#'
+#' @param fdobj An object of class \code{fdObj}.
+#' @param useCurve Character. Either \code{"retract"} or \code{"approach"}.
+#' @param plot_raw Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_noiseBand Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_repulsive_energy Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_adhesive_energy Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_adhesive_force Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_rupture_distance Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_repulsive_distance Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param xlim Optional numeric vector of length 2 for x-axis limits.
+#' @param ylim Optional numeric vector of length 2 for y-axis limits.
+#' @param title Character. Plot title passed to \code{plot_a_curve_metrics()}.
+#' @param base_size Numeric. Base theme text size.
+#' @param line_color Character. Line color for curves.
+#' @param point_color Character. Point color for curves.
+#' @param line_size Numeric. Line width for curves.
+#' @param point_size Numeric. Point size for curves.
+#' @param line_alpha Numeric. Line alpha for curves.
+#' @param point_alpha Numeric. Point alpha for curves.
+#' @param annotation_text_size Numeric. Text size for annotation labels.
+#' @param interaction_label_color_rupture Character. Label color for rupture annotations.
+#' @param interaction_label_color_repulsive Character. Label color for repulsive annotations.
+#' @param interaction_label_fill Character. Fill color for interaction labels.
+#' @param destination_folder Character. Output folder path. If \code{NULL}, a
+#'   timestamped folder is created in the current working directory.
+#' @param width Numeric. Plot width passed to \code{ggplot2::ggsave()}.
+#' @param height Numeric. Plot height passed to \code{ggplot2::ggsave()}.
+#' @param format Character. Output graphics format. One of \code{"png"},
+#'   \code{"pdf"}, \code{"jpeg"}, \code{"tiff"}, \code{"bmp"}, \code{"svg"}.
+#' @param dpi Numeric. Resolution passed to \code{ggplot2::ggsave()}.
+#' @param units Character. Units for \code{width}/\code{height}. One of
+#'   \code{"in"}, \code{"cm"}, \code{"mm"}.
+#' @param ... Additional ggplot2 components passed to \code{plot_a_curve_metrics()}.
+#'
+#' @return A data.frame with one row per curve and columns:
+#'   \code{curve_name}, \code{file_path}, \code{status}, and \code{error_message}.
+#'   The output folder is attached as \code{attr(result, "destination_folder")}.
+#' @export
+#' @importFrom ggplot2 ggsave
+plot_all_curve_metrics <- function(
+    fdobj,
+    useCurve = c("retract", "approach"),
+    plot_raw = FALSE,
+    annotate_noiseBand = TRUE,
+    annotate_repulsive_energy = TRUE,
+    annotate_adhesive_energy = TRUE,
+    annotate_adhesive_force = TRUE,
+    annotate_rupture_distance = TRUE,
+    annotate_repulsive_distance = TRUE,
+    xlim = NULL,
+    ylim = NULL,
+    title = NULL,
+    base_size = 14,
+    line_color = "grey35",
+    point_color = "grey35",
+    line_size = 0.7,
+    point_size = 1.8,
+    line_alpha = 0.9,
+    point_alpha = 0.8,
+    annotation_text_size = 3.3,
+    interaction_label_color_rupture = "purple4",
+    interaction_label_color_repulsive = "darkorange3",
+    interaction_label_fill = "white",
+    destination_folder = NULL,
+    width = 12,
+    height = 6,
+    format = c("png", "pdf", "jpeg", "tiff", "bmp", "svg"),
+    dpi = 300,
+    units = c("in", "cm", "mm"),
+    ...
+) {
+  if (!inherits(fdobj, "fdObj")) {
+    stop("fdobj must be an object of class 'fdObj'.")
+  }
+
+  useCurve <- match.arg(useCurve)
+  format <- match.arg(format)
+  units <- match.arg(units)
+
+  if (!is.numeric(width) || length(width) != 1 || is.na(width) || width <= 0) {
+    stop("width must be a single numeric value > 0.")
+  }
+  if (!is.numeric(height) || length(height) != 1 || is.na(height) || height <= 0) {
+    stop("height must be a single numeric value > 0.")
+  }
+  if (!is.numeric(dpi) || length(dpi) != 1 || is.na(dpi) || dpi <= 0) {
+    stop("dpi must be a single numeric value > 0.")
+  }
+
+  if (is.null(destination_folder) || !nzchar(destination_folder)) {
+    destination_folder <- file.path(
+      getwd(),
+      paste0("plot_a_curve_metrics_", format(Sys.time(), "%Y%m%d_%H%M%S"))
+    )
+  }
+
+  if (!dir.exists(destination_folder)) {
+    dir.create(destination_folder, recursive = TRUE, showWarnings = FALSE)
+  }
+  if (!dir.exists(destination_folder)) {
+    stop("Failed to create destination folder: ", destination_folder)
+  }
+
+  curve_list <- if (useCurve == "retract") fdobj@retractCurves else fdobj@approachCurves
+  curve_names <- names(curve_list)
+  if (length(curve_names) == 0) {
+    stop("No curves found in the selected slot.")
+  }
+
+  sanitize_filename <- function(x) {
+    x <- gsub("[\\\\/:*?\"<>|]", "_", x)
+    x <- gsub("\\s+", "_", x)
+    x
+  }
+
+  result <- data.frame(
+    curve_name = curve_names,
+    file_path = NA_character_,
+    status = "failed",
+    error_message = NA_character_,
+    stringsAsFactors = FALSE
+  )
+
+  for (idx in seq_along(curve_names)) {
+    curve_name <- curve_names[[idx]]
+
+    plot_obj <- tryCatch(
+      plot_a_curve_metrics(
+        fdobj = fdobj,
+        curve_name = curve_name,
+        useCurve = useCurve,
+        plot_raw = plot_raw,
+        annotate_noiseBand = annotate_noiseBand,
+        annotate_repulsive_energy = annotate_repulsive_energy,
+        annotate_adhesive_energy = annotate_adhesive_energy,
+        annotate_adhesive_force = annotate_adhesive_force,
+        annotate_rupture_distance = annotate_rupture_distance,
+        annotate_repulsive_distance = annotate_repulsive_distance,
+        xlim = xlim,
+        ylim = ylim,
+        title = title,
+        base_size = base_size,
+        line_color = line_color,
+        point_color = point_color,
+        line_size = line_size,
+        point_size = point_size,
+        line_alpha = line_alpha,
+        point_alpha = point_alpha,
+        annotation_text_size = annotation_text_size,
+        interaction_label_color_rupture = interaction_label_color_rupture,
+        interaction_label_color_repulsive = interaction_label_color_repulsive,
+        interaction_label_fill = interaction_label_fill,
+        ...
+      ),
+      error = function(e) e
+    )
+
+    if (inherits(plot_obj, "error")) {
+      result$error_message[[idx]] <- conditionMessage(plot_obj)
+      next
+    }
+
+    file_name <- paste0(sanitize_filename(curve_name), "_", useCurve, ".", format)
+    file_path <- file.path(destination_folder, file_name)
+
+    save_ok <- tryCatch({
+      ggplot2::ggsave(
+        filename = file_path,
+        plot = plot_obj,
+        width = width,
+        height = height,
+        units = units,
+        dpi = dpi,
+        limitsize = FALSE
+      )
+      TRUE
+    }, error = function(e) {
+      result$error_message[[idx]] <<- conditionMessage(e)
+      FALSE
+    })
+
+    if (isTRUE(save_ok)) {
+      result$file_path[[idx]] <- file_path
+      result$status[[idx]] <- "saved"
+    }
+  }
+
+  n_saved <- sum(result$status == "saved", na.rm = TRUE)
+  n_failed <- nrow(result) - n_saved
+  message(sprintf("Saved %d plot(s); %d failed. Output: %s", n_saved, n_failed, destination_folder))
+
+  attr(result, "destination_folder") <- destination_folder
+  return(result)
 }
 
 
