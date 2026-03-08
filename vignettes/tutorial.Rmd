@@ -468,8 +468,8 @@ plot_all_curve_metrics(
   fdobj = test,
   useCurve = "retract",plot_raw = T,
   destination_folder = './test_plot_metrics',
-  format = 'png',width = 24,
-    height = 12,
+  format = 'png',width = 18,
+    height = 9,
 )
 ```
 

@@ -1,3 +1,4 @@
 Zhaoyang:
 
 check the unit? are all units (nN) showing on metadata column names correct?
+How did you calculate the area? how to let computer find out where to stop calculation area at a specific x?
