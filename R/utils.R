@@ -7,10 +7,11 @@
 #' @param color_map Named vector of colors (optional)
 #' @param point_size Size of points (default = 0.5)
 #' @param alpha Transparency of points (default = 0.6)
+#' @param line_alpha Transparency of connecting paths (default = 0.5)
 #'
 #' @return A ggplot2 object of the scatter plots showing raw deflection signal.
 #' @export
-#' @importFrom ggplot2 ggplot aes geom_point facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
+#' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
 
 plot_deflection_curves <- function(fdobj,
                                    curve = c("both", "approach", "retract"),
@@ -18,10 +19,21 @@ plot_deflection_curves <- function(fdobj,
                                    split_curves_by = NULL,
                                    point_size = 0.5,
                                    alpha = 0.5,
+                                   line_alpha = 0.5,
                                    color_map = NULL) {
   curve <- match.arg(curve)
   meta <- fdobj@metadata
   curves <- fdobj@rawCurves
+
+  if (!is.null(color_map)) {
+    if (is.list(color_map)) {
+      color_map <- unlist(color_map, use.names = TRUE)
+    }
+    if (!is.atomic(color_map) || is.null(names(color_map))) {
+      stop("color_map must be a named atomic vector (e.g., c('1' = 'darkred', '2' = 'orange')).")
+    }
+    color_map <- as.character(color_map)
+  }
 
   # Validate metadata inputs
   if (!is.null(group_curves_by) && !group_curves_by %in% colnames(meta)) {
@@ -29,6 +41,16 @@ plot_deflection_curves <- function(fdobj,
   }
   if (!is.null(split_curves_by) && !split_curves_by %in% colnames(meta)) {
     stop("split_curves_by must be a column name in metadata")
+  }
+
+  meta_scalar <- function(col_name, idx) {
+    if (is.na(idx)) return(NA_character_)
+    value <- meta[[col_name]][idx]
+    if (is.list(value)) {
+      value <- unlist(value, recursive = TRUE, use.names = FALSE)
+    }
+    if (length(value) == 0) return(NA_character_)
+    as.character(value[[1]])
   }
 
   # Collect data
@@ -57,11 +79,13 @@ plot_deflection_curves <- function(fdobj,
     df_combined <- do.call(rbind, segments)
     df_combined$sample <- name
 
+    idx <- match(name, rownames(meta))
+
     if (!is.null(group_curves_by)) {
-      df_combined[[group_curves_by]] <- meta[name, group_curves_by]
+      df_combined[[group_curves_by]] <- meta_scalar(group_curves_by, idx)
     }
     if (!is.null(split_curves_by)) {
-      df_combined[[split_curves_by]] <- meta[name, split_curves_by]
+      df_combined[[split_curves_by]] <- meta_scalar(split_curves_by, idx)
     }
 
     df_combined
@@ -75,11 +99,19 @@ plot_deflection_curves <- function(fdobj,
     labs(x = "Distance (nm)", y = "Deflection (V)")
 
   if (!is.null(group_curves_by)) {
-    p <- p + geom_point(aes(color = .data[[group_curves_by]]),
+    p <- p + geom_path(aes(color = .data[[group_curves_by]], group = interaction(sample, segment)),
+                       alpha = line_alpha,
+                       linewidth = 0.35,
+                       show.legend = FALSE) +
+      geom_point(aes(color = .data[[group_curves_by]]),
                         size = point_size, alpha = alpha) +
       labs(color = group_curves_by)
   } else {
-    p <- p + geom_point(size = point_size, alpha = alpha)
+    p <- p + geom_path(aes(group = interaction(sample, segment)),
+                       alpha = line_alpha,
+                       linewidth = 0.35,
+                       color = "grey50") +
+      geom_point(size = point_size, alpha = alpha)
   }
 
   # Faceting
@@ -175,6 +207,16 @@ plot_fd_curves <- function(fdobj,
     color_map <- as.character(color_map)
   }
 
+  meta_scalar <- function(col_name, idx) {
+    if (is.na(idx)) return(NA_character_)
+    value <- meta[[col_name]][idx]
+    if (is.list(value)) {
+      value <- unlist(value, recursive = TRUE, use.names = FALSE)
+    }
+    if (length(value) == 0) return(NA_character_)
+    as.character(value[[1]])
+  }
+
   # Build plotting dataframe
   plot_df <- do.call(rbind, lapply(curve_names, function(name) {
     df_list <- list()
@@ -203,11 +245,12 @@ plot_fd_curves <- function(fdobj,
     if (is.null(df_combined) || nrow(df_combined) == 0) {
       return(NULL)
     } else {
+      idx <- match(name, rownames(meta))
       if (!is.null(group_curves_by)) {
-        df_combined[[group_curves_by]] <- meta[name, group_curves_by]
+        df_combined[[group_curves_by]] <- meta_scalar(group_curves_by, idx)
       }
       if (!is.null(split_curves_by)) {
-        df_combined[[split_curves_by]] <- meta[name, split_curves_by]
+        df_combined[[split_curves_by]] <- meta_scalar(split_curves_by, idx)
       }
     }
 
@@ -1491,13 +1534,15 @@ plot_pca_biplot <- function(
     ggplot2::theme_classic(base_size = base_size)
 
   if (isTRUE(show_feature_labels)) {
-    p <- p + geom_text(
+    p <- p + ggrepel::geom_text_repel(
       data = loadings,
       aes(x = PC1_end, y = PC2_end, label = Feature),
       inherit.aes = FALSE,
       color = arrow_color,
       size = feature_label_size,
-      vjust = -0.3
+      min.segment.length = 0,
+      box.padding = 0.3,
+      point.padding = 0.1
     )
   }
 
