@@ -530,8 +530,8 @@ transform_curves <- function(fdObj, spring_constant, useCurve = c("approach", "r
 #' Adhesive Force for a Single Transformed AFM Curve
 #'
 #' Computes the adhesive force as the most negative force value in a transformed curve
-#' and returns that value along with the separation distance at which it occurs. Note that 
-#' the value will be negated. For example, if the most negative force is -2 nN, 
+#' and returns that value along with the separation distance at which it occurs. Note that
+#' the value will be negated. For example, if the most negative force is -2 nN,
 #' the function will return 2 nN as the adhesive force.
 #' @param curve_df A data.frame with columns:
 #'   \itemize{
@@ -664,10 +664,10 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
   n_total   <- length(curve_list)
   n_na      <- sum(is.na(forces))
   n_zero    <- sum(!is.na(forces) & forces == 0)
-  n_detect  <- sum(!is.na(forces) & forces < 0)
+  n_detect  <- sum(!is.na(forces) & forces > 0)
 
   message(sprintf(
-    "Adhesive force analyzed for %d curves: %d with adhesion (negative), %d with no adhesion (0), %d not analyzed (NA).",
+    "Adhesive force analyzed for %d curves: %d with adhesion, %d with no adhesion (0), %d not analyzed (NA).",
     n_total, n_detect, n_zero, n_na
   ))
 
@@ -1007,7 +1007,7 @@ analyze_a_curve_interaction_distance <- function(
     y_scan > threshold
   }
 
-  hit <- if (y_direction == "negative") which(hit_mask)[1L] else which(!hit_mask)[1L]
+  hit <- if (y_direction == "negative") which(hit_mask)[1L] - 1L else which(!hit_mask)[1L]
 
   if (is.na(hit)) return(c(distance = NA_real_, threshold = threshold))
 
@@ -1504,6 +1504,160 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
     "Energy analyzed for %d curves (%s): %d NA adhesive, %d NA repulsive (units = aJ).",
     n_total, dir_tag, n_na_ad, n_na_rep
   ))
+
+  fdObj
+}
+
+
+#' Run full analytical metrics pipeline on transformed curves in an fdObj
+#'
+#' Wrapper around:
+#' \itemize{
+#'   \item \code{analyze_curves_noise()}
+#'   \item \code{analyze_curves_adhesive_force()}
+#'   \item \code{analyze_curves_energy()}
+#'   \item \code{analyze_curves_interaction_distance()} (optional negative and/or positive runs)
+#' }
+#'
+#' This function executes the "Analytical metrics calculation" steps in one call.
+#' Users can run for approach curves, retract curves, or both.
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param useCurve Character; one of \code{c("retract", "approach", "both")}. Default \code{"both"}.
+#' @param threads Integer. Number of parallel workers passed to wrapped functions (default \code{1}).
+#'
+#' @param noise_baseline_span Either a single integer >= 1, or \code{"automatic"}.
+#'   Passed to \code{analyze_curves_noise()}.
+#' @param noise_threshold_method Character scalar; one of
+#'   \code{c("sd", "mad", "quantile", "fixed")}. Passed to \code{analyze_curves_noise()}.
+#' @param noise_multiplier Numeric >= 0. Passed to \code{analyze_curves_noise()}.
+#' @param noise_mad_constant Numeric. Passed to \code{analyze_curves_noise()}.
+#' @param noise_quantile_low Numeric in [0,1]. Passed to \code{analyze_curves_noise()}.
+#' @param noise_quantile_high Numeric in [0,1]. Passed to \code{analyze_curves_noise()}.
+#' @param noise_fixed_low Numeric or \code{NULL}. Passed to \code{analyze_curves_noise()} when method is \code{"fixed"}.
+#' @param noise_fixed_high Numeric or \code{NULL}. Passed to \code{analyze_curves_noise()} when method is \code{"fixed"}.
+#' @param analyze_adhesive_force Logical. If \code{TRUE}, runs \code{analyze_curves_adhesive_force()}.
+#'   Default \code{TRUE}.
+#' @param analyze_energy Logical. If \code{TRUE}, runs \code{analyze_curves_energy()}.
+#'   Default \code{TRUE}.
+#'
+#' @param analyze_rupture_distance Logical. If \code{TRUE}, runs interaction-distance analysis with
+#'   \code{y_direction = "negative"}. Default \code{TRUE}.
+#' @param analyze_rupture_distance_baseline_span Either a single integer >= 1, or \code{"automatic"}.
+#'   Passed to negative-direction \code{analyze_curves_interaction_distance()}.
+#' @param analyze_rupture_distance_x_direction Character; one of \code{c("left", "right")}.
+#'   Default \code{"left"}. Passed to negative-direction
+#'   \code{analyze_curves_interaction_distance()}.
+#'
+#' @param analyze_repulsive_distance Logical. If \code{TRUE}, runs interaction-distance analysis with
+#'   \code{y_direction = "positive"}. Default \code{TRUE}.
+#' @param analyze_repulsive_distance_baseline_span Either a single integer >= 1, or \code{"automatic"}.
+#'   Passed to positive-direction \code{analyze_curves_interaction_distance()}.
+#' @param analyze_repulsive_distance_x_direction Character; one of \code{c("right", "left")}.
+#'   Default \code{"right"}. Passed to positive-direction
+#'   \code{analyze_curves_interaction_distance()}.
+#'
+#' @return Updated \code{fdObj} with analytical metrics written to metadata.
+#' @export
+analyze_curves_all_analytical_metrics <- function(
+    fdObj,
+    useCurve = c("retract", "approach", "both"),
+    threads = 1,
+    noise_baseline_span = "automatic",
+    noise_threshold_method = c("sd", "mad", "quantile", "fixed"),
+    noise_multiplier = 3,
+    noise_mad_constant = 1.4826,
+    noise_quantile_low = 0.25,
+    noise_quantile_high = 0.75,
+    noise_fixed_low = NULL,
+    noise_fixed_high = NULL,
+    analyze_adhesive_force = TRUE,
+    analyze_energy = TRUE,
+    analyze_rupture_distance = TRUE,
+    analyze_rupture_distance_baseline_span = "automatic",
+    analyze_rupture_distance_x_direction = c("left", "right"),
+    analyze_repulsive_distance = TRUE,
+    analyze_repulsive_distance_baseline_span = "automatic",
+    analyze_repulsive_distance_x_direction = c("right", "left")
+) {
+  if (!inherits(fdObj, "fdObj")) {
+    stop("fdObj must be of class 'fdObj'")
+  }
+
+  useCurve <- match.arg(useCurve)
+  noise_threshold_method <- match.arg(noise_threshold_method)
+  analyze_rupture_distance_x_direction <- match.arg(analyze_rupture_distance_x_direction)
+  analyze_repulsive_distance_x_direction <- match.arg(analyze_repulsive_distance_x_direction)
+
+  if (!is.logical(analyze_rupture_distance) || length(analyze_rupture_distance) != 1 || is.na(analyze_rupture_distance)) {
+    stop("analyze_rupture_distance must be a single TRUE/FALSE value.")
+  }
+  if (!is.logical(analyze_repulsive_distance) || length(analyze_repulsive_distance) != 1 || is.na(analyze_repulsive_distance)) {
+    stop("analyze_repulsive_distance must be a single TRUE/FALSE value.")
+  }
+  if (!is.logical(analyze_adhesive_force) || length(analyze_adhesive_force) != 1 || is.na(analyze_adhesive_force)) {
+    stop("analyze_adhesive_force must be a single TRUE/FALSE value.")
+  }
+  if (!is.logical(analyze_energy) || length(analyze_energy) != 1 || is.na(analyze_energy)) {
+    stop("analyze_energy must be a single TRUE/FALSE value.")
+  }
+
+  directions <- if (useCurve == "both") c("approach", "retract") else useCurve
+
+  for (direction in directions) {
+    message(sprintf("Analyzing %s curves ...", direction))
+    fdObj <- analyze_curves_noise(
+      fdObj = fdObj,
+      useCurve = direction,
+      threads = threads,
+      baseline_span = noise_baseline_span,
+      threshold_method = noise_threshold_method,
+      multiplier = noise_multiplier,
+      mad_constant = noise_mad_constant,
+      quantile_low = noise_quantile_low,
+      quantile_high = noise_quantile_high,
+      fixed_low = noise_fixed_low,
+      fixed_high = noise_fixed_high
+    )
+
+    if (analyze_adhesive_force) {
+      fdObj <- analyze_curves_adhesive_force(
+        fdObj = fdObj,
+        useCurve = direction,
+        threads = threads
+      )
+    }
+
+    if (analyze_energy) {
+      fdObj <- analyze_curves_energy(
+        fdObj = fdObj,
+        useCurve = direction,
+        threads = threads
+      )
+    }
+
+    if (analyze_rupture_distance) {
+      fdObj <- analyze_curves_interaction_distance(
+        fdObj = fdObj,
+        useCurve = direction,
+        threads = threads,
+        baseline_span = analyze_rupture_distance_baseline_span,
+        y_direction = "negative",
+        x_direction = analyze_rupture_distance_x_direction
+      )
+    }
+
+    if (analyze_repulsive_distance) {
+      fdObj <- analyze_curves_interaction_distance(
+        fdObj = fdObj,
+        useCurve = direction,
+        threads = threads,
+        baseline_span = analyze_repulsive_distance_baseline_span,
+        y_direction = "positive",
+        x_direction = analyze_repulsive_distance_x_direction
+      )
+    }
+  }
 
   fdObj
 }
