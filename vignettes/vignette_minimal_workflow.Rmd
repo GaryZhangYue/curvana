@@ -1,0 +1,276 @@
+---
+title: "curvana: a comprehensive R package for analyzing atomic force microscopy force–distance curves"
+subtitle: "Minimal workflow"
+author: Yue (Gary) Zhang, PhD
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+    number_sections: false
+    highlight: tango
+vignette: >
+  %\VignetteIndexEntry{curvana tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(warning = T, message = T,echo = T) 
+```
+
+
+# Introduction
+
+This vignette shows a minimal workflow needed to analyze the raw curves. For information regarding the step-by-step demonstration of the full analytical workflow, please check out the full tutorial. 
+
+# Preparation 
+
+## Initializing work environment
+
+```{r Initiate, results='hide',warning='False'}
+packages_to_load = c('curvana','ggplot2','DT','dplyr','DT','ggpubr','cowplot')
+invisible(suppressPackageStartupMessages({
+    lapply(packages_to_load, library, character.only = TRUE)
+}))
+source(system.file("tutorial_helpers.R", package = "curvana"))
+devtools::load_all()
+```
+
+# Load data
+
+All examples below use the demo dataset provided in `extdata/` inside the package. To use your own dataset, you can pass the path to the directory holding the data to the "folder" argument. Note that users can increase the threads to enable parallel processing for loading a large folder (e.g., > 5000 curves), which will dramatically reduce the computational time.
+
+At this step, we initialize the fdObj named "test" by importing the demo data directory "extdata/" using the "createFdObjFromFolder" function. An fdObj is the core data container in curvana, designed to store atomic force microscopy (AFM) force–distance curve data, including raw approach and retract curves, transformed data, associated metadata for downstream analysis, and the analytical metrics generated.
+
+By default, createFdObjFromFolder will read all files in the designated folder with suffix ".txt", and expect each file has paired approach and retract deflection-dislocation raw curve data with standard column names (i.e., Calc_Ramp_Ex_nm, Defl_V_Ex, Calc_Ramp_Rt_nm, Defl_V_Rt). 
+
+
+```{r load data}
+#folder = system.file("extdata", package = "curvana")
+#test.input = createFdObjFromFolder(folder = folder, threads = t)
+input.path = "../../curvana_test/demo"
+t = 1
+test = createFdObjFromFolder(folder = input.path, threads = t)
+```
+
+Extract sample groups from the name of each raw curve file imported.
+
+```{r edit metadata}
+test@metadata <- test@metadata %>% 
+  mutate(surface = sub("_.*","",filename),
+         surface = case_when(
+            surface == 'F' ~ 'fluorinated',
+            surface == 'P' ~ 'PEG',
+            surface == 'silicon' ~ 'silicon',
+            surface == 'Z' ~ 'zwitterionic',
+            TRUE ~ surface),
+         region = sub(".*?_([0-9]+)\\.spm.*", "\\1", filename)
+  )
+view_df(test@metadata,'metadata')
+```
+
+# Preview the raw deflection curves
+
+It is important to inspect the raw curves before formal analysis. We can use the "plot_deflection_curves" function to plot curves in batch. Here, we split curves into sub-panels by column "surface", and color code them by column "region".
+
+```{r plot deflection curves, fig.height=12,fig.width=10}
+plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'region',
+                       alpha = 0.5,point_size = 0.5,
+                       color_map = list(`1` = 'darkred',
+                                        `2` = 'orange',
+                                        `3` = 'steelblue'))
+```
+
+
+# Curve transformation
+
+One advantage of curvana is that each step of the data analysis is modularized, enabling a flexible and customizable workflow. Curve transformation in curvana involves several steps, including sensitivity calculation, baseline offset calculation, and the application of these parameters to convert raw data into interaction force–separation distance curves. To execute all necessary steps at once, we can use a convenient function transform_curves.
+
+
+Here we set the spring constant to 0.08 N/m for all curves, and set the least length of of the curve for baseline calculation to 200, which means the function will use the last 200 points of each curve to calculate the baseline offset. We also set the slope threshold to 0.01 and standard deviation threshold to 0.01 for filtering out curves with unstable baseline. For sensitivity calculation, as we have a small contact region, we set end = 20 to only use the first 20 points of the curve to calculate sensitivity.
+
+```{r transform curves approach,warning=TRUE, message=TRUE,results='hold', echo=TRUE}
+t = 1
+# test_beforeTransform -> test
+test = transform_curves(test,spring_constant = 0.08, # spring constant
+                        useCurve = 'approach', # analyze the approach curve
+                        # baseline determination and filtering
+                        least_length = 200, # set the 200 data points at the far right side of each curve as the baseline region (the part of the curve presuming to be under zero force)
+                        slp_threshold = 0.01, # any curves with the baseline region having slope > 0.01 will be discarded
+                        std_threshold = 0.01, # any curves with the baseline region having standard deviation of y values > 0.01 will be discarded
+                        # sensitivity calibration
+                        end = 100, # use the first 100 data points at most on the left side to calibrate sensitivity
+                        threads = t)
+
+test = transform_curves(test,spring_constant = 0.08, # spring constant
+                        useCurve = 'retract', # analyze the retract curve
+                        # baseline determination and filtering
+                        least_length = 200, # set the 200 data points at the far right side of each curve as the baseline region (the part of the curve presuming to be under zero force)
+                        slp_threshold = 0.01, # any curves with the baseline region having slope > 0.01 will be discarded
+                        std_threshold = 0.01, # any curves with the baseline region having standard deviation of y values > 0.01 will be discarded
+                        # sensitivity calibration
+                        end = 100, # use the first 100 data points at most on the left side to calibrate sensitivity
+                        threads = t)
+```
+
+# Plot transformed curves
+
+To visualize the transformed curves, we can use the "plot_fd_curves" function. Here we plot the approach and retract curves in separate panels, and color code them by column "surface".
+
+```{r plot transformed curves, fig.height=12,fig.width=10}
+plot_fd_curves(test,group_curves_by = 'region', split_curves_by = 'surface',
+               point_alpha = 0.5,line_alpha = 0.3, point_size = 0.5,
+               color_map = list(`1` = 'darkred',
+                                `2` = 'orange',
+                                `3` = 'steelblue'))
+```
+
+## Analytical metrics calculation
+
+\code{analyze_curves_all_analytical_metrics()} is a wrapper function that performs all analytical metrics calculation at once. It first determines a baseline noise level so we can exclude insignificant fluctuations in metric calculations. After this, the adhesive force, adhesive and repulsive energy, and adhesive (rupture) and repulsive distance are determined.
+
+
+\code{analyze_curves_all_analytical_metrics()}, and toggle adhesive-force or energy analysis on/off.
+
+```{r run all analytical metrics with toggles}
+test = analyze_curves_all_analytical_metrics(
+  test, # the object
+  useCurve = "both", # run analysis for both approach and retract 
+  threads = 1, 
+  noise_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for noise band calculation
+  noise_threshold_method = "quantile", # use quantile method to define the noise band
+  noise_quantile_low = 0.05, # define the lower end of noise band as 5% percentile of y values of the baseline section
+  noise_quantile_high = 1, # define the upper end of noise band as 95% percentile of y values of the baseline section
+  analyze_adhesive_force = TRUE, # whether to analyze adhesive force
+  analyze_energy = TRUE, # whether to analyze interaction energy (repulsive and adhesive)
+  analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
+  analyze_repulsive_distance = TRUE, # whether to analyze repulsive distance
+  analyze_rupture_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for rupture distance analysis
+  analyze_rupture_distance_x_direction = "left", # scan from right to left to find the last data point before a curve enters the adhesive region from the noise band region
+  analyze_repulsive_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for repulsive distance analysis
+  analyze_repulsive_distance_x_direction = "right" # scan from left to right to find the last data point before a curve enters the noise band region from the repulsive region
+)
+```
+
+# Summary statistics of analytical metrics
+
+## Violin plot of selected metrics by surface
+
+```{r summary statistics of metrics, fig.height=6, fig.width=12}
+f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_sep_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f3 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f4 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f5 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f6 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+
+plot_grid(f1,f2,f3,f4,f5,f6, nrow = 2)
+
+
+```
+
+## Violin plot with statistical annotations
+
+```{r summary statistics with tests}
+plot_metric_violin(
+  df = test@metadata,
+  metric_name = "adhesive_force_nN_retract",
+  group_by = "surface",
+  color_by = "surface",
+  color_map = c(
+    PEG = "#1b9e77",
+    silicon = "#d95f02",
+    fluorinated = "#7570b3",
+    zwitterionic = "#e7298a"
+  ),
+  global_test = "anova",
+  pairwise_test = "t.test",
+  p_adjust_method = "BH"
+)
+```
+
+## PCA biplot of selected metrics
+
+```{r pca biplot of metrics, fig.height=8, fig.width=10}
+pca_features <- c(
+  "adhesive_force_nN_retract",
+  "adhesive_sep_nm_retract",
+  "adhesive_energy_aJ_retract",
+  "repulsive_energy_aJ_retract",
+  "rupture_distance_nm_retract",
+  "repulsive_distance_nm_retract"
+)
+
+plot_pca_biplot(
+  df = test@metadata,
+  include_columns = pca_features,
+  color_by = "surface",
+  color_map = c(
+    PEG = "#1b9e77",
+    silicon = "#d95f02",
+    fluorinated = "#7570b3",
+    zwitterionic = "#e7298a"
+  ),
+  arrow_scale = 1.1,
+  show_feature_labels = TRUE
+)
+```
+
+## Scaled feature heatmap with sample annotations
+
+The function `plot_complex_heatmap()` scales each selected feature by row (z-score),
+plots features as rows and samples as columns, and can annotate columns by up to
+two metadata variables.
+
+```{r complex heatmap of metrics, fig.height=7, fig.width=10}
+heatmap_features <- c(
+  "adhesive_force_nN_retract",
+  "adhesive_sep_nm_retract",
+  "adhesive_energy_aJ_retract",
+  "repulsive_energy_aJ_retract",
+  "rupture_distance_nm_retract",
+  "repulsive_distance_nm_retract"
+)
+
+  plot_complex_heatmap(
+    df = test@metadata,
+    include_columns = heatmap_features,
+    annotate_columns = c("surface", "region"),
+    annotation_colors = list(
+      surface = c(
+        PEG = "#1b9e77",
+        silicon = "#d95f02",
+        fluorinated = "#7570b3",
+        zwitterionic = "#e7298a"
+      )
+    ),
+    cluster_rows = TRUE,
+    cluster_columns = FALSE,
+    show_row_dend = TRUE,
+    show_column_dend = FALSE,
+    heatmap_name = "z-score",
+    show_column_names = FALSE
+  )
+```
+
+# Save all raw and transformed curves with analytical metrics annotated (optional)
+
+```{r plot all metrics for a curve,fig.height=8, fig.width=16,eval=T}
+plot_all_curve_metrics(
+  fdobj = test, # the fdObj to plot
+  useCurve = "retract", # plot the retract curve
+  plot_raw = T, # whether to plot the raw curve
+  destination_folder = '../test_plot_metrics', # the path to save the plots
+  format = 'png', width = 18, height = 9, # plot format and dimensions
+)
+plot_all_curve_metrics(
+  fdobj = test, # the fdObj to plot
+  useCurve = "approach", # plot the approach curve
+  plot_raw = T, # whether to plot the raw curve
+  destination_folder = '../test_plot_metrics', # the path to save the plots
+  format = 'png', width = 18, height = 9, # plot format and dimensions
+)
+```
