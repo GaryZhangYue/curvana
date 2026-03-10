@@ -31,12 +31,28 @@ This tutorial demonstrates the full analytical workflow of the **curvana** R pac
 ## Initializing work environment
 
 ```{r Initiate, results='hide',warning='False'}
-packages_to_load = c('curvana','ggplot2','DT','dplyr','DT','ggpubr','cowplot')
+required_packages = c('curvana', 'ggplot2', 'DT', 'dplyr', 'cowplot')
+optional_packages = c('ggpubr')
+
+missing_required <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing_required) > 0) {
+  stop('Please install required packages first: ', paste(missing_required, collapse = ', '))
+}
+
 invisible(suppressPackageStartupMessages({
-    lapply(packages_to_load, library, character.only = TRUE)
+  lapply(required_packages, library, character.only = TRUE)
 }))
+
+available_optional <- optional_packages[vapply(optional_packages, requireNamespace, logical(1), quietly = TRUE)]
+if (length(available_optional) > 0) {
+  invisible(suppressPackageStartupMessages({
+    lapply(available_optional, library, character.only = TRUE)
+  }))
+} else {
+  message("Optional package 'ggpubr' is not installed; statistical annotation examples will be skipped.")
+}
+
 source(system.file("tutorial_helpers.R", package = "curvana"))
-devtools::load_all()
 ```
 
 ## Load demo data
@@ -50,11 +66,9 @@ By default, createFdObjFromFolder will read all files in the designated folder w
 Users working with non-standard input files can specify column headers. User may also use the "suffix" argument to specify files to import by specifying filename suffix, or by providing a metadata dataframe whose row names match the input file names. Please note that the input files have to be tab-delimited files. See package manual for detailed usage.
 
 ```{r load data}
-#folder = system.file("extdata", package = "curvana")
-#test.input = createFdObjFromFolder(folder = folder, threads = t)
-input.path = "../curvana_test/demo"
+folder = system.file("extdata", package = "curvana")
 t = 1
-test.input = createFdObjFromFolder(folder = input.path, threads = t)
+test.input = createFdObjFromFolder(folder = folder, threads = t)
 ```
 
 Let's take a quick look at the fdObj (named test) we created. We can see that we imported 768 raw curves. Non of them are transformed yet, and "filename" is the only column in the metadata slot.
@@ -518,7 +532,7 @@ plot_grid(f1,f2,f3,f4,f5,f6, nrow = 2)
 
 ## Violin plot with statistical annotations
 
-```{r summary statistics with tests}
+```{r summary statistics with tests, eval=requireNamespace("ggpubr", quietly = TRUE)}
 plot_metric_violin(
   df = test@metadata,
   metric_name = "adhesive_force_nN_retract",
