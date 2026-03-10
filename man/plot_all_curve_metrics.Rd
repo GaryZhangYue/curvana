@@ -7,6 +7,7 @@
 plot_all_curve_metrics(
   fdobj,
   useCurve = c("retract", "approach"),
+  threads = 1,
   plot_raw = FALSE,
   annotate_noiseBand = TRUE,
   annotate_repulsive_energy = TRUE,
@@ -41,6 +42,9 @@ plot_all_curve_metrics(
 \item{fdobj}{An object of class \code{fdObj}.}
 
 \item{useCurve}{Character. Either \code{"retract"} or \code{"approach"}.}
+
+\item{threads}{Integer. Number of parallel workers (default \code{1}). Uses
+\pkg{future}+\pkg{future.apply} when \code{threads > 1}.}
 
 \item{plot_raw}{Logical. Passed to \code{plot_a_curve_metrics()}.}
 

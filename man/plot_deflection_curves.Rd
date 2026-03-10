@@ -11,6 +11,7 @@ plot_deflection_curves(
   split_curves_by = NULL,
   point_size = 0.5,
   alpha = 0.5,
+  line_alpha = 0.5,
   color_map = NULL
 )
 }
@@ -26,6 +27,8 @@ plot_deflection_curves(
 \item{point_size}{Size of points (default = 0.5)}
 
 \item{alpha}{Transparency of points (default = 0.6)}
+
+\item{line_alpha}{Transparency of connecting paths (default = 0.5)}
 
 \item{color_map}{Named vector of colors (optional)}
 }

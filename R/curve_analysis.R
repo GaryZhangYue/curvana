@@ -550,7 +550,7 @@ transform_curves <- function(fdObj, spring_constant, useCurve = c("approach", "r
 #' @examples
 #' df <- data.frame(
 #'   separation_distance_nm = seq(-50, 200, by = 1),
-#'   force_nN = 0.02 * seq(-50, 200, by = 1) + c(rep(0, 80), -3, rep(0, 171))
+#'   force_nN = 0.02 * seq(-50, 200, by = 1) + c(rep(0, 80), -3, rep(0, 170))
 #' )
 #' analyze_a_curve_adhesive_force(df)
 #'
