@@ -750,7 +750,7 @@ plot_a_curve_metrics <- function(
       title = title
     ) +
     ggplot2::theme_classic(base_size = base_size) +
-    coord_cartesian(xlim = xlim, ylim = ylim, clip = "off") +
+    ggplot2::coord_cartesian(xlim = xlim, ylim = ylim, clip = "off") +
     theme(
       plot.margin = ggplot2::margin(5.5, 90, 5.5, 5.5),
       legend.position = "top"
@@ -932,7 +932,7 @@ plot_a_curve_metrics <- function(
     p_raw <- p_raw + labs(subtitle = raw_subtitle)
 
     if (!is.null(xlim) || !is.null(ylim)) {
-      p_raw <- p_raw + coord_cartesian(xlim = xlim, ylim = ylim)
+      p_raw <- p_raw + ggplot2::coord_cartesian(xlim = xlim, ylim = ylim)
     }
 
     if (!requireNamespace("cowplot", quietly = TRUE)) {
@@ -954,6 +954,8 @@ plot_a_curve_metrics <- function(
 #'
 #' @param fdobj An object of class \code{fdObj}.
 #' @param useCurve Character. Either \code{"retract"} or \code{"approach"}.
+#' @param threads Integer. Number of parallel workers (default \code{1}). Uses
+#'   \pkg{future}+\pkg{future.apply} when \code{threads > 1}.
 #' @param plot_raw Logical. Passed to \code{plot_a_curve_metrics()}.
 #' @param annotate_noiseBand Logical. Passed to \code{plot_a_curve_metrics()}.
 #' @param annotate_repulsive_energy Logical. Passed to \code{plot_a_curve_metrics()}.
@@ -994,6 +996,7 @@ plot_a_curve_metrics <- function(
 plot_all_curve_metrics <- function(
     fdobj,
     useCurve = c("retract", "approach"),
+    threads = 1,
     plot_raw = FALSE,
     annotate_noiseBand = TRUE,
     annotate_repulsive_energy = TRUE,
@@ -1031,6 +1034,11 @@ plot_all_curve_metrics <- function(
   format <- match.arg(format)
   units <- match.arg(units)
 
+  if (!is.numeric(threads) || length(threads) != 1 || is.na(threads) || threads < 1) {
+    stop("threads must be a single numeric value >= 1.")
+  }
+  threads <- as.integer(threads)
+
   if (!is.numeric(width) || length(width) != 1 || is.na(width) || width <= 0) {
     stop("width must be a single numeric value > 0.")
   }
@@ -1067,17 +1075,7 @@ plot_all_curve_metrics <- function(
     x
   }
 
-  result <- data.frame(
-    curve_name = curve_names,
-    file_path = NA_character_,
-    status = "failed",
-    error_message = NA_character_,
-    stringsAsFactors = FALSE
-  )
-
-  for (idx in seq_along(curve_names)) {
-    curve_name <- curve_names[[idx]]
-
+  run_one <- function(curve_name) {
     plot_obj <- tryCatch(
       plot_a_curve_metrics(
         fdobj = fdobj,
@@ -1110,14 +1108,19 @@ plot_all_curve_metrics <- function(
     )
 
     if (inherits(plot_obj, "error")) {
-      result$error_message[[idx]] <- conditionMessage(plot_obj)
-      next
+      return(data.frame(
+        curve_name = curve_name,
+        file_path = NA_character_,
+        status = "failed",
+        error_message = conditionMessage(plot_obj),
+        stringsAsFactors = FALSE
+      ))
     }
 
     file_name <- paste0(sanitize_filename(curve_name), "_", useCurve, ".", format)
     file_path <- file.path(destination_folder, file_name)
 
-    save_ok <- tryCatch({
+    save_error <- tryCatch({
       ggplot2::ggsave(
         filename = file_path,
         plot = plot_obj,
@@ -1127,17 +1130,39 @@ plot_all_curve_metrics <- function(
         dpi = dpi,
         limitsize = FALSE
       )
-      TRUE
-    }, error = function(e) {
-      result$error_message[[idx]] <<- conditionMessage(e)
-      FALSE
-    })
+      NULL
+    }, error = function(e) conditionMessage(e))
 
-    if (isTRUE(save_ok)) {
-      result$file_path[[idx]] <- file_path
-      result$status[[idx]] <- "saved"
+    if (is.null(save_error)) {
+      return(data.frame(
+        curve_name = curve_name,
+        file_path = file_path,
+        status = "saved",
+        error_message = NA_character_,
+        stringsAsFactors = FALSE
+      ))
     }
+
+    data.frame(
+      curve_name = curve_name,
+      file_path = NA_character_,
+      status = "failed",
+      error_message = save_error,
+      stringsAsFactors = FALSE
+    )
   }
+
+  result_list <- if (threads > 1) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = threads)
+    future.apply::future_lapply(curve_names, run_one, future.packages = "curvana")
+  } else {
+    lapply(curve_names, run_one)
+  }
+
+  result <- do.call(rbind, result_list)
+  rownames(result) <- NULL
 
   n_saved <- sum(result$status == "saved", na.rm = TRUE)
   n_failed <- nrow(result) - n_saved
