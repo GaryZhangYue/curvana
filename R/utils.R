@@ -7,10 +7,11 @@
 #' @param color_map Named vector of colors (optional)
 #' @param point_size Size of points (default = 0.5)
 #' @param alpha Transparency of points (default = 0.6)
+#' @param line_alpha Transparency of connecting paths (default = 0.5)
 #'
 #' @return A ggplot2 object of the scatter plots showing raw deflection signal.
 #' @export
-#' @importFrom ggplot2 ggplot aes geom_point facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
+#' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
 
 plot_deflection_curves <- function(fdobj,
                                    curve = c("both", "approach", "retract"),
@@ -18,10 +19,21 @@ plot_deflection_curves <- function(fdobj,
                                    split_curves_by = NULL,
                                    point_size = 0.5,
                                    alpha = 0.5,
+                                   line_alpha = 0.5,
                                    color_map = NULL) {
   curve <- match.arg(curve)
   meta <- fdobj@metadata
   curves <- fdobj@rawCurves
+
+  if (!is.null(color_map)) {
+    if (is.list(color_map)) {
+      color_map <- unlist(color_map, use.names = TRUE)
+    }
+    if (!is.atomic(color_map) || is.null(names(color_map))) {
+      stop("color_map must be a named atomic vector (e.g., c('1' = 'darkred', '2' = 'orange')).")
+    }
+    color_map <- as.character(color_map)
+  }
 
   # Validate metadata inputs
   if (!is.null(group_curves_by) && !group_curves_by %in% colnames(meta)) {
@@ -29,6 +41,16 @@ plot_deflection_curves <- function(fdobj,
   }
   if (!is.null(split_curves_by) && !split_curves_by %in% colnames(meta)) {
     stop("split_curves_by must be a column name in metadata")
+  }
+
+  meta_scalar <- function(col_name, idx) {
+    if (is.na(idx)) return(NA_character_)
+    value <- meta[[col_name]][idx]
+    if (is.list(value)) {
+      value <- unlist(value, recursive = TRUE, use.names = FALSE)
+    }
+    if (length(value) == 0) return(NA_character_)
+    as.character(value[[1]])
   }
 
   # Collect data
@@ -57,11 +79,13 @@ plot_deflection_curves <- function(fdobj,
     df_combined <- do.call(rbind, segments)
     df_combined$sample <- name
 
+    idx <- match(name, rownames(meta))
+
     if (!is.null(group_curves_by)) {
-      df_combined[[group_curves_by]] <- meta[name, group_curves_by]
+      df_combined[[group_curves_by]] <- meta_scalar(group_curves_by, idx)
     }
     if (!is.null(split_curves_by)) {
-      df_combined[[split_curves_by]] <- meta[name, split_curves_by]
+      df_combined[[split_curves_by]] <- meta_scalar(split_curves_by, idx)
     }
 
     df_combined
@@ -75,11 +99,19 @@ plot_deflection_curves <- function(fdobj,
     labs(x = "Distance (nm)", y = "Deflection (V)")
 
   if (!is.null(group_curves_by)) {
-    p <- p + geom_point(aes(color = .data[[group_curves_by]]),
+    p <- p + geom_path(aes(color = .data[[group_curves_by]], group = interaction(sample, segment)),
+                       alpha = line_alpha,
+                       linewidth = 0.35,
+                       show.legend = FALSE) +
+      geom_point(aes(color = .data[[group_curves_by]]),
                         size = point_size, alpha = alpha) +
       labs(color = group_curves_by)
   } else {
-    p <- p + geom_point(size = point_size, alpha = alpha)
+    p <- p + geom_path(aes(group = interaction(sample, segment)),
+                       alpha = line_alpha,
+                       linewidth = 0.35,
+                       color = "grey50") +
+      geom_point(size = point_size, alpha = alpha)
   }
 
   # Faceting
@@ -129,7 +161,12 @@ plot_deflection_curves <- function(fdobj,
 #' @param split_curves_by Metadata column to facet by (optional).
 #' @param color_map Named vector of colors (optional).
 #' @param point_size Size of points (default = 0.5).
-#' @param alpha Transparency of points (default = 0.6).
+#' @param point_alpha Transparency of points (default = 0.6).
+#' @param line_alpha Transparency of curve lines (default = 0.5).
+#' @param xlim Optional numeric vector of length 2 for x-axis limits.
+#' @param ylim Optional numeric vector of length 2 for y-axis limits.
+#' @param ... Additional ggplot2 layers/settings to add to the plot
+#'   (e.g., \code{theme(...)}, \code{scale_*()}, \code{labs(...)}).
 #'
 #' @return A ggplot2 object showing the force-distance relationships from AFM curves.
 #' @export
@@ -140,7 +177,11 @@ plot_fd_curves <- function(fdobj,
                            split_curves_by = NULL,
                            color_map = NULL,
                            point_size = 0.5,
-                           alpha = 0.6) {
+                           point_alpha = 0.6,
+                           line_alpha = 0.5,
+                           xlim = NULL,
+                           ylim = NULL,
+                           ...) {
   if (!inherits(fdobj, "fdObj")) stop("fdobj must be of class 'fdObj'")
   if (!curve %in% c("approach", "retract", "both")) {
     stop("curve must be one of 'approach', 'retract', or 'both'")
@@ -155,6 +196,25 @@ plot_fd_curves <- function(fdobj,
   }
   if (!is.null(split_curves_by) && !(split_curves_by %in% colnames(meta))) {
     stop("split_curves_by must be a column in metadata")
+  }
+  if (!is.null(color_map)) {
+    if (is.list(color_map)) {
+      color_map <- unlist(color_map, use.names = TRUE)
+    }
+    if (!is.atomic(color_map) || is.null(names(color_map))) {
+      stop("color_map must be a named atomic vector (e.g., c('1' = 'darkred', '2' = 'orange')).")
+    }
+    color_map <- as.character(color_map)
+  }
+
+  meta_scalar <- function(col_name, idx) {
+    if (is.na(idx)) return(NA_character_)
+    value <- meta[[col_name]][idx]
+    if (is.list(value)) {
+      value <- unlist(value, recursive = TRUE, use.names = FALSE)
+    }
+    if (length(value) == 0) return(NA_character_)
+    as.character(value[[1]])
   }
 
   # Build plotting dataframe
@@ -185,11 +245,12 @@ plot_fd_curves <- function(fdobj,
     if (is.null(df_combined) || nrow(df_combined) == 0) {
       return(NULL)
     } else {
+      idx <- match(name, rownames(meta))
       if (!is.null(group_curves_by)) {
-        df_combined[[group_curves_by]] <- meta[name, group_curves_by]
+        df_combined[[group_curves_by]] <- meta_scalar(group_curves_by, idx)
       }
       if (!is.null(split_curves_by)) {
-        df_combined[[split_curves_by]] <- meta[name, split_curves_by]
+        df_combined[[split_curves_by]] <- meta_scalar(split_curves_by, idx)
       }
     }
 
@@ -203,11 +264,23 @@ plot_fd_curves <- function(fdobj,
   # Base plot
   if (!is.null(group_curves_by)) {
     p <- ggplot(plot_df, aes(x = separation_distance_nm, y = force_nN)) +
-      geom_point(aes(color = .data[[group_curves_by]]), size = point_size, alpha = alpha) +
+      geom_line(
+        aes(color = .data[[group_curves_by]], group = interaction(sample, segment)),
+        alpha = line_alpha,
+        linewidth = 0.35,
+        show.legend = FALSE
+      ) +
+      geom_point(aes(color = .data[[group_curves_by]]), size = point_size, alpha = point_alpha) +
       labs(x = "Separation Distance (nm)", y = "Force (nN)", color = group_curves_by)
   } else {
     p <- ggplot(plot_df, aes(x = separation_distance_nm, y = force_nN)) +
-      geom_point(size = point_size, alpha = alpha) +
+      geom_line(
+        aes(group = interaction(sample, segment)),
+        alpha = line_alpha,
+        linewidth = 0.35,
+        color = "grey50"
+      ) +
+      geom_point(size = point_size, alpha = point_alpha) +
       labs(x = "Separation Distance (nm)", y = "Force (nN)")
   }
 
@@ -234,6 +307,21 @@ plot_fd_curves <- function(fdobj,
       strip.background = element_rect(fill = "#f0f0f0"),
       strip.text = element_text(face = "bold")
     )
+
+  if (!is.null(xlim) || !is.null(ylim)) {
+    if (!is.null(xlim) && (!is.numeric(xlim) || length(xlim) != 2)) {
+      stop("xlim must be NULL or a numeric vector of length 2.")
+    }
+    if (!is.null(ylim) && (!is.numeric(ylim) || length(ylim) != 2)) {
+      stop("ylim must be NULL or a numeric vector of length 2.")
+    }
+    p <- p + ggplot2::coord_cartesian(xlim = xlim, ylim = ylim)
+  }
+
+  extra_layers <- list(...)
+  if (length(extra_layers) > 0) {
+    p <- p + extra_layers
+  }
 
   # count and print the number of curves expected and to be printed
   n_samples <- length(fdobj@rawCurves)
@@ -332,9 +420,10 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #'
 #' @param curve_df A data frame containing the transformed force curve with
 #'   columns \code{separation_distance_nm} and \code{force_nN}.
-#' @param noise_cutoff Numeric. The force threshold (in nanoNewtons) for
-#'   separating signal from noise. Adhesive and repulsive regions are those
-#'   exceeding this threshold in magnitude. Default is 0.5.
+#' @param noiseBand_low Numeric lower noise-band threshold (nN).
+#'   Adhesive region is where \code{force_nN < noiseBand_low}.
+#' @param noiseBand_high Numeric upper noise-band threshold (nN).
+#'   Repulsive region is where \code{force_nN > noiseBand_high}.
 #' @param title Character. Title for the plot. Default is
 #'   "Interaction Energy Calculation with Noise Threshold".
 #' @param base_size Numeric. Base font size for the plot. Default is 14.
@@ -349,11 +438,11 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #' @details
 #' The function:
 #' \enumerate{
-#'   \item Calls \code{analyze_a_curve_area()} with the provided \code{noise_cutoff}
+#'   \item Calls \code{analyze_a_curve_area()} with \code{noiseBand_low} and \code{noiseBand_high}
 #'   \item Creates a region classification (Baseline, Adhesive, Repulsive)
-#'   \item Visualizes the noise threshold as a grey band
-#'   \item Colors adhesive regions (force < -noise_cutoff) in steelblue
-#'   \item Colors repulsive regions (force > noise_cutoff) in coral
+#'   \item Visualizes the noise band as a grey region
+#'   \item Colors adhesive regions (force < noiseBand_low) in steelblue
+#'   \item Colors repulsive regions (force > noiseBand_high) in coral
 #'   \item Displays calculated energy values in the plot subtitle
 #' }
 #'
@@ -365,13 +454,13 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #' curve_transformed <- transform_a_curve(curve)
 #' 
 #' # Plot with default noise cutoff (0.5 nN)
-#' plot_force_curve_energy(curve_transformed)
+#' plot_force_curve_energy(curve_transformed, noiseBand_low = -0.5, noiseBand_high = 0.5)
 #' 
-#' # Plot with larger noise cutoff (5 nN)
-#' plot_force_curve_energy(curve_transformed, noise_cutoff = 5)
+#' # Plot with larger noise band
+#' plot_force_curve_energy(curve_transformed, noiseBand_low = -5, noiseBand_high = 5)
 #' 
 #' # Customize appearance
-#' plot_force_curve_energy(curve_transformed, noise_cutoff = 1.0, 
+#' plot_force_curve_energy(curve_transformed, noiseBand_low = -1.0, noiseBand_high = 1.0,
 #'                        title = "My Custom Title", base_size = 12)
 #' }
 #'
@@ -381,45 +470,54 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #' @importFrom ggplot2 scale_color_manual labs annotate theme_minimal theme element_blank element_rect element_text
 #'
 plot_force_curve_energy <- function(curve_df,
-                                     noise_cutoff = 0.5,
+                                     noiseBand_low = -0.5,
+                                     noiseBand_high = 0.5,
                                      title = "Interaction Energy Calculation with Noise Threshold",
                                      base_size = 14,
                                      point_size = 2,
                                      alpha_ribbon = 0.3,
                                      show_legend = TRUE) {
+  if (!is.numeric(noiseBand_low) || length(noiseBand_low) != 1 || is.na(noiseBand_low) || !(noiseBand_low < 0)) {
+    stop("noiseBand_low must be a single numeric value < 0.")
+  }
+  if (!is.numeric(noiseBand_high) || length(noiseBand_high) != 1 || is.na(noiseBand_high) || !(noiseBand_high > 0)) {
+    stop("noiseBand_high must be a single numeric value > 0.")
+  }
   
   # Calculate energy using the internal function
-  energy_result <- analyze_a_curve_area(curve_df, noise_cutoff = noise_cutoff)
+  energy_result <- analyze_a_curve_area(
+    curve_df,
+    noiseBand_low = noiseBand_low,
+    noiseBand_high = noiseBand_high
+  )
   
-  # Prepare data for plotting (sort by separation distance)
-  plot_data <- curve_df[order(curve_df$separation_distance_nm), ]
-  
+  plot_data <- curve_df
   # Create region classifications
   plot_data$region <- "Baseline"
-  plot_data$region[plot_data$force_nN > noise_cutoff] <- "Repulsive"
-  plot_data$region[plot_data$force_nN < -noise_cutoff] <- "Adhesive"
+  plot_data$region[plot_data$force_nN > noiseBand_high] <- "Repulsive"
+  plot_data$region[plot_data$force_nN < noiseBand_low] <- "Adhesive"
   
   # Separate data for ribbon layers
-  repulsive_data <- plot_data[plot_data$force_nN > noise_cutoff, ]
-  adhesive_data <- plot_data[plot_data$force_nN < -noise_cutoff, ]
+  repulsive_data <- plot_data[plot_data$force_nN > noiseBand_high, ]
+  adhesive_data <- plot_data[plot_data$force_nN < noiseBand_low, ]
   
   # Create the plot
   p <- ggplot(plot_data, aes(x = separation_distance_nm, y = force_nN)) +
     # Grey background for noise band
     annotate("rect", xmin = -Inf, xmax = Inf, 
-             ymin = -noise_cutoff, ymax = noise_cutoff,
+             ymin = noiseBand_low, ymax = noiseBand_high,
              alpha = 0.08, fill = "grey50") +
     # Shaded regions for energy calculation
     geom_ribbon(data = repulsive_data, 
-                aes(ymin = noise_cutoff, ymax = force_nN),
+                aes(ymin = noiseBand_high, ymax = force_nN),
                 fill = "coral", alpha = alpha_ribbon, color = NA) +
     geom_ribbon(data = adhesive_data, 
-                aes(ymin = force_nN, ymax = -noise_cutoff),
+                aes(ymin = force_nN, ymax = noiseBand_low),
                 fill = "steelblue", alpha = alpha_ribbon, color = NA) +
     # Threshold lines
-    geom_hline(yintercept = noise_cutoff, color = "red", 
+    geom_hline(yintercept = noiseBand_high, color = "red", 
                linetype = "dashed", linewidth = 0.7) +
-    geom_hline(yintercept = -noise_cutoff, color = "red", 
+    geom_hline(yintercept = noiseBand_low, color = "red", 
                linetype = "dashed", linewidth = 0.7) +
     geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
     # Curve rendering
@@ -435,222 +533,96 @@ plot_force_curve_energy <- function(curve_df,
       x = "Separation distance (nm)",
       y = "Force (nN)",
       title = title,
-      subtitle = sprintf("Adhesive energy = %.2f aJ | Repulsive energy = %.2f aJ",
-                         energy_result["adhesive_area"],
-                         energy_result["repulsive_area"])
+      subtitle = sprintf("Adhesive energy = %.3g aJ\nRepulsive energy = %.3g aJ",
+             energy_result["adhesive_area"],
+             energy_result["repulsive_area"])
     ) +
-    # Annotation for noise cutoff value
-    annotate("text", x = Inf, y = noise_cutoff,
-             label = sprintf("Noise cutoff = %.1f nN", noise_cutoff),
+    # Annotation for noise-band values
+    annotate("text", x = Inf, y = noiseBand_high,
+         label = sprintf("noiseBand_high = %.3g nN", noiseBand_high),
              hjust = 1.1, vjust = -0.5, size = 3.5, color = "red") +
+    annotate("text", x = Inf, y = noiseBand_low,
+         label = sprintf("noiseBand_low = %.3g nN", noiseBand_low),
+         hjust = 1.1, vjust = 1.3, size = 3.5, color = "red") +
     # Theme
-    theme_minimal(base_size = base_size) +
+    ggplot2::theme_classic(base_size = base_size) +
     theme(legend.position = if (show_legend) "bottom" else "none")
   
   return(p)
 }
 
 
-#' Plot a transformed force curve with interaction distance annotations
-#'
-#' Creates a ggplot visualization of a transformed force-distance curve and
-#' annotates the interaction threshold and detected interaction distance.
-#' Internally calls \code{analyze_a_curve_interaction_distance()}.
-#'
-#' @param curve_df A data frame containing the transformed force curve with
-#'   columns \code{separation_distance_nm} and \code{force_nN}.
-#' @param baseline_span Either a single integer >= 1, or the string
-#'   \code{"automatic"}. Passed to
-#'   \code{analyze_a_curve_interaction_distance()}.
-#' @param y_direction Character. \code{"negative"} (rupture) or
-#'   \code{"positive"} (repulsive). Passed to
-#'   \code{analyze_a_curve_interaction_distance()}.
-#' @param x_direction Character. \code{"left"} or \code{"right"}. Direction
-#'   to scan from baseline. Passed to
-#'   \code{analyze_a_curve_interaction_distance()}.
-#' @param threshold_method Threshold method passed to
-#'   \code{analyze_a_curve_interaction_distance()}.
-#' @param multiplier Numeric. Threshold multiplier for spread-based methods.
-#' @param mad_constant Numeric. MAD scaling constant.
-#' @param q_low Numeric quantile used by \code{threshold_method = "quantile"}
-#'   for \code{y_direction = "negative"}.
-#' @param q_high Numeric quantile used by \code{threshold_method = "quantile"}
-#'   for \code{y_direction = "positive"}.
-#' @param q_abs Numeric quantile used by
-#'   \code{threshold_method = "abs_quantile"}.
-#' @param fixed_threshold Numeric threshold (nN) when
-#'   \code{threshold_method = "fixed"}.
-#' @param title Character. Plot title.
-#' @param base_size Numeric. Base font size for the plot.
-#' @param line_color Character. Color of the curve line.
-#' @param line_width Numeric. Width of the curve line.
-#' @param point_size Numeric. Size of the highlighted interaction point.
-#' @param show_positive_threshold Logical. If \code{TRUE}, draw a dotted line at
-#'   \code{+threshold} as reference.
-#'
-#' @return A ggplot2 object with threshold and interaction-distance annotations.
-#' @export
-#' @importFrom ggplot2 ggplot aes geom_path geom_hline geom_vline geom_point
-#' @importFrom ggplot2 annotate labs theme_minimal
-plot_force_curve_interaction_distance <- function(
-    curve_df,
-    baseline_span,
-    y_direction = c("negative", "positive"),
-    x_direction = c("left", "right"),
-    threshold_method = c("sd", "mad", "iqr", "quantile", "abs_quantile", "fixed"),
-    multiplier = 3,
-    mad_constant = 1.4826,
-    q_low = 0.01,
-    q_high = 0.99,
-    q_abs = 0.99,
-    fixed_threshold = NULL,
-    title = "Single-Curve Interaction Distance",
-    base_size = 14,
-    line_color = "grey40",
-    line_width = 0.7,
-    point_size = 2,
-    show_positive_threshold = TRUE
-) {
-  y_direction <- match.arg(y_direction)
-  x_direction <- match.arg(x_direction)
-  threshold_method <- match.arg(threshold_method)
 
-  result <- analyze_a_curve_interaction_distance(
-    curve_df = curve_df,
-    baseline_span = baseline_span,
-    y_direction = y_direction,
-    x_direction = x_direction,
-    threshold_method = threshold_method,
-    multiplier = multiplier,
-    mad_constant = mad_constant,
-    q_low = q_low,
-    q_high = q_high,
-    q_abs = q_abs,
-    fixed_threshold = fixed_threshold
-  )
-
-  distance_nm <- unname(result["distance"])
-  threshold_nN <- unname(result["threshold"])
-  threshold_line <- if (y_direction == "negative") -threshold_nN else threshold_nN
-
-  p <- ggplot(curve_df, aes(x = separation_distance_nm, y = force_nN)) +
-    geom_path(color = line_color, linewidth = line_width) +
-    geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
-    geom_hline(yintercept = threshold_line, color = "red", linetype = "dashed", linewidth = 0.7) +
-    labs(
-      x = "Separation distance (nm)",
-      y = "Force (nN)",
-      title = title,
-      subtitle = ifelse(
-        is.na(distance_nm),
-        sprintf("Threshold = %.3f nN | No threshold crossing detected", threshold_nN),
-        sprintf("Interaction distance = %.2f nm | Threshold = %.3f nN", distance_nm, threshold_nN)
-      )
-    ) +
-    theme_minimal(base_size = base_size) +
-    annotate(
-      "text",
-      x = Inf,
-      y = threshold_line,
-      label = sprintf("Threshold = %.3f nN", threshold_nN),
-      hjust = 1.05,
-      vjust = -0.5,
-      color = "red",
-      size = 4
-    )
-
-  if (isTRUE(show_positive_threshold)) {
-    p <- p + geom_hline(yintercept = abs(threshold_nN), color = "red", linetype = "dotted", linewidth = 0.5, alpha = 0.6)
-  }
-
-  if (!is.na(distance_nm)) {
-    p <- p +
-      geom_vline(xintercept = distance_nm, color = "dodgerblue4", linetype = "dashed", linewidth = 0.7) +
-      geom_point(
-        data = data.frame(separation_distance_nm = distance_nm, force_nN = threshold_line),
-        aes(x = separation_distance_nm, y = force_nN),
-        color = "dodgerblue4",
-        size = point_size,
-        inherit.aes = FALSE
-      ) +
-      annotate(
-        "text",
-        x = distance_nm,
-        y = min(curve_df$force_nN, na.rm = TRUE),
-        label = sprintf("Distance = %.2f nm", distance_nm),
-        vjust = -0.5,
-        color = "dodgerblue4",
-        size = 4
-      )
-  }
-
-  return(p)
-}
-
-
-#' Plot one transformed curve with selectable metric annotations
+#' Plot one transformed curve with optional metadata annotations
 #'
 #' High-level visualization helper that takes an \code{fdObj} and one curve name,
-#' then overlays selected analytical annotations (energy regions, adhesive force,
-#' and interaction distance/threshold) on the force-distance curve.
+#' plots the transformed force-distance curve, and optionally overlays selected
+#' annotations from predefined metadata columns for the selected \code{useCurve}.
 #'
 #' @param fdobj An object of class \code{fdObj}.
 #' @param curve_name Character. Name of one curve to plot. Must match
 #'   \code{rownames(fdobj@metadata)}.
 #' @param useCurve Character. Either \code{"retract"} or \code{"approach"}.
-#' @param repulsive_energy Logical. If \code{TRUE}, shade repulsive-energy region
-#'   (force > noise cutoff).
-#' @param adhesive_energy Logical. If \code{TRUE}, shade adhesive-energy region
-#'   (force < -noise cutoff).
-#' @param annotate_adhesive_force Logical. If \code{TRUE}, mark adhesive force
-#'   point and annotate force + separation distance.
-#' @param annotate_interaction_distance Logical. If \code{TRUE}, annotate one
-#'   interaction distance and threshold.
-#' @param noise_cutoff Numeric scalar or metadata column name (character).
-#'   If character, the function looks up \code{fdobj@metadata[curve_name, noise_cutoff]}.
-#' @param interaction_type Character. \code{"rupture"}, \code{"repulsive"}, or
-#'   \code{"auto"}. Controls default interaction-distance column names and
-#'   threshold sign. When \code{"auto"}, rupture columns are tried first, then
-#'   repulsive columns.
-#' @param interaction_distance_col Optional metadata column name containing the
-#'   interaction distance to annotate for this curve.
-#' @param interaction_threshold_col Optional metadata column name containing the
-#'   interaction threshold (nN) to annotate for this curve.
+#' @param plot_raw Logical. If \code{TRUE}, also plot the corresponding raw curve
+#'   and return a two-column panel using \code{cowplot::plot_grid()}.
+#' @param annotate_noiseBand Logical. If \code{TRUE}, annotate noise band from
+#'   \code{noiseBand_low_nN_<useCurve>} and \code{noiseBand_high_nN_<useCurve>},
+#'   and add "Noise band" labels above and below the band boundaries.
+#' @param annotate_repulsive_energy Logical. If \code{TRUE}, add repulsive
+#'   energy value to subtitle when available.
+#' @param annotate_adhesive_energy Logical. If \code{TRUE}, add adhesive force
+#'   and adhesive energy values to subtitle when available.
+#' @param annotate_adhesive_force Logical. If \code{TRUE}, annotate adhesive force
+#'   point and separation using arrow + label.
+#' @param annotate_rupture_distance Logical. If \code{TRUE}, annotate rupture
+#'   distance/threshold using arrow + label.
+#' @param annotate_repulsive_distance Logical. If \code{TRUE}, annotate repulsive
+#'   distance/threshold using arrow + label.
+#' @param xlim Optional numeric vector of length 2 for x-axis limits.
+#' @param ylim Optional numeric vector of length 2 for y-axis limits.
 #' @param title Character. Plot title.
 #' @param base_size Numeric. Base theme text size.
-#' @param annotation_text_size Numeric. Text size used for annotation labels
-#'   (adhesive force, interaction threshold, interaction distance).
-#' @param interaction_label_color_rupture Character. Text color for rupture
-#'   interaction label box.
-#' @param interaction_label_color_repulsive Character. Text color for repulsive
-#'   interaction label box.
+#' @param line_color Character. Line color for curves.
+#' @param point_color Character. Point color for curves.
+#' @param line_size Numeric. Line width for curves.
+#' @param point_size Numeric. Point size for curves.
+#' @param line_alpha Numeric. Line alpha for curves.
+#' @param point_alpha Numeric. Point alpha for curves.
+#' @param annotation_text_size Numeric. Text size used for annotation labels.
+#' @param interaction_label_color_rupture Character. Text/line color for rupture
+#'   annotation label.
+#' @param interaction_label_color_repulsive Character. Text/line color for
+#'   repulsive annotation label.
 #' @param interaction_label_fill Character. Fill color for interaction label box.
-#' @param ... Additional ggplot2 components to add to the plot (e.g.,
-#'   \code{theme()}, \code{scale_*()}, \code{coord_*()}, \code{labs()},
+#' @param ... Additional ggplot2 components to add to the transformed-curve plot
+#'   (e.g., \code{theme()}, \code{scale_*()}, \code{coord_*()}, \code{labs()},
 #'   or extra \code{geom_*()} layers).
 #'
-#' @return A ggplot2 object.
+#' @return A ggplot2 object, or a cowplot grid object when \code{plot_raw = TRUE}.
 #' @export
-#' @importFrom ggplot2 ggplot aes geom_path geom_hline geom_ribbon geom_point
-#' @importFrom ggplot2 geom_segment geom_vline annotate labs theme_minimal
-plot_curve_metrics <- function(
+#' @importFrom ggplot2 ggplot aes geom_hline geom_line geom_point
+#' @importFrom ggplot2 geom_segment geom_vline annotate labs theme_minimal scale_color_manual
+plot_a_curve_metrics <- function(
     fdobj,
     curve_name,
     useCurve = c("retract", "approach"),
-    repulsive_energy = TRUE,
-    adhesive_energy = TRUE,
+    plot_raw = FALSE,
+    annotate_noiseBand = TRUE,
+    annotate_repulsive_energy = TRUE,
+    annotate_adhesive_energy = TRUE,
     annotate_adhesive_force = TRUE,
-    annotate_interaction_distance = TRUE,
-    noise_cutoff = 0.5,
-    interaction_type = c("rupture", "repulsive", "auto"),
-  adhesive_energy_col = NULL,
-  repulsive_energy_col = NULL,
-  adhesive_force_col = NULL,
-  adhesive_sep_col = NULL,
-    interaction_distance_col = NULL,
-    interaction_threshold_col = NULL,
+    annotate_rupture_distance = TRUE,
+    annotate_repulsive_distance = TRUE,
+    xlim = NULL,
+    ylim = NULL,
     title = NULL,
     base_size = 14,
+    line_color = "grey35",
+    point_color = "grey35",
+    line_size = 0.7,
+    point_size = 1.8,
+    line_alpha = 0.9,
+    point_alpha = 0.8,
     annotation_text_size = 3.3,
     interaction_label_color_rupture = "purple4",
     interaction_label_color_repulsive = "darkorange3",
@@ -662,7 +634,6 @@ plot_curve_metrics <- function(
   }
 
   useCurve <- match.arg(useCurve)
-  interaction_type <- match.arg(interaction_type)
 
   metadata <- fdobj@metadata
   if (!(curve_name %in% rownames(metadata))) {
@@ -682,260 +653,233 @@ plot_curve_metrics <- function(
     stop("Selected curve must contain columns 'separation_distance_nm' and 'force_nN'.")
   }
 
-  resolve_numeric_or_column <- function(value_or_col, param_name) {
-    if (is.numeric(value_or_col) && length(value_or_col) == 1) {
-      return(as.numeric(value_or_col))
-    }
-
-    if (is.character(value_or_col) && length(value_or_col) == 1) {
-      if (value_or_col %in% colnames(metadata)) {
-        value <- metadata[curve_name, value_or_col]
-        value <- suppressWarnings(as.numeric(value))
-        if (is.na(value)) {
-          stop(sprintf("Metadata value for '%s' in column '%s' is NA/non-numeric.", curve_name, value_or_col))
-        }
-        return(value)
-      }
-
-      numeric_try <- suppressWarnings(as.numeric(value_or_col))
-      if (!is.na(numeric_try)) {
-        return(numeric_try)
-      }
-    }
-
-    stop(sprintf("%s must be a numeric scalar or a metadata column name.", param_name))
-  }
+  raw_curve <- fdobj@rawCurves[[curve_name]]
+  raw_x_col <- if (useCurve == "retract") "Calc_Ramp_Rt_nm" else "Calc_Ramp_Ex_nm"
+  raw_y_col <- if (useCurve == "retract") "Defl_V_Rt" else "Defl_V_Ex"
 
   resolve_metadata_value <- function(col_name) {
-    if (is.null(col_name)) return(NA_real_)
-    if (!(col_name %in% colnames(metadata))) return(NA_real_)
+    if (!(col_name %in% colnames(metadata))) {
+      return(NA_real_)
+    }
     suppressWarnings(as.numeric(metadata[curve_name, col_name]))
   }
 
-  noise_value <- resolve_numeric_or_column(noise_cutoff, "noise_cutoff")
+  noiseBand_low <- resolve_metadata_value(paste0("noiseBand_low_nN_", useCurve))
+  noiseBand_high <- resolve_metadata_value(paste0("noiseBand_high_nN_", useCurve))
 
-  curve_df <- curve_df[order(curve_df$separation_distance_nm), ]
-  curve_df$region <- "Baseline"
-  curve_df$region[curve_df$force_nN > noise_value] <- "Repulsive"
-  curve_df$region[curve_df$force_nN < -noise_value] <- "Adhesive"
+  adhesive_energy_val <- resolve_metadata_value(paste0("adhesive_energy_aJ_", useCurve))
+  repulsive_energy_val <- resolve_metadata_value(paste0("repulsive_energy_aJ_", useCurve))
+  adhesive_force_val <- resolve_metadata_value(paste0("adhesive_force_nN_", useCurve))
+  adhesive_sep_val <- resolve_metadata_value(paste0("adhesive_sep_nm_", useCurve))
+  rupture_distance_val <- resolve_metadata_value(paste0("rupture_distance_nm_", useCurve))
+  rupture_threshold_val <- resolve_metadata_value(paste0("rupture_threshold_nN_", useCurve))
+  repulsive_distance_val <- resolve_metadata_value(paste0("repulsive_distance_nm_", useCurve))
+  repulsive_threshold_val <- resolve_metadata_value(paste0("repulsive_threshold_nN_", useCurve))
+  sensitivity_val <- resolve_metadata_value(paste0("sensitivity_V_nm_", useCurve))
+  spring_constant_val <- resolve_metadata_value("spring_constant")
+  baseline_V_val <- resolve_metadata_value(paste0("baseline_V_", useCurve))
+
+  region_colors <- c(
+    "Sensitivity region" = "green3",
+    "Baseline region" = "yellow3",
+    "Other" = point_color
+  )
+
+  raw_point_region <- NULL
+  transformed_point_region <- rep("Other", nrow(curve_df))
+
+  if (!is.null(raw_curve) && nrow(raw_curve) > 0 && (raw_x_col %in% colnames(raw_curve))) {
+    sens_seg <- fdobj@senscal_segment[[useCurve]][[curve_name]]
+    base_seg <- fdobj@baseline_segment[[useCurve]][[curve_name]]
+
+    raw_point_region <- rep("Other", nrow(raw_curve))
+
+    if (!is.null(base_seg) && nrow(base_seg) > 0 && (raw_x_col %in% colnames(base_seg))) {
+      raw_point_region[raw_curve[[raw_x_col]] %in% base_seg[[raw_x_col]]] <- "Baseline region"
+    }
+    if (!is.null(sens_seg) && nrow(sens_seg) > 0 && (raw_x_col %in% colnames(sens_seg))) {
+      raw_point_region[raw_curve[[raw_x_col]] %in% sens_seg[[raw_x_col]]] <- "Sensitivity region"
+    }
+
+    if (nrow(curve_df) == length(raw_point_region)) {
+      transformed_point_region <- raw_point_region
+    } else {
+      idx <- seq_len(min(nrow(curve_df), length(raw_point_region)))
+      transformed_point_region[idx] <- raw_point_region[idx]
+    }
+  }
+
+  curve_df$point_region <- factor(
+    transformed_point_region,
+    levels = c("Sensitivity region", "Baseline region", "Other")
+  )
 
   x_min <- min(curve_df$separation_distance_nm, na.rm = TRUE)
   x_max <- max(curve_df$separation_distance_nm, na.rm = TRUE)
   x_span <- x_max - x_min
   if (!is.finite(x_span) || x_span <= 0) x_span <- 1
+
   y_min <- min(curve_df$force_nN, na.rm = TRUE)
   y_max <- max(curve_df$force_nN, na.rm = TRUE)
   y_span <- y_max - y_min
   if (!is.finite(y_span) || y_span <= 0) y_span <- 1
 
-  label_x_right <- x_max + 0.25 * x_span
   x_offset <- 0.06 * x_span
   y_offset <- 0.08 * y_span
 
-  if (is.null(title)) {
-    title <- sprintf("Curve metrics: %s (%s)", curve_name, useCurve)
+  if (!is.null(xlim) && (!is.numeric(xlim) || length(xlim) != 2 || any(is.na(xlim)))) {
+    stop("xlim must be NULL or a numeric vector of length 2.")
+  }
+  if (!is.null(ylim) && (!is.numeric(ylim) || length(ylim) != 2 || any(is.na(ylim)))) {
+    stop("ylim must be NULL or a numeric vector of length 2.")
   }
 
-  default_adhesive_energy_col <- paste0("adhesive_energy_aJ_", useCurve)
-  default_repulsive_energy_col <- paste0("repulsive_energy_aJ_", useCurve)
-  default_adhesive_force_col <- paste0("adhesive_force_nN_", useCurve)
-  default_adhesive_sep_col <- paste0("adhesive_sep_nm_", useCurve)
-
-  adhesive_energy_col <- if (is.null(adhesive_energy_col)) default_adhesive_energy_col else adhesive_energy_col
-  repulsive_energy_col <- if (is.null(repulsive_energy_col)) default_repulsive_energy_col else repulsive_energy_col
-  adhesive_force_col <- if (is.null(adhesive_force_col)) default_adhesive_force_col else adhesive_force_col
-  adhesive_sep_col <- if (is.null(adhesive_sep_col)) default_adhesive_sep_col else adhesive_sep_col
-
-  adhesive_energy_val <- resolve_metadata_value(adhesive_energy_col)
-  repulsive_energy_val <- resolve_metadata_value(repulsive_energy_col)
-  adhesive_force_val <- resolve_metadata_value(adhesive_force_col)
-  adhesive_sep_val <- resolve_metadata_value(adhesive_sep_col)
+  if (is.null(title)) {
+    title <- sprintf("Transformed curve: \n%s \n(%s)", curve_name, useCurve)
+  }
 
   p <- ggplot(curve_df, aes(x = separation_distance_nm, y = force_nN)) +
-    annotate("rect", xmin = -Inf, xmax = Inf, ymin = -noise_value, ymax = noise_value,
-             alpha = 0.08, fill = "grey50") +
+    geom_vline(xintercept = 0, color = "black", linewidth = 0.5) +
     geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
-    geom_path(aes(color = region), linewidth = 0.7, alpha = 0.9) +
-    geom_point(aes(color = region), size = 1.8, alpha = 0.8) +
+    geom_path(color = line_color, linewidth = line_size, alpha = line_alpha) +
+    geom_point(aes(color = point_region), size = point_size, alpha = point_alpha, show.legend = TRUE) +
+    scale_color_manual(values = region_colors, drop = FALSE, name = "Region") +
     labs(
       x = "Separation distance (nm)",
       y = "Force (nN)",
       title = title
     ) +
-    theme_minimal(base_size = base_size) +
-    coord_cartesian(xlim = c(x_min, label_x_right), clip = "off") +
-    theme(plot.margin = ggplot2::margin(5.5, 80, 5.5, 5.5))
+    ggplot2::theme_classic(base_size = base_size) +
+    ggplot2::coord_cartesian(xlim = xlim, ylim = ylim, clip = "off") +
+    theme(
+      plot.margin = ggplot2::margin(5.5, 90, 5.5, 5.5),
+      legend.position = "top"
+    )
 
-  if (isTRUE(repulsive_energy) || isTRUE(adhesive_energy)) {
-    if (isTRUE(repulsive_energy)) {
-      repulsive_data <- curve_df[curve_df$force_nN > noise_value, ]
-      p <- p + geom_ribbon(
-        data = repulsive_data,
-        aes(ymin = noise_value, ymax = force_nN),
-        fill = "coral",
-        alpha = 0.3,
-        color = NA
+  if (isTRUE(annotate_noiseBand) && is.finite(noiseBand_low) && is.finite(noiseBand_high) && noiseBand_low < noiseBand_high) {
+    p <- p +
+      annotate(
+        "rect",
+        xmin = -Inf,
+        xmax = Inf,
+        ymin = noiseBand_low,
+        ymax = noiseBand_high,
+        alpha = 0.10,
+        fill = "grey50"
+      ) +
+      geom_hline(yintercept = noiseBand_low, color = "red", linetype = "dashed", linewidth = 0.7) +
+      geom_hline(yintercept = noiseBand_high, color = "red", linetype = "dashed", linewidth = 0.7) +
+      annotate(
+        "text",
+        x = if (is.null(xlim)) x_max else max(xlim, na.rm = TRUE),
+        y = noiseBand_high,
+        label = "Noise band",
+        hjust = 1.05,
+        vjust = -0.7,
+        size = annotation_text_size,
+        color = "grey20"
+      ) +
+      annotate(
+        "text",
+        x = if (is.null(xlim)) x_max else max(xlim, na.rm = TRUE),
+        y = noiseBand_low,
+        label = "Noise band",
+        hjust = 1.05,
+        vjust = 1.5,
+        size = annotation_text_size,
+        color = "grey20"
       )
-    }
-
-    if (isTRUE(adhesive_energy)) {
-      adhesive_data <- curve_df[curve_df$force_nN < -noise_value, ]
-      p <- p + geom_ribbon(
-        data = adhesive_data,
-        aes(ymin = force_nN, ymax = -noise_value),
-        fill = "steelblue",
-        alpha = 0.3,
-        color = NA
-      )
-    }
-
-    subtitle_parts <- character(0)
-    if (isTRUE(adhesive_energy) && !is.na(adhesive_energy_val)) {
-      subtitle_parts <- c(subtitle_parts, sprintf("Adhesive energy = %.2f", adhesive_energy_val))
-    }
-    if (isTRUE(repulsive_energy) && !is.na(repulsive_energy_val)) {
-      subtitle_parts <- c(subtitle_parts, sprintf("Repulsive energy = %.2f", repulsive_energy_val))
-    }
-    if (length(subtitle_parts) > 0) {
-      p <- p + labs(subtitle = paste(subtitle_parts, collapse = " | "))
-    }
   }
 
-  if (isTRUE(annotate_adhesive_force)) {
-    if (!is.na(adhesive_force_val) && !is.na(adhesive_sep_val)) {
-      adhesive_label_x <- adhesive_sep_val
-      adhesive_label_y <- adhesive_force_val - y_offset
-
-      p <- p +
-        geom_point(
-          data = data.frame(separation_distance_nm = adhesive_sep_val, force_nN = adhesive_force_val),
-          aes(x = separation_distance_nm, y = force_nN),
-          color = "red",
-          size = 3,
-          inherit.aes = FALSE
-        ) +
-        geom_segment(
-          data = data.frame(
-            x = adhesive_sep_val,
-            y = adhesive_force_val,
-            xend = adhesive_label_x,
-            yend = adhesive_label_y
-          ),
-          aes(x = x, y = y, xend = xend, yend = yend),
-          inherit.aes = FALSE,
-          color = "red",
-          linewidth = 0.4
-        ) +
-        annotate(
-          "label",
-          x = adhesive_label_x,
-          y = adhesive_label_y,
-          label = sprintf("Adhesive force = %.2f nN\nSeparation = %.2f nm", adhesive_force_val, adhesive_sep_val),
-          color = "red",
-          fill = "white",
-          size = annotation_text_size
-        )
-    }
+  subtitle_parts <- character(0)
+  if (isTRUE(annotate_adhesive_energy) && is.finite(adhesive_force_val)) {
+    subtitle_parts <- c(subtitle_parts, sprintf("Adhesive force = %.3g nN", adhesive_force_val))
+  } else {subtitle_parts <- c(subtitle_parts,' ')}
+  if (isTRUE(annotate_adhesive_energy) && is.finite(adhesive_energy_val)) {
+    subtitle_parts <- c(subtitle_parts, sprintf("Adhesive energy = %.3g aJ", adhesive_energy_val))
+  } else {subtitle_parts <- c(subtitle_parts,' ')}
+  if (isTRUE(annotate_repulsive_energy) && is.finite(repulsive_energy_val)) {
+    subtitle_parts <- c(subtitle_parts, sprintf("Repulsive energy = %.3g aJ", repulsive_energy_val))
+  } else {subtitle_parts <- c(subtitle_parts,' ')}
+  if (length(subtitle_parts) > 0) {
+    p <- p + labs(subtitle = paste(subtitle_parts, collapse = "\n"))
   }
 
-  if (isTRUE(annotate_interaction_distance)) {
-    preferred_types <- if (interaction_type == "auto") c("rupture", "repulsive") else interaction_type
+  if (isTRUE(annotate_adhesive_force) && is.finite(adhesive_force_val) && is.finite(adhesive_sep_val)) {
+    adhesive_label_x <- adhesive_sep_val + x_offset
+    adhesive_label_y <- (-1)*adhesive_force_val - y_offset
 
-    interaction_distance <- NA_real_
-    interaction_threshold <- NA_real_
-    active_type <- preferred_types[1]
-
-    if (!is.null(interaction_distance_col) || !is.null(interaction_threshold_col)) {
-      distance_col_to_use <- if (is.null(interaction_distance_col)) paste0(active_type, "_distance_nm_", useCurve) else interaction_distance_col
-      threshold_col_to_use <- if (is.null(interaction_threshold_col)) paste0(active_type, "_threshold_nN_", useCurve) else interaction_threshold_col
-      interaction_distance <- resolve_metadata_value(distance_col_to_use)
-      interaction_threshold <- resolve_metadata_value(threshold_col_to_use)
-    } else {
-      for (tp in preferred_types) {
-        distance_candidate <- resolve_metadata_value(paste0(tp, "_distance_nm_", useCurve))
-        threshold_candidate <- resolve_metadata_value(paste0(tp, "_threshold_nN_", useCurve))
-        if (!is.na(distance_candidate) || !is.na(threshold_candidate)) {
-          interaction_distance <- distance_candidate
-          interaction_threshold <- threshold_candidate
-          active_type <- tp
-          break
-        }
-      }
-    }
-
-    if (!is.na(interaction_distance)) {
-      p <- p + geom_vline(
-        xintercept = interaction_distance,
-        color = "dodgerblue4",
-        linetype = "dashed",
-        linewidth = 0.7
+    p <- p +
+      geom_point(
+        data = data.frame(separation_distance_nm = adhesive_sep_val, force_nN = (-1)*adhesive_force_val),
+        aes(x = separation_distance_nm, y = force_nN),
+        color = "red",
+        size = 3,
+        inherit.aes = FALSE
+      ) +
+      geom_segment(
+        data = data.frame(
+          x = adhesive_sep_val,
+          y = (-1)*adhesive_force_val,
+          xend = adhesive_label_x,
+          yend = adhesive_label_y
+        ),
+        aes(x = x, y = y, xend = xend, yend = yend),
+        inherit.aes = FALSE,
+        color = "red",
+        linewidth = 0.4,
+        arrow = ggplot2::arrow(length = grid::unit(0.12, "cm"))
+      ) +
+      annotate(
+        "label",
+        x = adhesive_label_x,
+        y = adhesive_label_y,
+        label = sprintf("Adhesive force = %.3g nN\nSeparation = %.3g nm", adhesive_force_val, adhesive_sep_val),
+        color = "red",
+        fill = "white",
+        size = annotation_text_size
       )
+  }
+
+  add_distance_annotation <- function(plot_obj, distance, threshold, type) {
+    if (!is.finite(distance) || !is.finite(threshold)) {
+      return(plot_obj)
     }
 
-    type_label <- if (active_type == "rupture") "Rupture" else "Repulsive"
-    interaction_label_color <- if (active_type == "rupture") interaction_label_color_rupture else interaction_label_color_repulsive
-    interaction_y <- if (!is.na(interaction_threshold)) {
-      if (active_type == "rupture") -abs(interaction_threshold) else abs(interaction_threshold)
-    } else {
-      NA_real_
-    }
+    interaction_y <- if (type == "rupture") -abs(threshold) else abs(threshold)
+    interaction_label_color <- if (type == "rupture") interaction_label_color_rupture else interaction_label_color_repulsive
+    type_label <- if (type == "rupture") "Rupture" else "Repulsive"
 
-    if (!is.na(interaction_threshold)) {
-      p <- p + geom_hline(
-        yintercept = interaction_y,
-        color = "purple4",
-        linetype = "dashed",
-        linewidth = 0.7
+    label_x <- distance + x_offset
+    label_y <- interaction_y + if (type == "rupture") -y_offset else y_offset
+
+    plot_obj +
+      annotate("point", x = distance, y = interaction_y, color = "dodgerblue4", size = 2) +
+      geom_segment(
+        data = data.frame(x = distance, y = interaction_y, xend = label_x, yend = label_y),
+        aes(x = x, y = y, xend = xend, yend = yend),
+        inherit.aes = FALSE,
+        color = interaction_label_color,
+        linewidth = 0.4,
+        arrow = ggplot2::arrow(length = grid::unit(0.12, "cm"))
+      ) +
+      annotate(
+        "label",
+        x = label_x,
+        y = label_y,
+        label = sprintf("%s distance = %.3g nm\n%s threshold = %.3g nN", type_label, distance, type_label, threshold),
+        color = interaction_label_color,
+        fill = interaction_label_fill,
+        hjust = 0,
+        size = annotation_text_size
       )
-    }
+  }
 
-    if (!is.na(interaction_distance) && !is.na(interaction_threshold)) {
-      p <- p + annotate(
-        "point",
-        x = interaction_distance,
-        y = interaction_y,
-        color = "dodgerblue4",
-        size = 2
-      )
-    }
-
-    if (!is.na(interaction_distance) || !is.na(interaction_threshold)) {
-      interaction_label <- c()
-      if (!is.na(interaction_distance)) {
-        interaction_label <- c(interaction_label, sprintf("%s distance = %.2f nm", type_label, interaction_distance))
-      }
-      if (!is.na(interaction_threshold)) {
-        interaction_label <- c(interaction_label, sprintf("%s threshold = %.3f nN", type_label, interaction_threshold))
-      }
-
-      point_x <- if (!is.na(interaction_distance)) interaction_distance else min(curve_df$separation_distance_nm, na.rm = TRUE)
-      point_y <- if (!is.na(interaction_y)) interaction_y else min(curve_df$force_nN, na.rm = TRUE)
-
-      label_x <- point_x + x_offset
-      label_y <- point_y + y_offset
-      if (active_type == "rupture") {
-        label_y <- max(label_y, 0 + 0.05 * y_span)
-      }
-
-      p <- p +
-        geom_segment(
-          data = data.frame(x = point_x, y = point_y, xend = label_x, yend = label_y),
-          aes(x = x, y = y, xend = xend, yend = yend),
-          inherit.aes = FALSE,
-          color = interaction_label_color,
-          linewidth = 0.4
-        ) +
-        annotate(
-          "label",
-          x = label_x,
-          y = label_y,
-          label = paste(interaction_label, collapse = "\n"),
-          color = interaction_label_color,
-          fill = interaction_label_fill,
-          hjust = 0,
-          size = annotation_text_size
-        )
-    }
+  if (isTRUE(annotate_rupture_distance)) {
+    p <- add_distance_annotation(p, rupture_distance_val, rupture_threshold_val, "rupture")
+  }
+  if (isTRUE(annotate_repulsive_distance)) {
+    p <- add_distance_annotation(p, repulsive_distance_val, repulsive_threshold_val, "repulsive")
   }
 
   extra_layers <- list(...)
@@ -943,6 +887,887 @@ plot_curve_metrics <- function(
     p <- p + extra_layers
   }
 
+  if (isTRUE(plot_raw)) {
+    if (is.null(raw_curve) || nrow(raw_curve) == 0) {
+      stop("plot_raw = TRUE requires a non-empty raw curve in fdobj@rawCurves for this sample.")
+    }
+
+    if (!all(c(raw_x_col, raw_y_col) %in% colnames(raw_curve))) {
+      stop("Required raw-curve columns are missing for the selected useCurve.")
+    }
+
+    if (is.null(raw_point_region) || length(raw_point_region) != nrow(raw_curve)) {
+      raw_point_region <- rep("Other", nrow(raw_curve))
+    }
+
+    raw_df <- data.frame(
+      x = suppressWarnings(as.numeric(raw_curve[[raw_x_col]])),
+      y = suppressWarnings(as.numeric(raw_curve[[raw_y_col]])),
+      point_region = factor(raw_point_region, levels = c("Sensitivity region", "Baseline region", "Other"))
+    )
+    raw_df <- raw_df[is.finite(raw_df$x) & is.finite(raw_df$y), , drop = FALSE]
+    if (nrow(raw_df) == 0) {
+      stop("Raw curve has no finite x/y values for plotting.")
+    }
+
+    p_raw <- ggplot(raw_df, aes(x = x, y = y)) +
+      geom_vline(xintercept = 0, color = "black", linewidth = 0.5) +
+      geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+      geom_path(color = line_color, linewidth = line_size, alpha = line_alpha) +
+      geom_point(aes(color = point_region), size = point_size, alpha = point_alpha, show.legend = TRUE) +
+      scale_color_manual(values = region_colors, drop = FALSE, name = "Region") +
+      labs(
+        x = raw_x_col,
+        y = raw_y_col,
+        title = sprintf("Raw curve: \n%s \n(%s)", curve_name, useCurve),
+      ) +
+      ggplot2::theme_classic(base_size = base_size) +
+      theme(legend.position = "top")
+    raw_subtitle <- paste(
+      sprintf("Sensitivity (V/nm) = %s", if (is.finite(sensitivity_val)) sprintf("%.3g", sensitivity_val) else "NA"),
+      sprintf("Spring constant (N/nm) = %s", if (is.finite(spring_constant_val)) sprintf("%.3g", spring_constant_val) else "NA"),
+      sprintf("Baseline (V) = %s", if (is.finite(baseline_V_val)) sprintf("%.3g", baseline_V_val) else "NA"),
+      sep = "\n"
+    )
+    p_raw <- p_raw + labs(subtitle = raw_subtitle)
+
+    if (!is.null(xlim) || !is.null(ylim)) {
+      p_raw <- p_raw + ggplot2::coord_cartesian(xlim = xlim, ylim = ylim)
+    }
+
+    if (!requireNamespace("cowplot", quietly = TRUE)) {
+      stop("plot_raw = TRUE requires package 'cowplot'. Please install it with install.packages('cowplot').")
+    }
+
+    return(cowplot::plot_grid(p_raw, p, ncol = 2))
+  }
+
   return(p)
+}
+
+
+#' Plot and save curve metrics for all curves in an fdObj
+#'
+#' Iteratively runs \code{plot_a_curve_metrics()} over all entries in the
+#' selected transformed-curve slot (approach or retract) of an \code{fdObj}, and
+#' saves each plot to disk.
+#'
+#' @param fdobj An object of class \code{fdObj}.
+#' @param useCurve Character. Either \code{"retract"} or \code{"approach"}.
+#' @param threads Integer. Number of parallel workers (default \code{1}). Uses
+#'   \pkg{future}+\pkg{future.apply} when \code{threads > 1}.
+#' @param plot_raw Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_noiseBand Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_repulsive_energy Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_adhesive_energy Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_adhesive_force Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_rupture_distance Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param annotate_repulsive_distance Logical. Passed to \code{plot_a_curve_metrics()}.
+#' @param xlim Optional numeric vector of length 2 for x-axis limits.
+#' @param ylim Optional numeric vector of length 2 for y-axis limits.
+#' @param title Character. Plot title passed to \code{plot_a_curve_metrics()}.
+#' @param base_size Numeric. Base theme text size.
+#' @param line_color Character. Line color for curves.
+#' @param point_color Character. Point color for curves.
+#' @param line_size Numeric. Line width for curves.
+#' @param point_size Numeric. Point size for curves.
+#' @param line_alpha Numeric. Line alpha for curves.
+#' @param point_alpha Numeric. Point alpha for curves.
+#' @param annotation_text_size Numeric. Text size for annotation labels.
+#' @param interaction_label_color_rupture Character. Label color for rupture annotations.
+#' @param interaction_label_color_repulsive Character. Label color for repulsive annotations.
+#' @param interaction_label_fill Character. Fill color for interaction labels.
+#' @param destination_folder Character. Output folder path. If \code{NULL}, a
+#'   timestamped folder is created in the current working directory.
+#' @param width Numeric. Plot width passed to \code{ggplot2::ggsave()}.
+#' @param height Numeric. Plot height passed to \code{ggplot2::ggsave()}.
+#' @param format Character. Output graphics format. One of \code{"png"},
+#'   \code{"pdf"}, \code{"jpeg"}, \code{"tiff"}, \code{"bmp"}, \code{"svg"}.
+#' @param dpi Numeric. Resolution passed to \code{ggplot2::ggsave()}.
+#' @param units Character. Units for \code{width}/\code{height}. One of
+#'   \code{"in"}, \code{"cm"}, \code{"mm"}.
+#' @param ... Additional ggplot2 components passed to \code{plot_a_curve_metrics()}.
+#'
+#' @return A data.frame with one row per curve and columns:
+#'   \code{curve_name}, \code{file_path}, \code{status}, and \code{error_message}.
+#'   The output folder is attached as \code{attr(result, "destination_folder")}.
+#' @export
+#' @importFrom ggplot2 ggsave
+plot_all_curve_metrics <- function(
+    fdobj,
+    useCurve = c("retract", "approach"),
+    threads = 1,
+    plot_raw = FALSE,
+    annotate_noiseBand = TRUE,
+    annotate_repulsive_energy = TRUE,
+    annotate_adhesive_energy = TRUE,
+    annotate_adhesive_force = TRUE,
+    annotate_rupture_distance = TRUE,
+    annotate_repulsive_distance = TRUE,
+    xlim = NULL,
+    ylim = NULL,
+    title = NULL,
+    base_size = 14,
+    line_color = "grey35",
+    point_color = "grey35",
+    line_size = 0.7,
+    point_size = 1.8,
+    line_alpha = 0.9,
+    point_alpha = 0.8,
+    annotation_text_size = 3.3,
+    interaction_label_color_rupture = "purple4",
+    interaction_label_color_repulsive = "darkorange3",
+    interaction_label_fill = "white",
+    destination_folder = NULL,
+    width = 12,
+    height = 6,
+    format = c("png", "pdf", "jpeg", "tiff", "bmp", "svg"),
+    dpi = 300,
+    units = c("in", "cm", "mm"),
+    ...
+) {
+  if (!inherits(fdobj, "fdObj")) {
+    stop("fdobj must be an object of class 'fdObj'.")
+  }
+
+  useCurve <- match.arg(useCurve)
+  format <- match.arg(format)
+  units <- match.arg(units)
+
+  if (!is.numeric(threads) || length(threads) != 1 || is.na(threads) || threads < 1) {
+    stop("threads must be a single numeric value >= 1.")
+  }
+  threads <- as.integer(threads)
+
+  if (!is.numeric(width) || length(width) != 1 || is.na(width) || width <= 0) {
+    stop("width must be a single numeric value > 0.")
+  }
+  if (!is.numeric(height) || length(height) != 1 || is.na(height) || height <= 0) {
+    stop("height must be a single numeric value > 0.")
+  }
+  if (!is.numeric(dpi) || length(dpi) != 1 || is.na(dpi) || dpi <= 0) {
+    stop("dpi must be a single numeric value > 0.")
+  }
+
+  if (is.null(destination_folder) || !nzchar(destination_folder)) {
+    destination_folder <- file.path(
+      getwd(),
+      paste0("plot_a_curve_metrics_", format(Sys.time(), "%Y%m%d_%H%M%S"))
+    )
+  }
+
+  if (!dir.exists(destination_folder)) {
+    dir.create(destination_folder, recursive = TRUE, showWarnings = FALSE)
+  }
+  if (!dir.exists(destination_folder)) {
+    stop("Failed to create destination folder: ", destination_folder)
+  }
+
+  curve_list <- if (useCurve == "retract") fdobj@retractCurves else fdobj@approachCurves
+  curve_names <- names(curve_list)
+  if (length(curve_names) == 0) {
+    stop("No curves found in the selected slot.")
+  }
+
+  sanitize_filename <- function(x) {
+    x <- gsub("[\\\\/:*?\"<>|]", "_", x)
+    x <- gsub("\\s+", "_", x)
+    x
+  }
+
+  run_one <- function(curve_name) {
+    plot_obj <- tryCatch(
+      plot_a_curve_metrics(
+        fdobj = fdobj,
+        curve_name = curve_name,
+        useCurve = useCurve,
+        plot_raw = plot_raw,
+        annotate_noiseBand = annotate_noiseBand,
+        annotate_repulsive_energy = annotate_repulsive_energy,
+        annotate_adhesive_energy = annotate_adhesive_energy,
+        annotate_adhesive_force = annotate_adhesive_force,
+        annotate_rupture_distance = annotate_rupture_distance,
+        annotate_repulsive_distance = annotate_repulsive_distance,
+        xlim = xlim,
+        ylim = ylim,
+        title = title,
+        base_size = base_size,
+        line_color = line_color,
+        point_color = point_color,
+        line_size = line_size,
+        point_size = point_size,
+        line_alpha = line_alpha,
+        point_alpha = point_alpha,
+        annotation_text_size = annotation_text_size,
+        interaction_label_color_rupture = interaction_label_color_rupture,
+        interaction_label_color_repulsive = interaction_label_color_repulsive,
+        interaction_label_fill = interaction_label_fill,
+        ...
+      ),
+      error = function(e) e
+    )
+
+    if (inherits(plot_obj, "error")) {
+      return(data.frame(
+        curve_name = curve_name,
+        file_path = NA_character_,
+        status = "failed",
+        error_message = conditionMessage(plot_obj),
+        stringsAsFactors = FALSE
+      ))
+    }
+
+    file_name <- paste0(sanitize_filename(curve_name), "_", useCurve, ".", format)
+    file_path <- file.path(destination_folder, file_name)
+
+    save_error <- tryCatch({
+      ggplot2::ggsave(
+        filename = file_path,
+        plot = plot_obj,
+        width = width,
+        height = height,
+        units = units,
+        dpi = dpi,
+        limitsize = FALSE
+      )
+      NULL
+    }, error = function(e) conditionMessage(e))
+
+    if (is.null(save_error)) {
+      return(data.frame(
+        curve_name = curve_name,
+        file_path = file_path,
+        status = "saved",
+        error_message = NA_character_,
+        stringsAsFactors = FALSE
+      ))
+    }
+
+    data.frame(
+      curve_name = curve_name,
+      file_path = NA_character_,
+      status = "failed",
+      error_message = save_error,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  result_list <- if (threads > 1) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = threads)
+    future.apply::future_lapply(curve_names, run_one, future.packages = "curvana")
+  } else {
+    lapply(curve_names, run_one)
+  }
+
+  result <- do.call(rbind, result_list)
+  rownames(result) <- NULL
+
+  n_saved <- sum(result$status == "saved", na.rm = TRUE)
+  n_failed <- nrow(result) - n_saved
+  message(sprintf("Saved %d plot(s); %d failed. Output: %s", n_saved, n_failed, destination_folder))
+
+  attr(result, "destination_folder") <- destination_folder
+  return(result)
+}
+
+
+#' Plot one metric as a violin plot
+#'
+#' Visualizes one metric column from a data frame using violin plots, optional
+#' jittered points, and an optional linear trend line. Faceting supports up to
+#' two columns. Supports one global test (ANOVA or Kruskal-Wallis) shown in
+#' subtitle, and pairwise tests (t-test or Wilcoxon) shown as significance
+#' asterisks.
+#'
+#' @param df A data.frame containing grouping and metric columns.
+#' @param metric_name Character scalar. One column name in \code{df} to plot
+#'   on the y-axis.
+#' @param group_by Character scalar. Column name in \code{df} used for the
+#'   x-axis grouping.
+#' @param color_by Character scalar. Column name in \code{df} used to color
+#'   violins and points. Defaults to \code{group_by} when \code{NULL}.
+#' @param color_map Optional named character vector of colors for groups in
+#'   \code{color_by} (e.g., \code{c(A = "#1b9e77", B = "#d95f02")}).
+#' @param facet_by Character vector of length 0 to 2 specifying facet columns.
+#'   Use \code{NULL} for no faceting.
+#' @param global_test Character scalar. One of \code{"none"}, \code{"anova"},
+#'   or \code{"kruskal"}. When not \code{"none"}, the global test p-value is
+#'   added as subtitle.
+#' @param pairwise_test Character scalar. One of \code{"none"},
+#'   \code{"t.test"}, or \code{"wilcox"}. Pairwise comparisons are shown as
+#'   significance asterisks.
+#' @param pairwise_comparisons Optional list of group-name pairs (e.g.,
+#'   \code{list(c("A", "B"), c("A", "C"))}). If \code{NULL}, all pairwise
+#'   combinations are used.
+#' @param p_adjust_method Character p-value adjustment method passed to
+#'   \code{ggpubr::stat_compare_means()}.
+#' @param log10 Logical. If \code{TRUE}, applies \code{log10} transform to the
+#'   metric values before plotting and testing. Non-positive values are removed.
+#' @param add_points Logical. If \code{TRUE}, overlays jittered points.
+#' @param add_smooth Logical. If \code{TRUE}, overlays \code{geom_smooth(method = "lm")}
+#'   within each facet.
+#' @param point_alpha Numeric point transparency.
+#' @param point_color Character point color.
+#' @param point_size Numeric point size.
+#' @param jitter_width Numeric horizontal jitter width.
+#' @param violin_fill Character fill color for violins.
+#' @param violin_color Character outline color for violins.
+#' @param violin_alpha Numeric violin transparency.
+#' @param smooth_color Character color for linear trend line.
+#' @param base_size Numeric base font size for theme.
+#'
+#' @return A ggplot object.
+#' @export
+#' @importFrom ggplot2 ggplot aes geom_violin geom_point geom_smooth
+#' @importFrom ggplot2 facet_wrap facet_grid labs position_jitter theme_classic
+#' @importFrom ggplot2 scale_color_manual scale_fill_manual
+plot_metric_violin <- function(
+    df,
+    metric_name,
+    group_by,
+    color_by = NULL,
+    color_map = NULL,
+    facet_by = NULL,
+    global_test = c("none", "anova", "kruskal"),
+    pairwise_test = c("none", "t.test", "wilcox"),
+    pairwise_comparisons = NULL,
+    p_adjust_method = "BH",
+    log10 = FALSE,
+    add_points = TRUE,
+    add_smooth = FALSE,
+    point_alpha = 0.6,
+    point_color = "black",
+    point_size = 1.2,
+    jitter_width = 0.15,
+    violin_fill = "grey85",
+    violin_color = "grey40",
+    violin_alpha = 0.8,
+    smooth_color = "steelblue",
+    base_size = 10
+) {
+  if (!is.data.frame(df)) {
+    stop("df must be a data.frame.")
+  }
+  if (!is.character(metric_name) || length(metric_name) != 1 || is.na(metric_name) || nchar(metric_name) == 0) {
+    stop("metric_name must be one column name.")
+  }
+  if (!is.character(group_by) || length(group_by) != 1) {
+    stop("group_by must be a single column name.")
+  }
+  if (!(group_by %in% colnames(df))) {
+    stop("group_by column not found in df.")
+  }
+
+  if (is.null(color_by)) {
+    color_by <- group_by
+  }
+  if (!is.character(color_by) || length(color_by) != 1 || is.na(color_by) || nchar(color_by) == 0) {
+    stop("color_by must be NULL or one column name.")
+  }
+  if (!(color_by %in% colnames(df))) {
+    stop("color_by column not found in df.")
+  }
+
+  if (!is.null(color_map)) {
+    if (is.list(color_map)) {
+      color_map <- unlist(color_map, use.names = TRUE)
+    }
+    if (!is.atomic(color_map) || is.null(names(color_map)) || any(names(color_map) == "")) {
+      stop("color_map must be a named atomic vector (e.g., c(A = '#1b9e77', B = '#d95f02')).")
+    }
+    color_map <- as.character(color_map)
+  }
+
+  if (!(metric_name %in% colnames(df))) {
+    stop(sprintf("metric_name column '%s' not found in df.", metric_name))
+  }
+
+  if (is.null(facet_by)) {
+    facet_by <- character(0)
+  }
+  if (!is.character(facet_by)) {
+    stop("facet_by must be NULL or a character vector.")
+  }
+  if (length(facet_by) > 2) {
+    stop("facet_by supports up to two columns.")
+  }
+
+  missing_facets <- setdiff(unique(facet_by), colnames(df))
+  if (length(missing_facets) > 0) {
+    stop(sprintf("These facet columns are missing in df: %s", paste(missing_facets, collapse = ", ")))
+  }
+
+  global_test <- match.arg(global_test)
+  pairwise_test <- match.arg(pairwise_test)
+
+  plot_df <- data.frame(
+    Group = df[[group_by]],
+    Value = suppressWarnings(as.numeric(df[[metric_name]])),
+    ColorGroup = df[[color_by]],
+    stringsAsFactors = FALSE
+  )
+  if (length(facet_by) > 0) {
+    for (fc in facet_by) {
+      plot_df[[fc]] <- df[[fc]]
+    }
+  }
+
+  plot_df <- plot_df[is.finite(plot_df$Value), , drop = FALSE]
+
+  if (!is.logical(log10) || length(log10) != 1 || is.na(log10)) {
+    stop("log10 must be TRUE or FALSE.")
+  }
+  if (isTRUE(log10)) {
+    plot_df <- plot_df[plot_df$Value > 0, , drop = FALSE]
+    if (nrow(plot_df) == 0) {
+      stop("No positive values available for log10 transform.")
+    }
+    plot_df$Value <- base::log10(plot_df$Value)
+  }
+
+  plot_df$Group <- as.factor(plot_df$Group)
+
+  if (nrow(plot_df) == 0) {
+    stop("No finite values available for plotting after filtering.")
+  }
+
+  p <- ggplot(plot_df, aes(x = Group, y = Value, fill = ColorGroup, color = ColorGroup)) +
+    geom_violin(alpha = violin_alpha, trim = FALSE)
+
+  if (isTRUE(add_points)) {
+    p <- p + geom_point(
+      alpha = point_alpha,
+      size = point_size,
+      position = position_jitter(width = jitter_width, height = 0)
+    )
+  }
+
+  if (isTRUE(add_smooth)) {
+    p <- p + geom_smooth(aes(group = 1), method = "lm", se = FALSE, color = smooth_color)
+  }
+
+  if (length(facet_by) == 1) {
+    p <- p + facet_wrap(as.formula(paste("~", facet_by[[1]])), scales = "free_y")
+  } else if (length(facet_by) == 2) {
+    p <- p + facet_grid(as.formula(paste(facet_by[[1]], "~", facet_by[[2]])), scales = "free_y")
+  }
+
+  global_subtitle <- NULL
+  if (global_test != "none" && length(unique(stats::na.omit(plot_df$Group))) >= 2) {
+    p_global <- tryCatch({
+      if (global_test == "anova") {
+        summary(stats::aov(Value ~ Group, data = plot_df))[[1]][["Pr(>F)"]][1]
+      } else {
+        stats::kruskal.test(Value ~ Group, data = plot_df)$p.value
+      }
+    }, error = function(e) NA_real_)
+
+    if (is.finite(p_global)) {
+      test_label <- if (global_test == "anova") "ANOVA" else "Kruskal-Wallis"
+      global_subtitle <- sprintf("%s p = %.3g", test_label, p_global)
+    }
+  }
+
+  y_label <- if (isTRUE(log10)) sprintf("log10(%s)", metric_name) else metric_name
+  p <- p + labs(x = group_by, y = y_label, color = color_by, fill = color_by, subtitle = global_subtitle)
+
+  if (!is.null(color_map)) {
+    p <- p +
+      scale_color_manual(values = color_map) +
+      scale_fill_manual(values = color_map)
+  }
+
+  if (pairwise_test != "none") {
+    if (!requireNamespace("ggpubr", quietly = TRUE)) {
+      stop("pairwise_test requires package 'ggpubr'. Please install it with install.packages('ggpubr').")
+    }
+
+    if (is.null(pairwise_comparisons)) {
+      groups <- as.character(stats::na.omit(unique(plot_df$Group)))
+      if (length(groups) >= 2) {
+        pairwise_comparisons <- utils::combn(groups, 2, simplify = FALSE)
+      } else {
+        pairwise_comparisons <- list()
+      }
+    }
+
+    if (length(pairwise_comparisons) > 0) {
+      pairwise_method <- if (pairwise_test == "wilcox") "wilcox.test" else "t.test"
+      p <- p + ggpubr::stat_compare_means(
+        comparisons = pairwise_comparisons,
+        method = pairwise_method,
+        p.adjust.method = p_adjust_method,
+        label = "p.signif",
+        hide.ns = TRUE,
+        step.increase = 0.08
+      )
+    }
+  }
+
+  if (requireNamespace("ggpubr", quietly = TRUE)) {
+    p <- p + ggpubr::theme_pubr(base_size = base_size)
+  } else {
+    p <- p + ggplot2::theme_classic(base_size = base_size)
+  }
+
+  return(p)
+}
+
+
+#' PCA biplot for selected feature columns
+#'
+#' Runs principal component analysis (PCA) on selected feature columns after
+#' numeric coercion and z-score normalization (
+#' \\code{center = TRUE, scale. = TRUE}), then draws a biplot with samples as
+#' points and feature-loading arrows showing trend directions.
+#'
+#' @param df A data.frame containing features and metadata columns.
+#' @param include_columns Character vector of column names to include as PCA
+#'   features.
+#' @param color_by Character scalar column name used to color sample points.
+#' @param color_map Optional named character vector for sample colors.
+#' @param point_size Numeric point size.
+#' @param point_alpha Numeric point alpha.
+#' @param arrow_color Character arrow/label color for feature loadings.
+#' @param arrow_alpha Numeric alpha for loading arrows.
+#' @param arrow_scale Numeric multiplier to scale loading-arrow length.
+#' @param show_feature_labels Logical; if \code{TRUE}, labels loading arrows.
+#' @param feature_label_size Numeric feature-label text size.
+#' @param base_size Numeric base font size.
+#'
+#' @return A ggplot object. The fitted PCA model is attached as
+#'   \\code{attr(plot, "pca_model")}, plus score/loading tables in
+#'   \\code{attr(plot, "pca_scores")} and \\code{attr(plot, "pca_loadings")}.
+#' @export
+#' @importFrom ggplot2 ggplot aes geom_point geom_segment geom_text geom_hline
+#' @importFrom ggplot2 geom_vline labs coord_equal theme_classic scale_color_manual
+plot_pca_biplot <- function(
+    df,
+    include_columns,
+    color_by,
+    color_map = NULL,
+    point_size = 2.2,
+    point_alpha = 0.9,
+    arrow_color = "grey30",
+    arrow_alpha = 0.85,
+    arrow_scale = 1,
+    show_feature_labels = TRUE,
+    feature_label_size = 3.5,
+    base_size = 12
+) {
+  if (!is.data.frame(df)) {
+    stop("df must be a data.frame.")
+  }
+  if (!is.character(include_columns) || length(include_columns) < 2) {
+    stop("include_columns must contain at least two feature column names.")
+  }
+  if (!is.character(color_by) || length(color_by) != 1 || is.na(color_by) || nchar(color_by) == 0) {
+    stop("color_by must be one column name.")
+  }
+
+  missing_features <- setdiff(include_columns, colnames(df))
+  if (length(missing_features) > 0) {
+    stop(sprintf("These include_columns are missing in df: %s", paste(missing_features, collapse = ", ")))
+  }
+  if (!(color_by %in% colnames(df))) {
+    stop("color_by column not found in df.")
+  }
+
+  if (!is.null(color_map)) {
+    if (is.list(color_map)) {
+      color_map <- unlist(color_map, use.names = TRUE)
+    }
+    if (!is.atomic(color_map) || is.null(names(color_map)) || any(names(color_map) == "")) {
+      stop("color_map must be a named atomic vector (e.g., c(A = '#1b9e77', B = '#d95f02')).")
+    }
+    color_map <- as.character(color_map)
+  }
+
+  work_df <- data.frame(df[, unique(c(include_columns, color_by)), drop = FALSE], stringsAsFactors = FALSE)
+  for (nm in include_columns) {
+    work_df[[nm]] <- suppressWarnings(as.numeric(work_df[[nm]]))
+  }
+
+  keep_idx <- stats::complete.cases(work_df[, include_columns, drop = FALSE]) & !is.na(work_df[[color_by]])
+  dropped_n <- sum(!keep_idx)
+  work_df <- work_df[keep_idx, , drop = FALSE]
+
+  if (dropped_n > 0) {
+    message(sprintf("Dropped %d row(s) with missing/non-finite feature values or missing color group.", dropped_n))
+  }
+  if (nrow(work_df) < 2) {
+    stop("Not enough complete rows for PCA after filtering.")
+  }
+
+  feature_mat <- as.matrix(work_df[, include_columns, drop = FALSE])
+  col_sd <- apply(feature_mat, 2, stats::sd)
+  if (any(!is.finite(col_sd) | col_sd == 0)) {
+    bad_cols <- include_columns[!is.finite(col_sd) | col_sd == 0]
+    stop(sprintf("These feature columns have zero/invalid variance: %s", paste(bad_cols, collapse = ", ")))
+  }
+
+  pca_fit <- stats::prcomp(feature_mat, center = TRUE, scale. = TRUE)
+
+  scores <- as.data.frame(pca_fit$x[, 1:2, drop = FALSE])
+  colnames(scores) <- c("PC1", "PC2")
+  scores$ColorGroup <- as.factor(work_df[[color_by]])
+
+  loadings <- as.data.frame(pca_fit$rotation[, 1:2, drop = FALSE])
+  colnames(loadings) <- c("PC1", "PC2")
+  loadings$Feature <- rownames(loadings)
+
+  score_range <- apply(scores[, c("PC1", "PC2"), drop = FALSE], 2, function(v) diff(range(v, na.rm = TRUE)))
+  loading_range <- apply(loadings[, c("PC1", "PC2"), drop = FALSE], 2, function(v) diff(range(v, na.rm = TRUE)))
+
+  valid <- is.finite(score_range) & is.finite(loading_range) & (loading_range > 0)
+  if (any(valid)) {
+    mult <- min(score_range[valid] / loading_range[valid]) * 0.80 * arrow_scale
+  } else {
+    mult <- 1 * arrow_scale
+  }
+  if (!is.finite(mult) || mult <= 0) mult <- 1
+
+  loadings$PC1_end <- loadings$PC1 * mult
+  loadings$PC2_end <- loadings$PC2 * mult
+
+  var_explained <- (pca_fit$sdev^2) / sum(pca_fit$sdev^2)
+  x_lab <- sprintf("PC1 (%.1f%%)", 100 * var_explained[1])
+  y_lab <- sprintf("PC2 (%.1f%%)", 100 * var_explained[2])
+
+  p <- ggplot(scores, aes(x = PC1, y = PC2, color = ColorGroup)) +
+    geom_hline(yintercept = 0, color = "grey75", linetype = "dashed", linewidth = 0.4) +
+    geom_vline(xintercept = 0, color = "grey75", linetype = "dashed", linewidth = 0.4) +
+    geom_point(size = point_size, alpha = point_alpha) +
+    geom_segment(
+      data = loadings,
+      aes(x = 0, y = 0, xend = PC1_end, yend = PC2_end),
+      inherit.aes = FALSE,
+      color = arrow_color,
+      alpha = arrow_alpha,
+      linewidth = 0.6,
+      arrow = ggplot2::arrow(length = grid::unit(0.18, "cm"))
+    ) +
+    labs(
+      x = x_lab,
+      y = y_lab,
+      color = color_by,
+      title = "PCA biplot"
+    ) +
+    coord_equal() +
+    ggplot2::theme_classic(base_size = base_size)
+
+  if (isTRUE(show_feature_labels)) {
+    p <- p + ggrepel::geom_text_repel(
+      data = loadings,
+      aes(x = PC1_end, y = PC2_end, label = Feature),
+      inherit.aes = FALSE,
+      color = arrow_color,
+      size = feature_label_size,
+      min.segment.length = 0,
+      box.padding = 0.3,
+      point.padding = 0.1
+    )
+  }
+
+  if (!is.null(color_map)) {
+    p <- p + scale_color_manual(values = color_map)
+  }
+
+  attr(p, "pca_model") <- pca_fit
+  attr(p, "pca_scores") <- scores
+  attr(p, "pca_loadings") <- loadings
+
+  return(p)
+}
+
+
+#' Plot a scaled feature heatmap using ComplexHeatmap
+#'
+#' Creates a heatmap where selected feature columns are shown as rows and
+#' samples are shown as columns. Feature values are z-score scaled by row
+#' (feature) before plotting. Optionally annotates sample columns with up to
+#' two metadata columns.
+#'
+#' @param df A data.frame containing feature and metadata columns. Each row is
+#'   one sample.
+#' @param include_columns Character vector of feature column names to include as
+#'   heatmap rows.
+#' @param annotate_columns Optional character vector (length 0 to 2) of metadata
+#'   column names used to annotate heatmap columns (samples).
+#' @param annotation_colors Optional named list of color mappings for annotation
+#'   columns passed to \code{ComplexHeatmap::HeatmapAnnotation(col = ...)}.
+#' @param cluster_rows Logical; whether to cluster heatmap rows.
+#' @param cluster_columns Logical; whether to cluster heatmap columns.
+#' @param show_row_dend Logical; whether to display the row dendrogram.
+#' @param show_column_dend Logical; whether to display the column dendrogram.
+#' @param show_row_names Logical; whether to display row names (feature names).
+#' @param show_column_names Logical; whether to display column names (sample names).
+#' @param heatmap_name Character legend title for the scaled values.
+#' @param row_title Optional row title.
+#' @param column_title Optional column title.
+#' @param draw Logical; if \code{TRUE}, draws the heatmap immediately.
+#'
+#' @return A \code{ComplexHeatmap} object. When \code{draw = TRUE}, returns the
+#'   object produced by \code{ComplexHeatmap::draw()}.
+#' @export
+plot_complex_heatmap <- function(
+    df,
+    include_columns,
+    annotate_columns = NULL,
+    annotation_colors = NULL,
+    cluster_rows = TRUE,
+    cluster_columns = TRUE,
+    show_row_dend = TRUE,
+    show_column_dend = TRUE,
+    show_row_names = TRUE,
+    show_column_names = TRUE,
+    heatmap_name = "z-score",
+    row_title = "Features",
+    column_title = NULL,
+    draw = TRUE
+) {
+  if (!is.data.frame(df)) {
+    stop("df must be a data.frame.")
+  }
+  if (!is.character(include_columns) || length(include_columns) < 1) {
+    stop("include_columns must contain at least one feature column name.")
+  }
+
+  include_columns <- unique(include_columns)
+  missing_features <- setdiff(include_columns, colnames(df))
+  if (length(missing_features) > 0) {
+    stop(sprintf("These include_columns are missing in df: %s", paste(missing_features, collapse = ", ")))
+  }
+
+  if (is.null(annotate_columns)) {
+    annotate_columns <- character(0)
+  }
+  if (!is.character(annotate_columns)) {
+    stop("annotate_columns must be NULL or a character vector.")
+  }
+  annotate_columns <- unique(annotate_columns)
+  if (length(annotate_columns) > 2) {
+    stop("annotate_columns supports up to two metadata columns.")
+  }
+
+  missing_anno <- setdiff(annotate_columns, colnames(df))
+  if (length(missing_anno) > 0) {
+    stop(sprintf("These annotate_columns are missing in df: %s", paste(missing_anno, collapse = ", ")))
+  }
+
+  if (!is.null(annotation_colors) && !is.list(annotation_colors)) {
+    stop("annotation_colors must be NULL or a named list.")
+  }
+  if (!is.logical(show_row_names) || length(show_row_names) != 1 || is.na(show_row_names)) {
+    stop("show_row_names must be TRUE or FALSE.")
+  }
+  if (!is.logical(show_column_names) || length(show_column_names) != 1 || is.na(show_column_names)) {
+    stop("show_column_names must be TRUE or FALSE.")
+  }
+
+  if (!requireNamespace("ComplexHeatmap", quietly = TRUE)) {
+    stop("This function requires package 'ComplexHeatmap'. Please install it first.")
+  }
+  if (!requireNamespace("circlize", quietly = TRUE)) {
+    stop("This function requires package 'circlize'. Please install it first.")
+  }
+
+  work_cols <- unique(c(include_columns, annotate_columns))
+  work_df <- data.frame(df[, work_cols, drop = FALSE], stringsAsFactors = FALSE)
+
+  for (nm in include_columns) {
+    work_df[[nm]] <- suppressWarnings(as.numeric(work_df[[nm]]))
+  }
+
+  keep_idx <- stats::complete.cases(work_df[, include_columns, drop = FALSE])
+  dropped_n <- sum(!keep_idx)
+  work_df <- work_df[keep_idx, , drop = FALSE]
+
+  if (dropped_n > 0) {
+    message(sprintf("Dropped %d row(s) with missing/non-numeric feature values.", dropped_n))
+  }
+  if (nrow(work_df) == 0) {
+    stop("No rows available for heatmap after filtering.")
+  }
+
+  sample_ids <- rownames(df)
+  if (is.null(sample_ids) || any(is.na(sample_ids)) || any(sample_ids == "")) {
+    sample_ids <- paste0("sample_", seq_len(nrow(df)))
+  }
+  sample_ids <- make.unique(as.character(sample_ids))[keep_idx]
+
+  feature_mat <- as.matrix(work_df[, include_columns, drop = FALSE])
+  mat <- t(feature_mat)
+  rownames(mat) <- include_columns
+  colnames(mat) <- sample_ids
+
+  row_scale <- function(v) {
+    v_mean <- mean(v, na.rm = TRUE)
+    v_sd <- stats::sd(v, na.rm = TRUE)
+    if (!is.finite(v_sd) || v_sd == 0) {
+      return(rep(0, length(v)))
+    }
+    (v - v_mean) / v_sd
+  }
+  scaled_mat <- t(apply(mat, 1, row_scale))
+  if (is.null(dim(scaled_mat))) {
+    scaled_mat <- matrix(scaled_mat, nrow = 1)
+    rownames(scaled_mat) <- rownames(mat)
+    colnames(scaled_mat) <- colnames(mat)
+  }
+
+  top_annotation <- NULL
+  if (length(annotate_columns) > 0) {
+    anno_df <- data.frame(work_df[, annotate_columns, drop = FALSE], stringsAsFactors = FALSE)
+    for (nm in annotate_columns) {
+      anno_df[[nm]] <- as.factor(anno_df[[nm]])
+    }
+
+    anno_col <- NULL
+    if (!is.null(annotation_colors)) {
+      if (is.null(names(annotation_colors)) || any(names(annotation_colors) == "")) {
+        stop("annotation_colors must be a named list using annotate_columns as names.")
+      }
+      anno_col <- annotation_colors[intersect(names(annotation_colors), annotate_columns)]
+    }
+
+    top_annotation <- ComplexHeatmap::HeatmapAnnotation(
+      df = anno_df,
+      col = anno_col,
+      which = "column"
+    )
+  }
+
+  lim <- max(abs(scaled_mat), na.rm = TRUE)
+  if (!is.finite(lim) || lim == 0) {
+    lim <- 1
+  }
+  col_fun <- circlize::colorRamp2(
+    c(-lim, 0, lim),
+    c("#3B4CC0", "#FFFFFF", "#B40426")
+  )
+
+  ht <- ComplexHeatmap::Heatmap(
+    scaled_mat,
+    name = heatmap_name,
+    col = col_fun,
+    cluster_rows = cluster_rows,
+    cluster_columns = cluster_columns,
+    show_row_dend = show_row_dend,
+    show_column_dend = show_column_dend,
+    show_row_names = show_row_names,
+    show_column_names = show_column_names,
+    top_annotation = top_annotation,
+    row_title = row_title,
+    column_title = column_title
+  )
+
+  if (isTRUE(draw)) {
+    return(ComplexHeatmap::draw(ht))
+  }
+
+  return(ht)
 }
 

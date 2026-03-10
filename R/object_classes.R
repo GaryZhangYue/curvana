@@ -6,6 +6,7 @@
 #' @slot metadata A data.frame with row names matching names(rawCurves). Stores metadata and calculated features.
 #' @slot senscal_segment A list with two slots: approach and retract, each is a named list of data.frames, storing the part of the raw curve used for sensitivity calculation.
 #' @slot baseline_segment A list with two slots: approach and retract, each is a named list of data.frames, storing the part of the raw curve used for baseline calculation
+#' @importFrom methods new setClass setMethod show
 setClass(
   "fdObj",
   slots = list(

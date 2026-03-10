@@ -10,14 +10,7 @@ analyze_curves_interaction_distance(
   threads = 1,
   baseline_span,
   y_direction = c("negative", "positive"),
-  x_direction = c("left", "right"),
-  threshold_method = c("sd", "mad", "iqr", "quantile", "abs_quantile", "fixed"),
-  multiplier = 3,
-  mad_constant = 1.4826,
-  q_low = 0.01,
-  q_high = 0.99,
-  q_abs = 0.99,
-  fixed_threshold = NULL
+  x_direction = c("left", "right")
 )
 }
 \arguments{
@@ -31,14 +24,19 @@ analyze_curves_interaction_distance(
 When "automatic", per-curve baseline spans are read from
 \code{fdObj@metadata$baseline_span_<useCurve>}.}
 
-\item{y_direction}{"negative" (rupture) or "positive" (repulsive).}
+\item{y_direction}{Detection mode:
+\itemize{
+  \item \code{"negative"}: detects first point with \code{force_nN < noiseBand_low}
+    (curve enters adhesive region; threshold is typically negative).
+  \item \code{"positive"}: detects last point with \code{force_nN > noiseBand_high}
+    (curve exits repulsive excursion; threshold is typically positive).
+}}
 
-\item{x_direction}{"left" or "right". Direction to scan from baseline.}
-
-\item{threshold_method}{Thresholding method, passed to
-\code{analyze_a_curve_interaction_distance()}.}
-
-\item{multiplier, mad_constant, q_low, q_high, q_abs, fixed_threshold}{Threshold-related parameters, passed through to the inner function.}
+\item{x_direction}{Scan direction for each curve:
+\itemize{
+  \item \code{"left"}: right-to-left, from just before baseline toward origin.
+  \item \code{"right"}: left-to-right, from origin toward just before baseline.
+}}
 }
 \value{
 The updated \code{fdObj} with two new metadata columns:
@@ -51,6 +49,16 @@ Applies \code{analyze_a_curve_interaction_distance()} to each transformed curve
 in an \code{fdObj} and stores the resulting interaction distances and thresholds
 in the metadata. These measure the first significant excursion in force relative
 to a baseline, either repulsive (positive force deviation) or rupture (negative).
+}
+\details{
+This function assumes precomputed noise-band columns already exist in
+\code{fdObj@metadata} and uses them directly:
+\itemize{
+  \item if \code{y_direction = "negative"}: \code{noiseBand_low_nN_<useCurve>}
+  \item if \code{y_direction = "positive"}: \code{noiseBand_high_nN_<useCurve>}
+}
+Example for \code{useCurve = "retract"}:
+\code{noiseBand_low_nN_retract} or \code{noiseBand_high_nN_retract}.
 }
 \seealso{
 analyze_a_curve_interaction_distance

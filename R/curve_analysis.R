@@ -21,7 +21,7 @@
 #' calc_sensitivity(end = 80, intv = 10, x = x, y = y)
 #'
 #' @export
-calc_sensitivity <- function(end, intv, x, y) {
+calc_sensitivity <- function(end, intv=4, x, y) {
   sens_x <- numeric()
   sens_y <- numeric()
 
@@ -530,8 +530,9 @@ transform_curves <- function(fdObj, spring_constant, useCurve = c("approach", "r
 #' Adhesive Force for a Single Transformed AFM Curve
 #'
 #' Computes the adhesive force as the most negative force value in a transformed curve
-#' and returns that value along with the separation distance at which it occurs.
-#'
+#' and returns that value along with the separation distance at which it occurs. Note that
+#' the value will be negated. For example, if the most negative force is -2 nN,
+#' the function will return 2 nN as the adhesive force.
 #' @param curve_df A data.frame with columns:
 #'   \itemize{
 #'     \item{\code{separation_distance_nm}}{Numeric tip-sample separation (nm).}
@@ -549,7 +550,7 @@ transform_curves <- function(fdObj, spring_constant, useCurve = c("approach", "r
 #' @examples
 #' df <- data.frame(
 #'   separation_distance_nm = seq(-50, 200, by = 1),
-#'   force_nN = 0.02 * seq(-50, 200, by = 1) + c(rep(0, 80), -3, rep(0, 171))
+#'   force_nN = 0.02 * seq(-50, 200, by = 1) + c(rep(0, 80), -3, rep(0, 170))
 #' )
 #' analyze_a_curve_adhesive_force(df)
 #'
@@ -581,7 +582,7 @@ analyze_a_curve_adhesive_force <- function(curve_df) {
     return(c(adhesive_force_nN = 0, separation_distance_nm = NA_real_))
   }
 
-  c(adhesive_force_nN = unname(min_force),
+  c(adhesive_force_nN = unname(min_force)*(-1),
     separation_distance_nm = unname(sep[idx_min]))
 }
 
@@ -663,11 +664,251 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
   n_total   <- length(curve_list)
   n_na      <- sum(is.na(forces))
   n_zero    <- sum(!is.na(forces) & forces == 0)
-  n_detect  <- sum(!is.na(forces) & forces < 0)
+  n_detect  <- sum(!is.na(forces) & forces > 0)
 
   message(sprintf(
-    "Adhesive force analyzed for %d curves: %d with adhesion (negative), %d with no adhesion (0), %d not analyzed (NA).",
+    "Adhesive force analyzed for %d curves: %d with adhesion, %d with no adhesion (0), %d not analyzed (NA).",
     n_total, n_detect, n_zero, n_na
+  ))
+
+  fdObj
+}
+
+#' Determine single-curve noise cutoff from baseline force noise
+#'
+#' Computes a positive noise cutoff (nN) from the baseline window of one transformed
+#' AFM curve.
+#'
+#' @param curve_df data.frame with columns:
+#'   - separation_distance_nm (numeric): x values (distance, nm)
+#'   - force_nN (numeric): y values (force, nN)
+#' @param baseline_span Integer >= 1. Number of last points used as the baseline window.
+#' @param threshold_method Character scalar controlling how baseline noise bands are estimated.
+#'   One of
+#'   \\code{c("sd", "mad", "quantile", "fixed")} (default \\code{"sd"}):
+#'   \\itemize{
+#'     \\item \\code{"sd"}: symmetric bands from baseline SD, i.e. \\eqn{\\pm\\,sd(y_{base})\\times multiplier}.
+#'     \\item \\code{"mad"}: symmetric robust bands from MAD, i.e. \\eqn{\\pm\\,mad(y_{base})\\times mad\\_constant\\times multiplier}.
+#'     \\item \\code{"quantile"}: asymmetric empirical bands using \\code{quantile\\_low} and \\code{quantile\\_high}, each scaled by \\code{multiplier}.
+#'     \\item \\code{"fixed"}: user-specified \\code{fixed\\_low} and \\code{fixed\\_high}, each scaled by \\code{multiplier}.
+#'   }
+#' @param multiplier Numeric >= 0 scaling multiplier for all methods. Default 3.
+#' @param mad_constant Scaling for MAD to be SD-equivalent. Default 1.4826.
+#' @param quantile_low Lower quantile probability for "quantile" method. Default 0.25.
+#' @param quantile_high Upper quantile probability for "quantile" method. Default 0.75.
+#' @param fixed_low Numeric lower band (nN) for "fixed" method. Default NULL.
+#' @param fixed_high Numeric upper band (nN) for "fixed" method. Default NULL.
+#'
+#' @return Named numeric vector: c(noiseBand_low = value, noiseBand_high = value).
+#' @export
+analyze_a_curve_noise <- function(
+    curve_df,
+    baseline_span,
+  threshold_method = c("sd","mad","quantile","fixed"),
+    multiplier = 3,
+    mad_constant = 1.4826,
+    quantile_low = 0.25,
+    quantile_high = 0.75,
+    fixed_low = NULL,
+    fixed_high = NULL
+) {
+  threshold_method <- match.arg(threshold_method)
+
+  if (!is.data.frame(curve_df)) {
+    warning("curve_df must be a data.frame. Returning NA as results.")
+    return(c(noiseBand_low = NA_real_, noiseBand_high = NA_real_))
+  }
+  if (!all(c("separation_distance_nm", "force_nN") %in% names(curve_df))) {
+    warning("curve_df must contain 'separation_distance_nm' and 'force_nN'. Returning NA as results.")
+    return(c(noiseBand_low = NA_real_, noiseBand_high = NA_real_))
+  }
+  if (!is.numeric(baseline_span) || length(baseline_span) != 1 || baseline_span < 1) {
+    warning("baseline_span must be a single integer >= 1. Returning NA as results.")
+    return(c(noiseBand_low = NA_real_, noiseBand_high = NA_real_))
+  }
+
+  n <- nrow(curve_df)
+  baseline_span <- min(as.integer(baseline_span), n)
+  b_start <- n - baseline_span + 1L
+  y_base  <- curve_df$force_nN[b_start:n]
+
+  guard <- function(val) if (is.na(val) || val <= 0) .Machine$double.eps else val
+
+  if (!is.numeric(multiplier) || length(multiplier) != 1 || is.na(multiplier) || multiplier < 0) {
+    stop("multiplier must be a single non-negative numeric value.")
+  }
+
+  if (threshold_method == "sd") {
+    value <- guard(stats::sd(y_base, na.rm = TRUE)) * multiplier
+    noiseBand_low <- -value
+    noiseBand_high <- value
+  } else if (threshold_method == "mad") {
+    md <- stats::mad(y_base, constant = 1, na.rm = TRUE)
+    value <- guard(md) * mad_constant * multiplier
+    noiseBand_low <- -value
+    noiseBand_high <- value
+  } else if (threshold_method == "quantile") {
+    if (!is.numeric(quantile_low) || length(quantile_low) != 1 || is.na(quantile_low) || quantile_low < 0 || quantile_low > 1) {
+      stop("quantile_low must be a single numeric value in [0, 1].")
+    }
+    if (!is.numeric(quantile_high) || length(quantile_high) != 1 || is.na(quantile_high) || quantile_high < 0 || quantile_high > 1) {
+      stop("quantile_high must be a single numeric value in [0, 1].")
+    }
+    noiseBand_low <- stats::quantile(y_base, probs = quantile_low, na.rm = TRUE, names = FALSE) * multiplier
+    noiseBand_high <- stats::quantile(y_base, probs = quantile_high, na.rm = TRUE, names = FALSE) * multiplier
+    if (!is.finite(noiseBand_low)) noiseBand_low <- -.Machine$double.eps
+    if (!is.finite(noiseBand_high)) noiseBand_high <- .Machine$double.eps
+  } else if (threshold_method == "fixed") {
+    if (is.null(fixed_low) || !is.numeric(fixed_low) || length(fixed_low) != 1 || is.na(fixed_low)) {
+      stop("For threshold_method = 'fixed', provide numeric fixed_low (nN).")
+    }
+    if (is.null(fixed_high) || !is.numeric(fixed_high) || length(fixed_high) != 1 || is.na(fixed_high)) {
+      stop("For threshold_method = 'fixed', provide numeric fixed_high (nN).")
+    }
+    noiseBand_low <- fixed_low * multiplier
+    noiseBand_high <- fixed_high * multiplier
+    if (!is.finite(noiseBand_low)) noiseBand_low <- -.Machine$double.eps
+    if (!is.finite(noiseBand_high)) noiseBand_high <- .Machine$double.eps
+  } else {
+    stop("Unknown threshold_method.")
+  }
+
+  c(noiseBand_low = noiseBand_low, noiseBand_high = noiseBand_high)
+}
+
+#' Noise-band Analysis (nN) for All Transformed Curves in an fdObj
+#'
+#' Applies \code{analyze_a_curve_noise()} to each transformed curve in an
+#' \code{fdObj} and stores per-curve lower/upper noise bands in metadata:
+#' \itemize{
+#'   \item \code{noiseBand_low_nN_<dir>}
+#'   \item \code{noiseBand_high_nN_<dir>}
+#' }
+#' where \code{<dir>} is \code{"approach"} or \code{"retract"}.
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param useCurve Character; must be one of \code{c("retract", "approach")}.
+#' @param threads Integer. Number of parallel workers (default \code{1}).
+#' @param baseline_span Either a single integer >= 1, or the string \code{"automatic"}.
+#'   When \code{"automatic"}, per-curve baseline spans are read from
+#'   \code{fdObj@metadata$baseline_span_<useCurve>}.
+#' @param threshold_method Character scalar controlling how baseline noise bands are estimated.
+#'   One of \code{c("sd", "mad", "quantile", "fixed")} (default \code{"sd"}).
+#' @param multiplier Numeric >= 0 scaling multiplier for all methods. Default 3.
+#' @param mad_constant Scaling for MAD to be SD-equivalent. Default 1.4826.
+#' @param quantile_low Lower quantile probability for \code{"quantile"} method. Default 0.25.
+#' @param quantile_high Upper quantile probability for \code{"quantile"} method. Default 0.75.
+#' @param fixed_low Numeric lower band (nN) for \code{"fixed"} method. Default NULL.
+#' @param fixed_high Numeric upper band (nN) for \code{"fixed"} method. Default NULL.
+#'
+#' @return The updated \code{fdObj} with two new metadata columns:
+#' \code{noiseBand_low_nN_<dir>} and \code{noiseBand_high_nN_<dir>}.
+#' @seealso analyze_a_curve_noise
+#' @export
+analyze_curves_noise <- function(
+    fdObj,
+    useCurve = c("retract", "approach"),
+    threads = 1,
+    baseline_span,
+    threshold_method = c("sd", "mad", "quantile", "fixed"),
+    multiplier = 3,
+    mad_constant = 1.4826,
+    quantile_low = 0.25,
+    quantile_high = 0.75,
+    fixed_low = NULL,
+    fixed_high = NULL
+) {
+  if (!inherits(fdObj, "fdObj")) {
+    stop("fdObj must be of class 'fdObj'")
+  }
+
+  useCurve <- match.arg(useCurve)
+  threshold_method <- match.arg(threshold_method)
+  curve_list <- if (useCurve == "approach") fdObj@approachCurves else fdObj@retractCurves
+  dir_tag <- useCurve
+
+  if (is.character(baseline_span) && baseline_span == "automatic") {
+    meta_col <- paste0("baseline_span_", dir_tag)
+    if (!meta_col %in% names(fdObj@metadata)) {
+      stop(sprintf(
+        "baseline_span is set to 'automatic', but column '%s' is missing in fdObj@metadata.",
+        meta_col
+      ))
+    }
+    use_baseline_span <- "from_metadata"
+  } else if (is.numeric(baseline_span) && length(baseline_span) == 1 && baseline_span >= 1) {
+    use_baseline_span <- "fixed"
+  } else {
+    stop("baseline_span must be either 'automatic' or a single integer >= 1.")
+  }
+
+  if (is.null(curve_list) || length(curve_list) == 0) {
+    warning("No transformed curves found for the selected direction. Did you run transform_curves()?")
+    fdObj@metadata[[paste0("noiseBand_low_nN_", dir_tag)]] <- NA_real_
+    fdObj@metadata[[paste0("noiseBand_high_nN_", dir_tag)]] <- NA_real_
+    return(fdObj)
+  }
+
+  curve_names <- names(curve_list)
+
+  run_one <- function(id) {
+    df <- curve_list[[id]]
+    if (!is.data.frame(df) ||
+        !all(c("separation_distance_nm", "force_nN") %in% names(df)) ||
+        nrow(df) == 0) {
+      return(c(noiseBand_low = NA_real_, noiseBand_high = NA_real_))
+    }
+
+    bs_value <- if (use_baseline_span == "from_metadata") {
+      bs <- fdObj@metadata[[paste0("baseline_span_", dir_tag)]][
+        match(id, rownames(fdObj@metadata))
+      ]
+      if (is.na(bs) || !is.numeric(bs) || bs < 1) {
+        return(c(noiseBand_low = NA_real_, noiseBand_high = NA_real_))
+      }
+      bs
+    } else {
+      baseline_span
+    }
+
+    analyze_a_curve_noise(
+      curve_df = df,
+      baseline_span = bs_value,
+      threshold_method = threshold_method,
+      multiplier = multiplier,
+      mad_constant = mad_constant,
+      quantile_low = quantile_low,
+      quantile_high = quantile_high,
+      fixed_low = fixed_low,
+      fixed_high = fixed_high
+    )
+  }
+
+  res_list <- if (threads > 1) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = threads)
+    future.apply::future_lapply(curve_names, run_one)
+  } else {
+    lapply(curve_names, run_one)
+  }
+
+  res_mat <- do.call(rbind, res_list)
+  res_df <- as.data.frame(res_mat, stringsAsFactors = FALSE)
+  rownames(res_df) <- curve_names
+
+  fdObj@metadata[[paste0("noiseBand_low_nN_", dir_tag)]] <-
+    res_df$noiseBand_low[match(rownames(fdObj@metadata), rownames(res_df))]
+  fdObj@metadata[[paste0("noiseBand_high_nN_", dir_tag)]] <-
+    res_df$noiseBand_high[match(rownames(fdObj@metadata), rownames(res_df))]
+
+  n_total <- length(curve_list)
+  n_na <- sum(is.na(res_df$noiseBand_low) | is.na(res_df$noiseBand_high))
+  n_valid <- n_total - n_na
+
+  message(sprintf(
+    "Noise bands analyzed for %d curves (%s): %d valid results.",
+    n_total, dir_tag, n_valid
   ))
 
   fdObj
@@ -678,33 +919,25 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 #' @description
 #' Detects the first significant deviation in force relative to a baseline window,
 #' marking rupture length (negative excursion) or repulsive distance (positive excursion).
-#' The cutoff can be based on SD, MAD, IQR, quantiles, absolute-quantiles, or a fixed value.
+#' This function uses user-provided noise-band thresholds directly.
 #' Scanning can proceed from right-to-left (default) or left-to-right.
+#' When y-direction is negative, the function looks for the first point where force < -noise_cutoff (i.e., the curve enters the adhesive region).
+#' When y-direction is positive, it looks for the last point where force > noise_cutoff (i.e., the curve exits the repulsive region).
 #'
 #' @param curve_df data.frame with columns:
 #'   - separation_distance_nm (numeric): x values (distance, nm)
 #'   - force_nN (numeric): y values (force, nN)
 #' @param baseline_span Integer >= 1. Number of last points used as the baseline window.
 #' @param y_direction "negative" or "positive".
-#'   - "negative": find first y < -threshold (rupture-like)
-#'   - "positive": find first y >  threshold (repulsion-like)
+#'   - "negative": find first y < threshold (rupture-like; threshold is typically negative)
+#'   - "positive": find first y > threshold (repulsion-like; threshold is typically positive)
 #' @param x_direction "left" or "right".
 #'   - "left": scan from right to left (from just before baseline toward the origin)
 #'   - "right": scan from left to right (from origin up to just before baseline)
-#' @param threshold_method One of
-#'   c("sd","mad","iqr","quantile","abs_quantile","fixed"). Default "sd".
-#'   - "sd":      threshold = multiplier * sd(baseline)
-#'   - "mad":     threshold = multiplier * (mad(baseline) * mad_constant)
-#'   - "iqr":     threshold = multiplier * IQR(baseline)
-#'   - "quantile": for "negative" use |quantile(baseline, probs = q_low)|,
-#'                 for "positive" use  quantile(baseline, probs = q_high)
-#'   - "abs_quantile": threshold = quantile(abs(baseline), probs = q_abs)
-#'   - "fixed":  threshold = fixed_threshold (in nN)
-#' @param multiplier Numeric >= 0 used by "sd", "mad", "iqr". Default 3.
-#' @param mad_constant Scaling for MAD to be SD-equivalent. Default 1.4826.
-#' @param q_low,q_high Quantiles for "quantile" method. Defaults: 0.01, 0.99.
-#' @param q_abs Quantile for "abs_quantile". Default 0.99.
-#' @param fixed_threshold Numeric (nN) for "fixed" method. Default NULL.
+#' @param noiseBand_low Numeric scalar threshold for negative-direction detection.
+#'   Required when \code{y_direction = "negative"}.
+#' @param noiseBand_high Numeric scalar threshold for positive-direction detection.
+#'   Required when \code{y_direction = "positive"}.
 #'
 #' @return c(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
 #' @export
@@ -713,17 +946,11 @@ analyze_a_curve_interaction_distance <- function(
     baseline_span,
     y_direction = c("negative", "positive"),
     x_direction = c("left", "right"),
-    threshold_method = c("sd","mad","iqr","quantile","abs_quantile","fixed"),
-    multiplier = 3,
-    mad_constant = 1.4826,
-    q_low = 0.01,
-    q_high = 0.99,
-    q_abs = 0.99,
-    fixed_threshold = NULL
+    noiseBand_low = NULL,
+    noiseBand_high = NULL
 ) {
   y_direction <- match.arg(y_direction)
   x_direction <- match.arg(x_direction)
-  threshold_method <- match.arg(threshold_method)
 
   # ---- validation ----
   if (!is.data.frame(curve_df)) {
@@ -744,50 +971,19 @@ analyze_a_curve_interaction_distance <- function(
 
   x <- curve_df$separation_distance_nm
   y <- curve_df$force_nN
-
-  # ---- baseline window (last baseline_span points) ----
   b_start <- n - baseline_span + 1L
-  y_base  <- y[b_start:n]
 
-  # ---- compute threshold ----
-  compute_threshold <- function() {
-    guard <- function(val) if (is.na(val) || val <= 0) .Machine$double.eps else val
-
-    if (threshold_method == "sd") {
-      sdv <- stats::sd(y_base, na.rm = TRUE)
-      return(multiplier * guard(sdv))
+  threshold <- if (y_direction == "negative") {
+    if (is.null(noiseBand_low) || !is.numeric(noiseBand_low) || length(noiseBand_low) != 1 || is.na(noiseBand_low)) {
+      stop("For y_direction = 'negative', provide noiseBand_low as a single numeric value.")
     }
-    if (threshold_method == "mad") {
-      md <- stats::mad(y_base, constant = 1, na.rm = TRUE)  # unscaled MAD
-      return(multiplier * guard(md) * mad_constant)
+    as.numeric(noiseBand_low)
+  } else {
+    if (is.null(noiseBand_high) || !is.numeric(noiseBand_high) || length(noiseBand_high) != 1 || is.na(noiseBand_high)) {
+      stop("For y_direction = 'positive', provide noiseBand_high as a single numeric value.")
     }
-    if (threshold_method == "iqr") {
-      iq <- stats::IQR(y_base, na.rm = TRUE)
-      return(multiplier * guard(iq))
-    }
-    if (threshold_method == "quantile") {
-      if (y_direction == "negative") {
-        qv <- stats::quantile(y_base, probs = q_low, na.rm = TRUE, names = FALSE)
-        return(abs(guard(abs(qv))))
-      } else {
-        qv <- stats::quantile(y_base, probs = q_high, na.rm = TRUE, names = FALSE)
-        return(guard(abs(qv)))
-      }
-    }
-    if (threshold_method == "abs_quantile") {
-      qv <- stats::quantile(abs(y_base), probs = q_abs, na.rm = TRUE, names = FALSE)
-      return(guard(qv))
-    }
-    if (threshold_method == "fixed") {
-      if (is.null(fixed_threshold) || !is.numeric(fixed_threshold) || fixed_threshold < 0) {
-        stop("For threshold_method = 'fixed', provide non-negative numeric fixed_threshold (nN).")
-      }
-      return(guard(fixed_threshold))
-    }
-    stop("Unknown threshold_method.")
+    as.numeric(noiseBand_high)
   }
-
-  threshold <- compute_threshold()
 
   # ---- choose scan indices based on x_direction ----
   if (x_direction == "left") {
@@ -806,13 +1002,13 @@ analyze_a_curve_interaction_distance <- function(
   # ---- apply y-direction rule ----
   y_scan <- y[scan_idx]
   hit_mask <- if (y_direction == "negative") {
-    y_scan < -threshold
+    y_scan < threshold
   } else {
-    y_scan >  threshold
+    y_scan > threshold
   }
 
-  hit <- if (y_direction == "negative") which(hit_mask)[1L] else which(!hit_mask)[1L]
-  
+  hit <- if (y_direction == "negative") which(hit_mask)[1L] - 1L else which(!hit_mask)[1L]
+
   if (is.na(hit)) return(c(distance = NA_real_, threshold = threshold))
 
   c(distance = x[scan_idx[hit]], threshold = threshold)
@@ -831,12 +1027,28 @@ analyze_a_curve_interaction_distance <- function(
 #' @param baseline_span Either a single integer >= 1, or the string "automatic".
 #'   When "automatic", per-curve baseline spans are read from
 #'   \code{fdObj@metadata$baseline_span_<useCurve>}.
-#' @param y_direction "negative" (rupture) or "positive" (repulsive).
-#' @param x_direction "left" or "right". Direction to scan from baseline.
-#' @param threshold_method Thresholding method, passed to
-#'   \code{analyze_a_curve_interaction_distance()}.
-#' @param multiplier,mad_constant,q_low,q_high,q_abs,fixed_threshold
-#'   Threshold-related parameters, passed through to the inner function.
+#' @param y_direction Detection mode:
+#'   \itemize{
+#'     \item \code{"negative"}: detects first point with \code{force_nN < noiseBand_low}
+#'       (curve enters adhesive region; threshold is typically negative).
+#'     \item \code{"positive"}: detects last point with \code{force_nN > noiseBand_high}
+#'       (curve exits repulsive excursion; threshold is typically positive).
+#'   }
+#' @param x_direction Scan direction for each curve:
+#'   \itemize{
+#'     \item \code{"left"}: right-to-left, from just before baseline toward origin.
+#'     \item \code{"right"}: left-to-right, from origin toward just before baseline.
+#'   }
+#'
+#' @details
+#' This function assumes precomputed noise-band columns already exist in
+#' \code{fdObj@metadata} and uses them directly:
+#' \itemize{
+#'   \item if \code{y_direction = "negative"}: \code{noiseBand_low_nN_<useCurve>}
+#'   \item if \code{y_direction = "positive"}: \code{noiseBand_high_nN_<useCurve>}
+#' }
+#' Example for \code{useCurve = "retract"}:
+#' \code{noiseBand_low_nN_retract} or \code{noiseBand_high_nN_retract}.
 #'
 #' @return The updated \code{fdObj} with two new metadata columns:
 #' \code{<type>_distance_nm_<dir>} and \code{<type>_threshold_nN_<dir>},
@@ -850,14 +1062,7 @@ analyze_curves_interaction_distance <- function(
     threads = 1,
     baseline_span,
     y_direction = c("negative", "positive"),
-    x_direction = c("left", "right"),
-    threshold_method = c("sd","mad","iqr","quantile","abs_quantile","fixed"),
-    multiplier = 3,
-    mad_constant = 1.4826,
-    q_low = 0.01,
-    q_high = 0.99,
-    q_abs = 0.99,
-    fixed_threshold = NULL
+    x_direction = c("left", "right")
 ) {
   # ---- Validation ----
   if (!inherits(fdObj, "fdObj"))
@@ -866,10 +1071,19 @@ analyze_curves_interaction_distance <- function(
   useCurve <- match.arg(useCurve)
   y_direction <- match.arg(y_direction)
   x_direction <- match.arg(x_direction)
-  threshold_method <- match.arg(threshold_method)
 
   curve_list <- if (useCurve == "approach") fdObj@approachCurves else fdObj@retractCurves
   dir_tag <- useCurve
+
+  noise_col <- if (y_direction == "negative") {
+    paste0("noiseBand_low_nN_", dir_tag)
+  } else {
+    paste0("noiseBand_high_nN_", dir_tag)
+  }
+
+  if (!noise_col %in% names(fdObj@metadata)) {
+    stop(sprintf("Required metadata column '%s' is missing.", noise_col))
+  }
 
   # ---- baseline_span handling ----
   if (is.character(baseline_span) && baseline_span == "automatic") {
@@ -921,19 +1135,30 @@ analyze_curves_interaction_distance <- function(
       baseline_span
     }
 
-    analyze_a_curve_interaction_distance(
-      curve_df = df,
-      baseline_span = bs_value,
-      y_direction = y_direction,
-      x_direction = x_direction,
-      threshold_method = threshold_method,
-      multiplier = multiplier,
-      mad_constant = mad_constant,
-      q_low = q_low,
-      q_high = q_high,
-      q_abs = q_abs,
-      fixed_threshold = fixed_threshold
-    )
+    curve_threshold <- fdObj@metadata[[noise_col]][match(id, rownames(fdObj@metadata))]
+    if (is.na(curve_threshold) || !is.numeric(curve_threshold) || length(curve_threshold) != 1) {
+      return(c(distance = NA_real_, threshold = NA_real_))
+    }
+
+    if (y_direction == "negative") {
+      analyze_a_curve_interaction_distance(
+        curve_df = df,
+        baseline_span = bs_value,
+        y_direction = y_direction,
+        x_direction = x_direction,
+        noiseBand_low = as.numeric(curve_threshold),
+        noiseBand_high = NULL
+      )
+    } else {
+      analyze_a_curve_interaction_distance(
+        curve_df = df,
+        baseline_span = bs_value,
+        y_direction = y_direction,
+        x_direction = x_direction,
+        noiseBand_low = NULL,
+        noiseBand_high = as.numeric(curve_threshold)
+      )
+    }
   }
 
   # ---- Parallel or sequential execution ----
@@ -983,8 +1208,8 @@ analyze_curves_interaction_distance <- function(
 #' \code{separation_distance_nm} (x) and \code{force_nN} (y).
 #'
 #' The computation proceeds in the given point order (no sorting). Segments entirely
-#' above the positive noise threshold or below the negative noise threshold are integrated 
-#' as trapezoids, and segments that cross the noise thresholds are split at the interpolated 
+#' above the positive noise threshold or below the negative noise threshold are integrated
+#' as trapezoids, and segments that cross the noise thresholds are split at the interpolated
 #' crossing point and integrated as triangles. Areas within the noise band (-noise_cutoff to +noise_cutoff) are ignored.
 #'
 #' As a practical fix for small transformation offsets near the origin, any
@@ -996,12 +1221,17 @@ analyze_curves_interaction_distance <- function(
 #'     \item{\code{separation_distance_nm}}{Numeric x-coordinates (nm). Values < 0 are clamped to 0.}
 #'     \item{\code{force_nN}}{Numeric y-coordinates (nN).}
 #'   }
-#' @param noise_cutoff Numeric. Noise threshold for energy calculation (default: 0). Only areas where |force| > noise_cutoff are included in energy calculation. Negative values are converted using \code{abs(noise_cutoff)}.
+#' @param noiseBand_low Numeric lower noise-band threshold
+#'   (default: \code{-.Machine$double.eps}).
+#'   Adhesive area is counted where \code{force_nN < noiseBand_low}.
+#' @param noiseBand_high Numeric upper noise-band threshold
+#'   (default: \code{.Machine$double.eps}).
+#'   Repulsive area is counted where \code{force_nN > noiseBand_high}.
 #'
 #' @return A named numeric vector of length 2:
 #' \describe{
-#'   \item{adhesive_area}{Total positive area where \code{y < -noise_cutoff}.}
-#'   \item{repulsive_area}{Total positive area where \code{y > noise_cutoff}.}
+#'   \item{adhesive_area}{Total positive area where \code{y < noiseBand_low}.}
+#'   \item{repulsive_area}{Total positive area where \code{y > noiseBand_high}.}
 #' }
 #'
 #' @examples
@@ -1010,12 +1240,23 @@ analyze_curves_interaction_distance <- function(
 #'   force_nN               = c( 0.50 , 0, 0.30, -0.20, 0.10)
 #' )
 #' analyze_a_curve_area(df)
-#' analyze_a_curve_area(df, noise_cutoff = 0.1)  # Only count forces > 0.1 nN in magnitude
+#' analyze_a_curve_area(df, noiseBand_low = -0.1, noiseBand_high = 0.1)
 #'
 #' @seealso area_trapezoid, area_triangle, crossing_x0
 #' @export
-analyze_a_curve_area <- function(curve_df, noise_cutoff = 0) {
-  noise_cutoff <- abs(noise_cutoff)
+analyze_a_curve_area <- function(curve_df, noiseBand_low = -.Machine$double.eps, noiseBand_high = .Machine$double.eps) {
+  if (!is.numeric(noiseBand_low) || length(noiseBand_low) != 1 || is.na(noiseBand_low)) {
+    stop("noiseBand_low must be a single numeric value.")
+  }
+  if (!is.numeric(noiseBand_high) || length(noiseBand_high) != 1 || is.na(noiseBand_high)) {
+    stop("noiseBand_high must be a single numeric value.")
+  }
+  if (!(noiseBand_low <= 0)) {
+    stop("noiseBand_low must be <= 0.")
+  }
+  if (!(noiseBand_high >= 0)) {
+    stop("noiseBand_high must be >= 0.")
+  }
 
   # ---- Universal input check (adapted to this function's return type) ----
   if (!is.data.frame(curve_df) ||
@@ -1052,85 +1293,80 @@ analyze_a_curve_area <- function(curve_df, noise_cutoff = 0) {
     # Skip zero-width segments (possible after clamping/backtracking)
     if (x1 == x2) next
 
-    # Both above noise cutoff → repulsive trapezoid
-    if (y1 > noise_cutoff && y2 > noise_cutoff) {
-      repulsive_area <- repulsive_area + area_trapezoid(x1, y1 - noise_cutoff, x2, y2 - noise_cutoff)
+    # Both above upper noise band → repulsive trapezoid
+    if (y1 > noiseBand_high && y2 > noiseBand_high) {
+      repulsive_area <- repulsive_area + area_trapezoid(x1, y1 - noiseBand_high, x2, y2 - noiseBand_high)
       next
     }
 
-    # Both below negative noise cutoff → adhesive trapezoid
-    if (y1 < -noise_cutoff && y2 < -noise_cutoff) {
-      adhesive_area  <- adhesive_area  + area_trapezoid(x1, y1 + noise_cutoff, x2, y2 + noise_cutoff)
+    # Both below lower noise band → adhesive trapezoid
+    if (y1 < noiseBand_low && y2 < noiseBand_low) {
+      adhesive_area  <- adhesive_area  + area_trapezoid(x1, y1 - noiseBand_low, x2, y2 - noiseBand_low)
       next
     }
 
-    # Both within noise band (-noise_cutoff to +noise_cutoff) → skip entirely (no area counted)
-    if (abs(y1) <= noise_cutoff && abs(y2) <= noise_cutoff) {
+    # Both within noise band [noiseBand_low, noiseBand_high] → skip entirely
+    if (y1 >= noiseBand_low && y1 <= noiseBand_high && y2 >= noiseBand_low && y2 <= noiseBand_high) {
       next
     }
 
-    # One endpoint on positive noise cutoff
-    if (y1 == noise_cutoff && y2 > noise_cutoff) {
-      repulsive_area <- repulsive_area + area_triangle(x2, y2 - noise_cutoff, x1)
+    # One endpoint on upper noise band
+    if (y1 == noiseBand_high && y2 > noiseBand_high) {
+      repulsive_area <- repulsive_area + area_triangle(x2, y2 - noiseBand_high, x1)
       next
     }
-    if (y2 == noise_cutoff && y1 > noise_cutoff) {
-      repulsive_area <- repulsive_area + area_triangle(x1, y1 - noise_cutoff, x2)
-      next
-    }
-
-    # One endpoint on negative noise cutoff 
-    if (y1 == -noise_cutoff && y2 < -noise_cutoff) {
-      adhesive_area <- adhesive_area + area_triangle(x2, y2 + noise_cutoff, x1)
-      next
-    }
-    if (y2 == -noise_cutoff && y1 < -noise_cutoff) {
-      adhesive_area <- adhesive_area + area_triangle(x1, y1 + noise_cutoff, x2)
+    if (y2 == noiseBand_high && y1 > noiseBand_high) {
+      repulsive_area <- repulsive_area + area_triangle(x1, y1 - noiseBand_high, x2)
       next
     }
 
-    # Handle crossings through noise cutoff boundaries
-    # NOTE: Area within the noise band (-noise_cutoff to +noise_cutoff) is NEVER included
-    # Crossing from above noise_cutoff to below -noise_cutoff (or vice versa)
-    if ((y1 > noise_cutoff && y2 < -noise_cutoff) || (y1 < -noise_cutoff && y2 > noise_cutoff)) {
-      # Find crossing at positive noise cutoff
-      x_pos <- x1 + (x2 - x1) * (noise_cutoff - y1) / (y2 - y1)
-      # Find crossing at negative noise cutoff  
-      x_neg <- x1 + (x2 - x1) * (-noise_cutoff - y1) / (y2 - y1)
-      
-      if (y1 > noise_cutoff) {
-        # y1 positive, y2 negative - only count areas outside noise band
-        repulsive_area <- repulsive_area + area_triangle(x1, y1 - noise_cutoff, x_pos)
-        adhesive_area <- adhesive_area + area_triangle(x2, y2 + noise_cutoff, x_neg)
+    # One endpoint on lower noise band
+    if (y1 == noiseBand_low && y2 < noiseBand_low) {
+      adhesive_area <- adhesive_area + area_triangle(x2, y2 - noiseBand_low, x1)
+      next
+    }
+    if (y2 == noiseBand_low && y1 < noiseBand_low) {
+      adhesive_area <- adhesive_area + area_triangle(x1, y1 - noiseBand_low, x2)
+      next
+    }
+
+    # Handle crossings through both noise-band boundaries
+    # NOTE: Area inside [noiseBand_low, noiseBand_high] is never counted
+    if ((y1 > noiseBand_high && y2 < noiseBand_low) || (y1 < noiseBand_low && y2 > noiseBand_high)) {
+      x_pos <- x1 + (x2 - x1) * (noiseBand_high - y1) / (y2 - y1)
+      x_neg <- x1 + (x2 - x1) * (noiseBand_low - y1) / (y2 - y1)
+
+      if (y1 > noiseBand_high) {
+        repulsive_area <- repulsive_area + area_triangle(x1, y1 - noiseBand_high, x_pos)
+        adhesive_area <- adhesive_area + area_triangle(x2, y2 - noiseBand_low, x_neg)
       } else {
-        # y1 negative, y2 positive - only count areas outside noise band
-        adhesive_area <- adhesive_area + area_triangle(x1, y1 + noise_cutoff, x_neg)
-        repulsive_area <- repulsive_area + area_triangle(x2, y2 - noise_cutoff, x_pos)
+        adhesive_area <- adhesive_area + area_triangle(x1, y1 - noiseBand_low, x_neg)
+        repulsive_area <- repulsive_area + area_triangle(x2, y2 - noiseBand_high, x_pos)
       }
       next
     }
 
-    # Crossing from above noise_cutoff to within noise band (only count area outside noise band)
-    if (y1 > noise_cutoff && abs(y2) <= noise_cutoff) {
-      x_cross <- x1 + (x2 - x1) * (noise_cutoff - y1) / (y2 - y1)
-      repulsive_area <- repulsive_area + area_triangle(x1, y1 - noise_cutoff, x_cross)
+    # Crossing from above upper band to within band
+    if (y1 > noiseBand_high && y2 >= noiseBand_low && y2 <= noiseBand_high) {
+      x_cross <- x1 + (x2 - x1) * (noiseBand_high - y1) / (y2 - y1)
+      repulsive_area <- repulsive_area + area_triangle(x1, y1 - noiseBand_high, x_cross)
       next
     }
-    if (y2 > noise_cutoff && abs(y1) <= noise_cutoff) {
-      x_cross <- x1 + (x2 - x1) * (noise_cutoff - y1) / (y2 - y1)
-      repulsive_area <- repulsive_area + area_triangle(x2, y2 - noise_cutoff, x_cross)
+    if (y2 > noiseBand_high && y1 >= noiseBand_low && y1 <= noiseBand_high) {
+      x_cross <- x1 + (x2 - x1) * (noiseBand_high - y1) / (y2 - y1)
+      repulsive_area <- repulsive_area + area_triangle(x2, y2 - noiseBand_high, x_cross)
       next
     }
 
-    # Crossing from below -noise_cutoff to within noise band (only count area outside noise band)
-    if (y1 < -noise_cutoff && abs(y2) <= noise_cutoff) {
-      x_cross <- x1 + (x2 - x1) * (-noise_cutoff - y1) / (y2 - y1)
-      adhesive_area <- adhesive_area + area_triangle(x1, y1 + noise_cutoff, x_cross)
+    # Crossing from below lower band to within band
+    if (y1 < noiseBand_low && y2 >= noiseBand_low && y2 <= noiseBand_high) {
+      x_cross <- x1 + (x2 - x1) * (noiseBand_low - y1) / (y2 - y1)
+      adhesive_area <- adhesive_area + area_triangle(x1, y1 - noiseBand_low, x_cross)
       next
     }
-    if (y2 < -noise_cutoff && abs(y1) <= noise_cutoff) {
-      x_cross <- x1 + (x2 - x1) * (-noise_cutoff - y1) / (y2 - y1)
-      adhesive_area <- adhesive_area + area_triangle(x2, y2 + noise_cutoff, x_cross)
+    if (y2 < noiseBand_low && y1 >= noiseBand_low && y1 <= noiseBand_high) {
+      x_cross <- x1 + (x2 - x1) * (noiseBand_low - y1) / (y2 - y1)
+      adhesive_area <- adhesive_area + area_triangle(x2, y2 - noiseBand_low, x_cross)
       next
     }
   }
@@ -1144,8 +1380,8 @@ analyze_a_curve_area <- function(curve_df, noise_cutoff = 0) {
 #' and stores the resulting energies (areas under the force–distance curve) in
 #' the metadata as:
 #' \itemize{
-#'   \item \code{adhesive_energy_aJ_<dir>} — total area where \code{y < -noise_cutoff}
-#'   \item \code{repulsive_energy_aJ_<dir>} — total area where \code{y > noise_cutoff}
+#'   \item \code{adhesive_energy_aJ_<dir>} — total area where \code{y < noiseBand_low}
+#'   \item \code{repulsive_energy_aJ_<dir>} — total area where \code{y > noiseBand_high}
 #' }
 #' where \code{<dir>} is \code{"approach"} or \code{"retract"}.
 #'
@@ -1165,19 +1401,43 @@ analyze_a_curve_area <- function(curve_df, noise_cutoff = 0) {
 #' @param useCurve Character; must be one of \code{c("retract", "approach")}.
 #' @param threads Integer. Number of parallel workers (default \code{1}). Uses
 #'   \pkg{future}+\pkg{future.apply} when \code{threads > 1}.
-#' @param noise_cutoff Numeric. Noise threshold for energy calculation (default: 0). Only areas where |force| > noise_cutoff are included in energy calculation.
+#'
+#' @details
+#' This function assumes precomputed noise-band columns already exist in
+#' \code{fdObj@metadata} and uses them directly:
+#' \itemize{
+#'   \item \code{noiseBand_low_nN_<useCurve>}
+#'   \item \code{noiseBand_high_nN_<useCurve>}
+#' }
+#' Example for \code{useCurve = "retract"}:
+#' \code{noiseBand_low_nN_retract} and \code{noiseBand_high_nN_retract}.
 #'
 #' @return The updated \code{fdObj} with two new metadata columns:
 #' \code{adhesive_energy_aJ_<dir>} and \code{repulsive_energy_aJ_<dir>}.
 #' @seealso analyze_a_curve_area, analyze_curves_adhesive_force
 #' @export
-analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), threads = 1, noise_cutoff = 0) {
+analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), threads = 1) {
   if (!inherits(fdObj, "fdObj"))
     stop("fdObj must be of class 'fdObj'")
 
   useCurve <- match.arg(useCurve)
   curve_list <- if (useCurve == "approach") fdObj@approachCurves else fdObj@retractCurves
   dir_tag <- useCurve
+
+  low_col <- paste0("noiseBand_low_nN_", dir_tag)
+  high_col <- paste0("noiseBand_high_nN_", dir_tag)
+
+  if (!low_col %in% names(fdObj@metadata)) {
+    stop(sprintf("Required metadata column '%s' is missing.", low_col))
+  }
+  if (!high_col %in% names(fdObj@metadata)) {
+    stop(sprintf("Required metadata column '%s' is missing.", high_col))
+  }
+
+  noise_low_vec <- fdObj@metadata[[low_col]]
+  noise_high_vec <- fdObj@metadata[[high_col]]
+  names(noise_low_vec) <- rownames(fdObj@metadata)
+  names(noise_high_vec) <- rownames(fdObj@metadata)
 
   # If no transformed curves are present, create NA columns and exit
   if (is.null(curve_list) || length(curve_list) == 0) {
@@ -1198,18 +1458,26 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
         nrow(df) == 0) {
       return(c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_))
     }
-    analyze_a_curve_area(df, noise_cutoff = noise_cutoff)
+
+    noise_low <- noise_low_vec[id]
+    noise_high <- noise_high_vec[id]
+    if (is.na(noise_low) || is.na(noise_high)) {
+      return(c(adhesive_area = NA_real_, repulsive_area = NA_real_))
+    }
+
+    analyze_a_curve_area(df, noiseBand_low = as.numeric(noise_low), noiseBand_high = as.numeric(noise_high))
   }
 
   res_list <- if (threads > 1) {
     old_plan <- future::plan()
     on.exit(future::plan(old_plan), add = TRUE)
     future::plan(future::multisession, workers = threads)
-    future.apply::future_lapply(curve_names, run_one, 
+    future.apply::future_lapply(curve_names, run_one,
                                  future.globals = list(
                                    run_one = run_one,
                                    curve_list = curve_list,
-                                   noise_cutoff = noise_cutoff
+                                   noise_low_vec = noise_low_vec,
+                                   noise_high_vec = noise_high_vec
                                  ),
                                  future.packages = "curvana")
   } else {
@@ -1236,6 +1504,160 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
     "Energy analyzed for %d curves (%s): %d NA adhesive, %d NA repulsive (units = aJ).",
     n_total, dir_tag, n_na_ad, n_na_rep
   ))
+
+  fdObj
+}
+
+
+#' Run full analytical metrics pipeline on transformed curves in an fdObj
+#'
+#' Wrapper around:
+#' \itemize{
+#'   \item \code{analyze_curves_noise()}
+#'   \item \code{analyze_curves_adhesive_force()}
+#'   \item \code{analyze_curves_energy()}
+#'   \item \code{analyze_curves_interaction_distance()} (optional negative and/or positive runs)
+#' }
+#'
+#' This function executes the "Analytical metrics calculation" steps in one call.
+#' Users can run for approach curves, retract curves, or both.
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param useCurve Character; one of \code{c("retract", "approach", "both")}. Default \code{"both"}.
+#' @param threads Integer. Number of parallel workers passed to wrapped functions (default \code{1}).
+#'
+#' @param noise_baseline_span Either a single integer >= 1, or \code{"automatic"}.
+#'   Passed to \code{analyze_curves_noise()}.
+#' @param noise_threshold_method Character scalar; one of
+#'   \code{c("sd", "mad", "quantile", "fixed")}. Passed to \code{analyze_curves_noise()}.
+#' @param noise_multiplier Numeric >= 0. Passed to \code{analyze_curves_noise()}.
+#' @param noise_mad_constant Numeric. Passed to \code{analyze_curves_noise()}.
+#' @param noise_quantile_low Numeric in [0,1]. Passed to \code{analyze_curves_noise()}.
+#' @param noise_quantile_high Numeric in [0,1]. Passed to \code{analyze_curves_noise()}.
+#' @param noise_fixed_low Numeric or \code{NULL}. Passed to \code{analyze_curves_noise()} when method is \code{"fixed"}.
+#' @param noise_fixed_high Numeric or \code{NULL}. Passed to \code{analyze_curves_noise()} when method is \code{"fixed"}.
+#' @param analyze_adhesive_force Logical. If \code{TRUE}, runs \code{analyze_curves_adhesive_force()}.
+#'   Default \code{TRUE}.
+#' @param analyze_energy Logical. If \code{TRUE}, runs \code{analyze_curves_energy()}.
+#'   Default \code{TRUE}.
+#'
+#' @param analyze_rupture_distance Logical. If \code{TRUE}, runs interaction-distance analysis with
+#'   \code{y_direction = "negative"}. Default \code{TRUE}.
+#' @param analyze_rupture_distance_baseline_span Either a single integer >= 1, or \code{"automatic"}.
+#'   Passed to negative-direction \code{analyze_curves_interaction_distance()}.
+#' @param analyze_rupture_distance_x_direction Character; one of \code{c("left", "right")}.
+#'   Default \code{"left"}. Passed to negative-direction
+#'   \code{analyze_curves_interaction_distance()}.
+#'
+#' @param analyze_repulsive_distance Logical. If \code{TRUE}, runs interaction-distance analysis with
+#'   \code{y_direction = "positive"}. Default \code{TRUE}.
+#' @param analyze_repulsive_distance_baseline_span Either a single integer >= 1, or \code{"automatic"}.
+#'   Passed to positive-direction \code{analyze_curves_interaction_distance()}.
+#' @param analyze_repulsive_distance_x_direction Character; one of \code{c("right", "left")}.
+#'   Default \code{"right"}. Passed to positive-direction
+#'   \code{analyze_curves_interaction_distance()}.
+#'
+#' @return Updated \code{fdObj} with analytical metrics written to metadata.
+#' @export
+analyze_curves_all_analytical_metrics <- function(
+    fdObj,
+    useCurve = c("retract", "approach", "both"),
+    threads = 1,
+    noise_baseline_span = "automatic",
+    noise_threshold_method = c("sd", "mad", "quantile", "fixed"),
+    noise_multiplier = 3,
+    noise_mad_constant = 1.4826,
+    noise_quantile_low = 0.25,
+    noise_quantile_high = 0.75,
+    noise_fixed_low = NULL,
+    noise_fixed_high = NULL,
+    analyze_adhesive_force = TRUE,
+    analyze_energy = TRUE,
+    analyze_rupture_distance = TRUE,
+    analyze_rupture_distance_baseline_span = "automatic",
+    analyze_rupture_distance_x_direction = c("left", "right"),
+    analyze_repulsive_distance = TRUE,
+    analyze_repulsive_distance_baseline_span = "automatic",
+    analyze_repulsive_distance_x_direction = c("right", "left")
+) {
+  if (!inherits(fdObj, "fdObj")) {
+    stop("fdObj must be of class 'fdObj'")
+  }
+
+  useCurve <- match.arg(useCurve)
+  noise_threshold_method <- match.arg(noise_threshold_method)
+  analyze_rupture_distance_x_direction <- match.arg(analyze_rupture_distance_x_direction)
+  analyze_repulsive_distance_x_direction <- match.arg(analyze_repulsive_distance_x_direction)
+
+  if (!is.logical(analyze_rupture_distance) || length(analyze_rupture_distance) != 1 || is.na(analyze_rupture_distance)) {
+    stop("analyze_rupture_distance must be a single TRUE/FALSE value.")
+  }
+  if (!is.logical(analyze_repulsive_distance) || length(analyze_repulsive_distance) != 1 || is.na(analyze_repulsive_distance)) {
+    stop("analyze_repulsive_distance must be a single TRUE/FALSE value.")
+  }
+  if (!is.logical(analyze_adhesive_force) || length(analyze_adhesive_force) != 1 || is.na(analyze_adhesive_force)) {
+    stop("analyze_adhesive_force must be a single TRUE/FALSE value.")
+  }
+  if (!is.logical(analyze_energy) || length(analyze_energy) != 1 || is.na(analyze_energy)) {
+    stop("analyze_energy must be a single TRUE/FALSE value.")
+  }
+
+  directions <- if (useCurve == "both") c("approach", "retract") else useCurve
+
+  for (direction in directions) {
+    message(sprintf("Analyzing %s curves ...", direction))
+    fdObj <- analyze_curves_noise(
+      fdObj = fdObj,
+      useCurve = direction,
+      threads = threads,
+      baseline_span = noise_baseline_span,
+      threshold_method = noise_threshold_method,
+      multiplier = noise_multiplier,
+      mad_constant = noise_mad_constant,
+      quantile_low = noise_quantile_low,
+      quantile_high = noise_quantile_high,
+      fixed_low = noise_fixed_low,
+      fixed_high = noise_fixed_high
+    )
+
+    if (analyze_adhesive_force) {
+      fdObj <- analyze_curves_adhesive_force(
+        fdObj = fdObj,
+        useCurve = direction,
+        threads = threads
+      )
+    }
+
+    if (analyze_energy) {
+      fdObj <- analyze_curves_energy(
+        fdObj = fdObj,
+        useCurve = direction,
+        threads = threads
+      )
+    }
+
+    if (analyze_rupture_distance) {
+      fdObj <- analyze_curves_interaction_distance(
+        fdObj = fdObj,
+        useCurve = direction,
+        threads = threads,
+        baseline_span = analyze_rupture_distance_baseline_span,
+        y_direction = "negative",
+        x_direction = analyze_rupture_distance_x_direction
+      )
+    }
+
+    if (analyze_repulsive_distance) {
+      fdObj <- analyze_curves_interaction_distance(
+        fdObj = fdObj,
+        useCurve = direction,
+        threads = threads,
+        baseline_span = analyze_repulsive_distance_baseline_span,
+        y_direction = "positive",
+        x_direction = analyze_repulsive_distance_x_direction
+      )
+    }
+  }
 
   fdObj
 }
