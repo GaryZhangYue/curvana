@@ -10,13 +10,21 @@ if (!file.exists("DESCRIPTION")) {
 	}
 }
 
-message("[1/3] Installing dependencies...")
+message("[1/4] Installing dependencies...")
 devtools::install_deps(dependencies = TRUE)
 
 message("[2/3] Generating documentation...")
 devtools::document()
 
-message("[3/3] Running checks...")
+message("[3/4] Building package manual (PDF)...")
+if (nzchar(Sys.which("pdflatex"))) {
+	manual_path <- devtools::build_manual(path = "doc")
+	message("Manual written to: ", manual_path)
+} else {
+	warning("Skipping manual build: 'pdflatex' not found. Install TinyTeX or a TeX distribution.")
+}
+
+message("[4/4] Running checks...")
 devtools::check()
 # or 
 devtools::check(vignettes = FALSE)  
