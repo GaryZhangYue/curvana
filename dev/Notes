@@ -6,3 +6,6 @@ check the grammar and writing in tutorial
 check the manual...
 analytical plots -- pca, boxplot, heatmap
 check all units (for force, spring constant sensitivity)
+
+
+check if all functions works if i just have approach/retract raw curves (not all 4 columns)

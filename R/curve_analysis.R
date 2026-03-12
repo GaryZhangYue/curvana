@@ -332,6 +332,133 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
   return(fdObj)
 }
 
+#' Denoise Deflection Columns in a Raw Curve Data Frame
+#'
+#' Applies Savitzky-Golay smoothing to deflection columns in a raw curve data frame.
+#' The original values are first copied to new columns with suffix
+#' \code{_original}, then the target columns are overwritten with smoothed values.
+#'
+#' @param raw_curve A raw curve data frame containing deflection columns.
+#' @param p Filter polynomial order.
+#' @param n Filter length (must be odd).
+#' @param m Order of the derivative to compute.
+#' @param ts Sampling interval.
+#' @param useCurve Character; one of \code{c("retract", "approach", "both")}.
+#'
+#' @return A data frame with original columns preserved and additional
+#' \code{*_original} backup column(s) for the smoothed deflection column(s).
+#' @export
+denoise_a_curve <- function(raw_curve,
+                    p = 3,
+                    n = p + 3 - p %% 2,
+                    m = 0,
+                    ts = 1,
+                    useCurve = c("retract", "approach", "both")) {
+  if (!is.data.frame(raw_curve)) {
+    stop("raw_curve must be a data.frame")
+  }
+  if (!requireNamespace("signal", quietly = TRUE)) {
+    stop("Package 'signal' is required. Please install it with install.packages('signal').")
+  }
+
+  useCurve <- match.arg(useCurve)
+
+  target_cols <- switch(
+    useCurve,
+    approach = "Defl_V_Ex",
+    retract = "Defl_V_Rt",
+    both = c("Defl_V_Ex", "Defl_V_Rt")
+  )
+
+  missing_cols <- setdiff(target_cols, names(raw_curve))
+  if (length(missing_cols) > 0) {
+    stop(sprintf(
+      "Missing required column(s) for useCurve = '%s': %s",
+      useCurve,
+      paste(missing_cols, collapse = ", ")
+    ))
+  }
+
+  for (col_name in target_cols) {
+    if (!is.numeric(raw_curve[[col_name]])) {
+      stop(sprintf("Column '%s' must be numeric.", col_name))
+    }
+  }
+
+  backup_cols <- paste0(target_cols, "_original")
+
+  raw_curve <- raw_curve %>%
+    dplyr::mutate(dplyr::across(dplyr::all_of(target_cols), ~ .x, .names = "{.col}_original")) %>%
+    dplyr::mutate(dplyr::across(
+      dplyr::all_of(target_cols),
+      ~ signal::sgolayfilt(.x, p = p, n = n, m = m, ts = ts)
+    ))
+
+  core_cols <- c("Calc_Ramp_Ex_nm", "Calc_Ramp_Rt_nm", "Defl_V_Ex", "Defl_V_Rt")
+  raw_curve <- raw_curve %>%
+    dplyr::relocate(dplyr::any_of(core_cols), .before = 1) %>%
+    dplyr::relocate(dplyr::any_of(backup_cols), .after = dplyr::last_col())
+
+  return(raw_curve)
+}
+
+#' Denoise All Raw Curves in an fdObj
+#'
+#' Applies \code{denoise_a_curve()} to every data frame in \code{fdObj@rawCurves}
+#' and writes the denoised results back to the \code{rawCurves} slot.
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param p Filter polynomial order.
+#' @param n Filter length (must be odd).
+#' @param m Order of the derivative to compute.
+#' @param ts Sampling interval.
+#' @param useCurve Character; one of \code{c("retract", "approach", "both")}.
+#' @param threads Integer. Number of parallel workers (default \code{1}).
+#'
+#' @return Updated \code{fdObj} with denoised curves in \code{rawCurves}.
+#' @export
+denoise_curves <- function(fdObj,
+                           p = 3,
+                           n = p + 3 - p %% 2,
+                           m = 0,
+                           ts = 1,
+                           useCurve = c("retract", "approach", "both"),
+                           threads = 1) {
+  if (!inherits(fdObj, "fdObj")) {
+    stop("fdObj must be of class 'fdObj'")
+  }
+
+  useCurve <- match.arg(useCurve)
+  raw_list <- fdObj@rawCurves
+  curve_names <- names(raw_list)
+
+  run_one <- function(name) {
+    denoise_a_curve(
+      raw_curve = raw_list[[name]],
+      p = p,
+      n = n,
+      m = m,
+      ts = ts,
+      useCurve = useCurve
+    )
+  }
+
+  results <- if (threads > 1) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = threads)
+    future.apply::future_lapply(curve_names, run_one)
+  } else {
+    lapply(curve_names, run_one)
+  }
+
+  names(results) <- curve_names
+  fdObj@rawCurves <- results
+
+  message(sprintf("Denoised %d raw curves (useCurve = '%s').", length(curve_names), useCurve))
+  return(fdObj)
+}
+
 #' Transform a Single AFM Curve into Separation Distance and Force
 #'
 #' Converts raw AFM deflection and piezo data into calibrated separation distance and force.
