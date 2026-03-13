@@ -224,19 +224,49 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001
 #' and stores baseline values and segments in the fdObj.
 #'
 #' @param fdObj An object of class \code{fdObj}.
-#' @param least_length Integer. Minimum number of points in the baseline segment.
+#' @param least_length Either a single integer (minimum number of points in
+#'   the baseline segment) or \code{"automatic"}. When \code{"automatic"},
+#'   per-curve span values are read from
+#'   \code{fdObj@metadata$baseline_span_approach} or
+#'   \code{fdObj@metadata$baseline_span_retract} depending on \code{useCurve}.
 #' @param useCurve Character. Either "approach" or "retract" to specify which raw curve to use.
 #' @param slp_threshold Numeric. Maximum absolute slope allowed for baseline detection (default = 0.001).
 #' @param std_threshold Numeric. Maximum standard error of the slope (default = 0.005).
 #' @param threads Integer. Number of parallel threads to use (default = 1).
 #'
-#' @return An updated \code{fdObj} with baseline values in the metadata column \code{baseline_V}, the minimum number of points in the baseline segment \code{baseline_span}, and baseline segments in \code{baseline_segment}.
+#' @return An updated \code{fdObj} with baseline values in metadata and baseline
+#'   segments in \code{baseline_segment}. If \code{least_length} is numeric,
+#'   the corresponding \code{baseline_span_<dir>} column is updated; if
+#'   \code{least_length = "automatic"}, existing span columns are preserved.
 #' @export
 analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
                              slp_threshold = 0.001, std_threshold = 0.005,
                              threads = 1) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
   if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
+
+  least_length_mode <- if (is.character(least_length) && length(least_length) == 1 && least_length == "automatic") {
+    "automatic"
+  } else if (is.numeric(least_length) && length(least_length) == 1 && is.finite(least_length) && least_length >= 1) {
+    "fixed"
+  } else {
+    stop("least_length must be either a single numeric value >= 1 or 'automatic'.")
+  }
+
+  fixed_least_length <- if (least_length_mode == "fixed") as.integer(least_length) else NA_integer_
+  span_col <- paste0("baseline_span_", useCurve)
+  span_vec <- NULL
+
+  if (least_length_mode == "automatic") {
+    if (!(span_col %in% colnames(fdObj@metadata))) {
+      stop(sprintf(
+        "least_length = 'automatic' requires metadata column '%s'.",
+        span_col
+      ))
+    }
+    span_vec <- suppressWarnings(as.numeric(fdObj@metadata[[span_col]]))
+    names(span_vec) <- rownames(fdObj@metadata)
+  }
 
   # Set column names based on approach/retract; select the corresponding sensitivity value
   if (useCurve == "approach") {
@@ -260,8 +290,11 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
   find_result_for_curve <- function(name) {
     df <- raw_list[[name]]
     sensitivity <- sensitivity_vec[name]
+    curve_least_length <- if (least_length_mode == "automatic") span_vec[name] else fixed_least_length
 
-    if (is.na(sensitivity) || !(x_col %in% names(df)) || !(y_col %in% names(df))) {
+    if (is.na(sensitivity) ||
+        is.na(curve_least_length) || !is.finite(curve_least_length) || curve_least_length < 1 ||
+        !(x_col %in% names(df)) || !(y_col %in% names(df))) {
       return(list(baseline = NA_real_, segment = empty_seg))
     }
 
@@ -270,7 +303,7 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
     res <- find_baseline(
       x = x,
       y = y,
-      least_length = least_length,
+      least_length = as.integer(curve_least_length),
       sensitivity = sensitivity,
       slp_threshold = slp_threshold,
       std_threshold = std_threshold
@@ -297,10 +330,12 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
         find_baseline = find_baseline,
         raw_list = raw_list,
         sensitivity_vec = sensitivity_vec,
+        span_vec = span_vec,
+        least_length_mode = least_length_mode,
+        fixed_least_length = fixed_least_length,
         x_col = x_col,
         y_col = y_col,
         empty_seg = empty_seg,
-        least_length = least_length,
         slp_threshold = slp_threshold,
         std_threshold = std_threshold
       )
@@ -318,10 +353,14 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
   # Update fdObj
   if(useCurve == 'approach') {
     fdObj@metadata$baseline_V_approach <- baseline_values
-    fdObj@metadata$baseline_span_approach <- least_length
+    if (least_length_mode == "fixed") {
+      fdObj@metadata$baseline_span_approach <- fixed_least_length
+    }
     } else {
     fdObj@metadata$baseline_V_retract <- baseline_values
-    fdObj@metadata$baseline_span_retract <- least_length
+    if (least_length_mode == "fixed") {
+      fdObj@metadata$baseline_span_retract <- fixed_least_length
+    }
   }
   fdObj@baseline_segment[[useCurve]] <- baseline_segments
 
