@@ -910,12 +910,42 @@ plot_a_curve_metrics <- function(
       stop("Raw curve has no finite x/y values for plotting.")
     }
 
+    raw_orig_col <- paste0(raw_y_col, "_original")
+    raw_region_colors <- region_colors
+    orig_df <- NULL
+    if (raw_orig_col %in% colnames(raw_curve)) {
+      orig_df <- data.frame(
+        x = suppressWarnings(as.numeric(raw_curve[[raw_x_col]])),
+        y = suppressWarnings(as.numeric(raw_curve[[raw_orig_col]]))
+      )
+      orig_df <- orig_df[is.finite(orig_df$x) & is.finite(orig_df$y), , drop = FALSE]
+      if (nrow(orig_df) > 0) {
+        raw_region_colors <- c("Before denoise" = "darkblue", raw_region_colors)
+      } else {
+        orig_df <- NULL
+      }
+    }
+
     p_raw <- ggplot(raw_df, aes(x = x, y = y)) +
       geom_vline(xintercept = 0, color = "black", linewidth = 0.5) +
-      geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+      geom_hline(yintercept = 0, color = "black", linewidth = 0.5)
+
+    if (!is.null(orig_df)) {
+      p_raw <- p_raw +
+        geom_point(
+          data = orig_df,
+          aes(x = x, y = y, color = "Before denoise"),
+          size = point_size,
+          alpha = point_alpha,
+          shape = 16,
+          inherit.aes = FALSE
+        )
+    }
+
+    p_raw <- p_raw +
       geom_path(color = line_color, linewidth = line_size, alpha = line_alpha) +
       geom_point(aes(color = point_region), size = point_size, alpha = point_alpha, show.legend = TRUE) +
-      scale_color_manual(values = region_colors, drop = FALSE, name = "Region") +
+      scale_color_manual(values = raw_region_colors, drop = FALSE, name = "Region") +
       labs(
         x = raw_x_col,
         y = raw_y_col,
@@ -923,6 +953,7 @@ plot_a_curve_metrics <- function(
       ) +
       ggplot2::theme_classic(base_size = base_size) +
       theme(legend.position = "top")
+
     raw_subtitle <- paste(
       sprintf("Sensitivity (V/nm) = %s", if (is.finite(sensitivity_val)) sprintf("%.3g", sensitivity_val) else "NA"),
       sprintf("Spring constant (N/nm) = %s", if (is.finite(spring_constant_val)) sprintf("%.3g", spring_constant_val) else "NA"),
