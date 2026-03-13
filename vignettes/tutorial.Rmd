@@ -578,7 +578,6 @@ plot_metric_violin(
 ```{r pca biplot of metrics, fig.height=8, fig.width=10}
 pca_features <- c(
   "adhesive_force_nN_retract",
-  "adhesive_sep_nm_retract",
   "adhesive_energy_aJ_retract",
   "repulsive_energy_aJ_retract",
   "rupture_distance_nm_retract",
@@ -609,7 +608,6 @@ two metadata variables.
 ```{r complex heatmap of metrics, fig.height=7, fig.width=10}
 heatmap_features <- c(
   "adhesive_force_nN_retract",
-  "adhesive_sep_nm_retract",
   "adhesive_energy_aJ_retract",
   "repulsive_energy_aJ_retract",
   "rupture_distance_nm_retract",
