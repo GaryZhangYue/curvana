@@ -1802,3 +1802,184 @@ plot_complex_heatmap <- function(
   return(ht)
 }
 
+#' Heatmap of raw deflection values across all curves in an fdObj
+#'
+#' Rows are measurement indices (position steps along the curve); columns are
+#' individual (sample, segment) pairs — one column per approach curve and one
+#' per retract curve.  A column annotation bar shows the segment
+#' (Approach / Retract) and up to two categorical metadata fields for each
+#' sample.  Curves shorter than the longest one are bottom-padded with
+#' \code{NA} so unequal lengths are visible.  Only \code{Defl_V_Ex} and
+#' \code{Defl_V_Rt} are used (never \code{_original} backups).
+#'
+#' @param fdobj An object of class \code{fdObj}.
+#' @param annotate_columns Character vector of up to 2 metadata column names to
+#'   display as column annotations alongside the Segment bar.  Defaults to
+#'   \code{NULL}.
+#' @param annotation_colors Named list of colour vectors for annotations,
+#'   e.g. \code{list(surface = c(PEG = "green", silicon = "orange"))}.
+#' @param approach_color Colour for the Approach segment annotation bar.
+#'   Default \code{"steelblue"}.
+#' @param retract_color Colour for the Retract segment annotation bar.
+#'   Default \code{"tomato"}.
+#' @param show_row_names Logical; show row index labels.  Default \code{FALSE}.
+#' @param show_column_names Logical; show column (sample) names.  Default
+#'   \code{FALSE}.
+#' @param heatmap_name Character; label for the colour-key legend.
+#' @param col_fun Optional \code{circlize::colorRamp2} colour function.  When
+#'   \code{NULL} a blue–white–red ramp scaled to the 1st/50th/99th percentile
+#'   of finite values is used.
+#' @param na_col Colour for padded \code{NA} cells.  Default \code{"grey90"}.
+#' @param draw Logical; if \code{TRUE} (default), calls
+#'   \code{ComplexHeatmap::draw()} before returning.
+#' @param ... Additional arguments forwarded to \code{ComplexHeatmap::Heatmap()}.
+#'
+#' @return A \code{ComplexHeatmap} object (drawn when \code{draw = TRUE}).
+#' @export
+plot_raw_deflection_heatmap <- function(
+  fdobj,
+  annotate_columns     = NULL,
+  annotation_colors    = list(),
+  approach_color       = "steelblue",
+  retract_color        = "tomato",
+  show_row_names       = FALSE,
+  show_column_names    = FALSE,
+  heatmap_name         = "Deflection (V)",
+  col_fun              = NULL,
+  na_col               = "grey90",
+  index_tick_interval  = 100,
+  draw                 = TRUE,
+  ...
+) {
+  if (!inherits(fdobj, "fdObj")) stop("fdobj must be an object of class 'fdObj'.")
+  for (pkg in c("ComplexHeatmap", "circlize")) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      stop(sprintf("Package '%s' is required. Install it with install.packages('%s').", pkg, pkg))
+    }
+  }
+
+  raw_list <- fdobj@rawCurves
+  if (length(raw_list) == 0) stop("fdobj@rawCurves is empty.")
+  metadata <- fdobj@metadata
+
+  # Validate annotate_columns ---------------------------------------------
+  if (!is.null(annotate_columns)) {
+    if (length(annotate_columns) > 2) {
+      warning("annotate_columns has more than 2 elements; only the first 2 will be used.")
+      annotate_columns <- annotate_columns[seq_len(2)]
+    }
+    missing_cols <- setdiff(annotate_columns, colnames(metadata))
+    if (length(missing_cols) > 0)
+      stop(sprintf("Metadata columns not found: %s", paste(missing_cols, collapse = ", ")))
+  }
+
+  # Build one column per (sample, segment) --------------------------------
+  col_vectors <- list()   # deflection numeric vectors
+  col_sample  <- character()
+  col_seg     <- character()
+
+  for (nm in names(raw_list)) {
+    df <- raw_list[[nm]]
+    if ("Defl_V_Ex" %in% colnames(df)) {
+      col_vectors[[length(col_vectors) + 1]] <- suppressWarnings(as.numeric(df[["Defl_V_Ex"]]))
+      col_sample <- c(col_sample, nm)
+      col_seg    <- c(col_seg, "Approach")
+    }
+    if ("Defl_V_Rt" %in% colnames(df)) {
+      col_vectors[[length(col_vectors) + 1]] <- suppressWarnings(as.numeric(df[["Defl_V_Rt"]]))
+      col_sample <- c(col_sample, nm)
+      col_seg    <- c(col_seg, "Retract")
+    }
+  }
+
+  if (length(col_vectors) == 0)
+    stop("No Defl_V_Ex or Defl_V_Rt columns found in rawCurves.")
+
+  # Pad to common length (rows = measurement index) -----------------------
+  max_len <- max(vapply(col_vectors, length, integer(1)))
+  mat <- do.call(cbind, lapply(col_vectors, function(v) {
+    if (length(v) < max_len) c(v, rep(NA_real_, max_len - length(v))) else v
+  }))
+  col_ids <- paste0(col_sample, ".", tolower(col_seg))
+  colnames(mat) <- col_ids
+
+  # Re-order: all Approach columns first, then all Retract ---------------
+  col_order <- order(match(col_seg, c("Approach", "Retract")))
+  mat        <- mat[, col_order, drop = FALSE]
+  col_sample <- col_sample[col_order]
+  col_seg    <- col_seg[col_order]
+  col_ids    <- col_ids[col_order]
+
+  # Per-column Min-Max normalisation to [0, 1] ----------------------------
+  mat <- apply(mat, 2, function(v) {
+    mn <- min(v, na.rm = TRUE); mx <- max(v, na.rm = TRUE)
+    if (!is.finite(mn) || !is.finite(mx) || mx == mn) return(v)
+    (v - mn) / (mx - mn)
+  })
+
+  # Colour function -------------------------------------------------------
+  if (is.null(col_fun)) {
+    col_fun <- circlize::colorRamp2(c(0, 0.5, 1), c("blue", "white", "red"))
+  }
+
+  # Column annotation -----------------------------------------------------
+  seg_factor <- factor(col_seg, levels = c("Approach", "Retract"))
+  seg_present <- levels(droplevels(seg_factor))
+  seg_colors  <- c(Approach = approach_color, Retract = retract_color)[seg_present]
+
+  anno_df <- data.frame(Segment = seg_factor, row.names = col_ids, stringsAsFactors = FALSE)
+  anno_col <- list(Segment = seg_colors)
+
+  if (!is.null(annotate_columns)) {
+    for (mc in annotate_columns) {
+      vals_col <- metadata[col_sample, mc]
+      if (!is.factor(vals_col)) vals_col <- as.factor(vals_col)
+      anno_df[[mc]] <- vals_col
+      if (mc %in% names(annotation_colors)) {
+        anno_col[[mc]] <- annotation_colors[[mc]]
+      }
+    }
+  }
+
+  top_anno <- ComplexHeatmap::HeatmapAnnotation(
+    df    = anno_df,
+    col   = anno_col,
+    which = "column",
+    show_annotation_name = TRUE
+  )
+
+  # Row index tick annotation --------------------------------------------
+  right_anno <- NULL
+  if (!is.null(index_tick_interval) && is.numeric(index_tick_interval) &&
+      index_tick_interval > 0 && nrow(mat) > 0) {
+    tick_rows <- seq(index_tick_interval, nrow(mat), by = index_tick_interval)
+    if (length(tick_rows) > 0) {
+      right_anno <- ComplexHeatmap::rowAnnotation(
+        Index = ComplexHeatmap::anno_mark(
+          at     = tick_rows,
+          labels = as.character(tick_rows),
+          which  = "row",
+          side   = "right"
+        )
+      )
+    }
+  }
+
+  # Build heatmap ---------------------------------------------------------
+  ht <- ComplexHeatmap::Heatmap(
+    mat,
+    name               = heatmap_name,
+    col                = col_fun,
+    na_col             = na_col,
+    cluster_rows       = FALSE,
+    cluster_columns    = FALSE,
+    show_row_names     = show_row_names,
+    show_column_names  = show_column_names,
+    top_annotation     = top_anno,
+    right_annotation   = right_anno,
+    ...
+  )
+
+  if (isTRUE(draw)) return(ComplexHeatmap::draw(ht))
+  return(ht)
+}
