@@ -53,6 +53,7 @@ if (length(available_optional) > 0) {
 }
 
 source(system.file("tutorial_helpers.R", package = "curvana"))
+devtools::load_all("C:/Users/muson/coding/curvana")
 ```
 
 # Load data
@@ -165,7 +166,7 @@ test = analyze_curves_all_analytical_metrics(
   noise_threshold_method = "quantile", # use quantile method to define the noise band
   noise_quantile_low = 0.00, # define the lower end of noise band as 0% percentile of y values of the baseline section
   noise_quantile_high = 1, # define the upper end of noise band as 100% percentile of y values of the baseline section
-  noise_multiplier = 2, # multiply the noise band by 2 to get a more stringent threshold for metric analysis
+  noise_multiplier = 1, # multiply the noise band by 2 to get a more stringent threshold for metric analysis
   analyze_adhesive_force = TRUE, # whether to analyze adhesive force
   analyze_energy = TRUE, # whether to analyze interaction energy (repulsive and adhesive)
   analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
@@ -187,7 +188,7 @@ view_df(test@metadata,'metadata')
 
 To visualize the curves with analytical metrics annotated, we can use the "plot_curve_with_metrics" function. Here we plot the retract curve of a selected sample, with setting plot_raw = TRUE to display the raw data side by side with the annotated metrics.
 
-```{r plot curve with metrics, fig.height=6, fig.width=8}
+```{r plot curve with metrics, fig.height=6, fig.width=15}
 plot_a_curve_metrics(
   fdobj = test,
   curve_name = 'F_1.spm-F4E1_ForceCurveIndex_1.spm'	,
@@ -304,7 +305,7 @@ heatmap_features <- c(
 
 # Save all raw and transformed curves with analytical metrics annotated (optional)
 
-```{r plot all metrics for a curve,fig.height=8, fig.width=16,eval=F}
+```{r plot all metrics for a curve,fig.height=8, fig.width=16,eval=T}
 plot_all_curve_metrics(
   fdobj = test, # the fdObj to plot
   useCurve = "retract", # plot the retract curve
