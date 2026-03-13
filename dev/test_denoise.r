@@ -1,15 +1,15 @@
 # Create sample 4-column raw curve
 set.seed(42)
-n_points <- 100
+n_points <- 10
 raw_curve <- data.frame(
-  Calc_Ramp_Ex_nm = seq(0, 100, length.out = n_points),
-  Calc_Ramp_Rt_nm = rev(seq(0, 100, length.out = n_points)),
-  Defl_V_Ex = rnorm(n_points, mean = 0.5, sd = 0.05),  # noisy data
-  Defl_V_Rt = rnorm(n_points, mean = 0.3, sd = 0.04)   # noisy data
+  Calc_Ramp_Ex_nm = seq(0, 10, 1),
+  Calc_Ramp_Rt_nm = rev(seq(0, 10,1)),
+  Defl_V_Ex = seq(0, 10, 1),  # noisy data
+  Defl_V_Rt = seq(0, 20, 2)   # noisy data
 )
 
 # Test denoising retract curve
-denoised_retract <- denoise_a_curve(raw_curve, useCurve = "retract", p = 3, n = 5)
+denoised_retract <- denoise_a_curve(raw_curve, useCurve = "retract", p = 1, n = 3)
 head(denoised_retract)
 # Should show: Calc_Ramp_Rt_nm, Defl_V_Rt, (other cols), Defl_V_Rt_original
 
