@@ -126,11 +126,11 @@ plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'regio
 
 # Curve transformation
 
-One advantage of curvana is that each step of the data analysis is modularized, enabling a flexible and customizable workflow. Curve transformation in curvana involves several steps, including sensitivity calculation, baseline offset calculation, and the application of these parameters to convert raw data into interaction force–separation distance curves. In this section, we demonstrate how to apply a wrapper function to transform all curves at once, as well as how each curve is transformed internally under the hood.
+One advantage of curvana is that each step of the data analysis is modularized, enabling a flexible and customizable workflow. Curve transformation in curvana involves several steps, including denoise (smoothing), sensitivity calculation, baseline offset calculation, and the application of these parameters to convert raw data into interaction force–separation distance curves. In this section, we demonstrate how to apply a wrapper function to transform all curves at once, as well as how each curve is transformed internally under the hood.
 
 ## Transform curves using the wrapper function "transform_curves"
 
-At this step, we calculate the baseline and sensitivity of each raw AFM curve and transform the deflection-dislocation data into calibrated force–distance curves. The wrapper function transform_curves() automates this process by internally calling analyze_sensitivity() and analyze_baseline() to estimate the sensitivity and baseline values when their corresponding columns are not yet present in the metadata.
+At this step, we calculate the baseline and sensitivity of each raw AFM curve and transform the deflection-dislocation data into calibrated force–distance curves. The wrapper function transform_curves() automates this process by internally calling analyze_sensitivity() and analyze_baseline() to estimate the sensitivity and baseline values when their corresponding columns are not yet present in the metadata. Before calculating sensitivity and baseline, the function also provides an optional smoothing step to the raw curve to reduce noise and improve the reliability of these calculations. The smoothed curve is used for all downstream analysis, while the original raw curve is preserved in the rawCurves slot of the object for reference. Users can specify the smoothing method and parameters, or choose to skip smoothing if desired.
 
 To transform a curve, the spring constant of the AFM probe is required to convert deflection (V) to force (nN). The transform_curves() function accepts either a single numeric value, applied to all curves and stored in metadata$spring_constant, or a metadata column name containing per-curve spring constants. These values are then used with the computed baseline and sensitivity to generate the final force–distance curves.After these parameters are obtained, the function applies them to transform each curve into its calibrated form. All arguments accepted by analyze_sensitivity() and analyze_baseline() can be passed directly to transform_curves(), allowing full control over the analysis parameters. 
 
@@ -139,8 +139,8 @@ Here we set the spring constant to 0.08 N/m for all curves, and set the least le
 ```{r transform curves approach,warning=TRUE, message=TRUE,results='hold', echo=TRUE}
 t = 1
 # test_beforeTransform -> test
-test = transform_curves(test,spring_constant = 0.08,useCurve = 'approach',threads = t, least_length = 200, slp_threshold = 0.01, std_threshold = 0.01, end = 20)
-test = transform_curves(test,spring_constant = 0.08,useCurve = 'retract',threads = t, least_length = 200, slp_threshold = 0.01, std_threshold = 0.01, end = 20)
+test = transform_curves(test,spring_constant = 0.08,useCurve = 'approach',threads = t, least_length = 200, slp_threshold = 0.01, std_threshold = 0.01, end = 20,denoise_first = TRUE)
+test = transform_curves(test,spring_constant = 0.08,useCurve = 'retract',threads = t, least_length = 200, slp_threshold = 0.01, std_threshold = 0.01, end = 20,denoise_first = TRUE)
 ```
 
 
@@ -181,16 +181,39 @@ We can see that Fluorinated surface has the largest adhesion, which occurs mostl
 
 ## Single curve transformation
 
+### Denoising
+
+To demonstrate how each single curve is transformed, we take the retract part of "silicon_wafer_2.spm-2658_ForceCurveIndex_36.spm" as an example. First,
+we apply the "denoise_a_curve" function to the raw curve. The function internally applies a Savitzky-Golay filter to smooth the curve, which can help reduce noise and improve the reliability of sensitivity and baseline calculations. The smoothed curve is used for all downstream analysis, while the original raw curve is preserved in the rawCurves slot of the object for reference.
+
+Here we set polynomial order p to 1 and window size n to 3 for the Savitzky-Golay filter, which means the function will fit a linear polynomial to each window of 3 points to smooth the curve, which is equivalent to a simple moving average. Users can adjust these parameters based on the noise level and characteristics of their curves.
+
+```{r single curve denoise, fig.height=6, fig.width=8}
+example1.name = 'silicon_wafer_2.spm-2658_ForceCurveIndex_36.spm'
+example1.raw = test_beforeTransform@rawCurves[[example1.name]]
+example1.raw = denoise_a_curve(example1.raw, useCurve = "retract", p = 1, n = 3)
+
+ggplot(example1.raw) +
+  geom_point(aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt_original, color = "Original"), size = 1.5) +
+  geom_point(aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt, color = "Smoothed"), size = 1.5) +
+  geom_path(aes(x = Calc_Ramp_Rt_nm, y = Defl_V_Rt, color = "Smoothed"), size = 0.8,alpha=0.5) +
+  scale_color_manual(values = c("Original" = "grey70", "Smoothed" = "steelblue")) +
+  labs(x = "Calc_Ramp_Rt (nm)", y = "Defl_V_Rt (V)", title = "Denoising a single curve") +
+  theme_minimal(base_size = 14) + 
+  theme(legend.title=element_blank())
+
+```
+
 ### Sensitivity calculation
 
-To demonstrate how each single curve is transformed, we take the retract part of "silicon_wafer_2.spm-2658_ForceCurveIndex_36.spm" as an example. The function "calc_sensitivity", adapted from fdafm (Zhang et al., 2021), is designed to automatically to calculate the sensitivity value. Note that the function returns two outputs -- the sensitivity value, and the subset of data points used to calculate the sensitivity value (the second element of the returned list, which is a named dataframe named senscal_segment).
+
+The function "calc_sensitivity", adapted from fdafm (Zhang et al., 2021), is designed to automatically to calculate the sensitivity value. Note that the function returns two outputs -- the sensitivity value, and the subset of data points used to calculate the sensitivity value (the second element of the returned list, which is a named dataframe named senscal_segment).
 
 For sensitivity calculation, as mentioned above, we set end = 20 to only use the first 20 points of the curve to calculate sensitivity. This is because for this experiment we have a short contact region in the curve.
 
 ```{r single curve sensitivity analysis}
 #example1.name = '180424_fv_pmon2_loc1-18-22.spm'
-example1.name = 'silicon_wafer_2.spm-2658_ForceCurveIndex_36.spm'
-example1.raw = test@rawCurves[[example1.name]]
+
 
 x = example1.raw$Calc_Ramp_Rt_nm
 y = example1.raw$Defl_V_Rt

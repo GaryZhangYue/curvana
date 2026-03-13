@@ -110,7 +110,10 @@ Here we set the spring constant to 0.08 N/m for all curves, and set the least le
 ```{r transform curves approach,warning=TRUE, message=TRUE,results='hold', echo=TRUE}
 t = 1
 # test_beforeTransform -> test
-test = transform_curves(test,spring_constant = 0.08, # spring constant
+test = transform_curves(test,
+                        denoise_first = TRUE, # whether to apply denoising to raw curves before transformation. Denoising can help improve the reliability of sensitivity and baseline calculations, especially for noisy curves. The smoothed curve will be used for all downstream analysis, while the original raw curve will be preserved in the rawCurves slot of the object for reference.
+                        p = 1, n = 3, # parameters for the Savitzky-Golay filter used in curve denoising. p is the polynomial order (default 1, which means linear), and n is the window size (default 3, which means each point will be smoothed by fitting a polynomial to itself and its 2 neighbors). Users can adjust these parameters based on the noise level and characteristics of their curves.
+                        spring_constant = 0.08, # spring constant
                         useCurve = 'approach', # analyze the approach curve
                         # baseline determination and filtering
                         least_length = 200, # set the 200 data points at the far right side of each curve as the baseline region (the part of the curve presuming to be under zero force)
@@ -120,7 +123,10 @@ test = transform_curves(test,spring_constant = 0.08, # spring constant
                         end = 100, # use the first 100 data points at most on the left side to calibrate sensitivity
                         threads = t)
 
-test = transform_curves(test,spring_constant = 0.08, # spring constant
+test = transform_curves(test,
+                        denoise_first = TRUE, # whether to apply denoising to raw curves before transformation. Denoising can help improve the reliability of sensitivity and baseline calculations, especially for noisy curves. The smoothed curve will be used for all downstream analysis, while the original raw curve will be preserved in the rawCurves slot of the object for reference.
+                        p = 1, n = 3, # parameters for the Savitzky-Golay filter used in curve denoising. p is the polynomial order (default 1, which means linear), and n is the window size (default 3, which means each point will be smoothed by fitting a polynomial to itself and its 2 neighbors). Users can adjust these parameters based on the noise level and characteristics of their curves.
+                        spring_constant = 0.08, # spring constant
                         useCurve = 'retract', # analyze the retract curve
                         # baseline determination and filtering
                         least_length = 200, # set the 200 data points at the far right side of each curve as the baseline region (the part of the curve presuming to be under zero force)
@@ -157,8 +163,9 @@ test = analyze_curves_all_analytical_metrics(
   threads = 1, 
   noise_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for noise band calculation
   noise_threshold_method = "quantile", # use quantile method to define the noise band
-  noise_quantile_low = 0.05, # define the lower end of noise band as 5% percentile of y values of the baseline section
-  noise_quantile_high = 1, # define the upper end of noise band as 95% percentile of y values of the baseline section
+  noise_quantile_low = 0.00, # define the lower end of noise band as 0% percentile of y values of the baseline section
+  noise_quantile_high = 1, # define the upper end of noise band as 100% percentile of y values of the baseline section
+  noise_multiplier = 2, # multiply the noise band by 2 to get a more stringent threshold for metric analysis
   analyze_adhesive_force = TRUE, # whether to analyze adhesive force
   analyze_energy = TRUE, # whether to analyze interaction energy (repulsive and adhesive)
   analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
@@ -184,7 +191,7 @@ To visualize the curves with analytical metrics annotated, we can use the "plot_
 plot_a_curve_metrics(
   fdobj = test,
   curve_name = 'F_1.spm-F4E1_ForceCurveIndex_1.spm'	,
-  useCurve = "retract",plot_raw = T,base_size = 15,annotation_text_size = 4
+  useCurve = "retract",plot_raw = T,base_size = 15,annotation_text_size = 4, point_alpha = 0.5
 )
 ```
 
@@ -198,7 +205,6 @@ As we have multiple analytical metrics, we can use PCA to visualize the overall 
 ```{r pca biplot of metrics, fig.height=8, fig.width=10}
 pca_features <- c(
   "adhesive_force_nN_retract",
-  "adhesive_sep_nm_retract",
   "adhesive_energy_aJ_retract",
   "repulsive_energy_aJ_retract",
   "rupture_distance_nm_retract",
@@ -225,15 +231,14 @@ plot_pca_biplot(
 
 To visualize the distribution of each metric across different sample groups, we can use the "plot_metric_violin" function to plot violin plots. Here we plot the distribution of adhesive force, the separation distance at which the maximum adhesive force occurs, adhesive energy, repulsive energy, rupture distance, and repulsive distance for each surface type. We also set log10 = TRUE for metrics with a wide range of values to improve visualization.
 
-```{r summary statistics of metrics, fig.height=6, fig.width=12}
+```{r summary statistics of metrics, fig.height=5, fig.width=18}
 f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_sep_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f3 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f4 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f5 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f6 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f3 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f4 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f5 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
 
-plot_grid(f1,f2,f3,f4,f5,f6, nrow = 2)
+plot_grid(f1,f2,f3,f4,f5, nrow = 1)
 
 
 ```
@@ -270,7 +275,6 @@ two metadata variables.
 ```{r complex heatmap of metrics, fig.height=7, fig.width=10}
 heatmap_features <- c(
   "adhesive_force_nN_retract",
-  "adhesive_sep_nm_retract",
   "adhesive_energy_aJ_retract",
   "repulsive_energy_aJ_retract",
   "rupture_distance_nm_retract",
@@ -305,7 +309,7 @@ plot_all_curve_metrics(
   fdobj = test, # the fdObj to plot
   useCurve = "retract", # plot the retract curve
   plot_raw = T, # whether to plot the raw curve
-  destination_folder = '../test_plot_metrics2', # the path to save the plots
+  destination_folder = '../test_plot_metrics_denoised', # the path to save the plots
   format = 'png', width = 18, height = 9, # plot format and dimensions,
   threads = 4 # number of threads to use for parallel processing (set to 4 to use 4 cores, which will significantly speed up the plotting process for a large dataset
 )
@@ -313,7 +317,7 @@ plot_all_curve_metrics(
   fdobj = test, # the fdObj to plot
   useCurve = "approach", # plot the approach curve
   plot_raw = T, # whether to plot the raw curve
-  destination_folder = '../test_plot_metrics', # the path to save the plots
+  destination_folder = '../test_plot_metrics_denoised', # the path to save the plots
   format = 'png', width = 18, height = 9, # plot format and dimensions
   threads = 4 # number of threads to use for parallel processing (set to 4 to use 4 cores, which will significantly speed up the plotting process for a large dataset
 )
