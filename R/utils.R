@@ -1844,7 +1844,7 @@ plot_raw_deflection_heatmap <- function(
   retract_color        = "tomato",
   show_row_names       = FALSE,
   show_column_names    = FALSE,
-  heatmap_name         = "Deflection (V)",
+  heatmap_name         = "Max-min Scaled Deflection",
   col_fun              = NULL,
   na_col               = "grey90",
   index_tick_interval  = 100,
