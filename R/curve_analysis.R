@@ -349,8 +349,8 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 #' \code{*_original} backup column(s) for the smoothed deflection column(s).
 #' @export
 denoise_a_curve <- function(raw_curve,
-                    p = 3,
-                    n = p + 3 - p %% 2,
+                    p = 1,
+                    n = 3,
                     m = 0,
                     ts = 1,
                     useCurve = c("retract", "approach", "both")) {
@@ -418,8 +418,8 @@ denoise_a_curve <- function(raw_curve,
 #' @return Updated \code{fdObj} with denoised curves in \code{rawCurves}.
 #' @export
 denoise_curves <- function(fdObj,
-                           p = 3,
-                           n = p + 3 - p %% 2,
+                           p = 1,
+                           n = 3,
                            m = 0,
                            ts = 1,
                            useCurve = c("retract", "approach", "both"),
@@ -528,17 +528,41 @@ transform_a_curve <- function(x, y,
 #'   in \code{fdObj@metadata} that contains per-curve spring constants.
 #' @param useCurve Character; one of \code{c("approach", "retract")}.
 #' @param threads Integer. Number of parallel threads to use (default = 1).
+#' @param denoise_first Logical. If \code{TRUE}, denoise raw curves for the
+#'   selected \code{useCurve} before transformation.
 #' @param ... Additional arguments passed to `analyze_sensitivity()` or
-#'   `analyze_baseline()` if they are invoked automatically.
+#'   `analyze_baseline()` if they are invoked automatically. When
+#'   \code{denoise_first = TRUE}, optional denoising arguments can also be
+#'   supplied via \code{...} using \code{denoise_curves()} argument names
+#'   (e.g., \code{p}, \code{n}, \code{m}, \code{ts}).
 #'
 #' @return An updated \code{fdObj} with transformed curves stored in the corresponding slot.
 #' @export
-transform_curves <- function(fdObj, spring_constant, useCurve = c("approach", "retract"), threads = 1, ...) {
+transform_curves <- function(fdObj,
+                             spring_constant,
+                             useCurve = c("approach", "retract"),
+                             threads = 1,
+                             denoise_first = FALSE,
+                             ...) {
   # ---- Validation ----
   if (!inherits(fdObj, "fdObj"))
     stop("fdObj must be of class 'fdObj'")
 
   useCurve <- match.arg(useCurve)
+
+  if (!is.logical(denoise_first) || length(denoise_first) != 1 || is.na(denoise_first)) {
+    stop("denoise_first must be a single TRUE/FALSE value.")
+  }
+
+  # ---- Optional denoising ----
+  if (denoise_first) {
+    denoise_args <- list(...)
+    denoise_args <- denoise_args[names(denoise_args) %in% names(formals(denoise_curves))]
+    denoise_args$fdObj <- fdObj
+    if (is.null(denoise_args$useCurve)) denoise_args$useCurve <- useCurve
+    if (is.null(denoise_args$threads)) denoise_args$threads <- threads
+    fdObj <- do.call(denoise_curves, denoise_args)
+  }
 
   # ---- Determine column names ----
   if (useCurve == "approach") {
