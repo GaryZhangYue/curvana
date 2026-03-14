@@ -53,8 +53,7 @@ if (length(available_optional) > 0) {
 }
 
 source(system.file("tutorial_helpers.R", package = "curvana"))
-devtools::load_all("/Users/zhangy68/Library/CloudStorage/OneDrive-NationalInstitutesofHealth/R_dev/curvana")
-#devtools::load_all("C:/Users/muson/coding/curvana")
+devtools::load_all("C:/Users/muson/coding/curvana")
 ```
 
 # Load data
@@ -91,31 +90,9 @@ view_df(test@metadata,'metadata')
 
 # Preview the raw deflection curves
 
-
-## Heatmap across each sampling event
-
-We can use the "plot_raw_deflection_heatmap" function to visualize the raw deflection curves as a heatmap, which can help us quickly inspect the overall pattern of the curves across different samples.
-
-```{r plot deflection heatmap, fig.height=12,fig.width=10,eval=TRUE}
-plot_raw_deflection_heatmap(
-  fdobj             = test,
-  annotate_columns  = c("surface", "region"),
-  annotation_colors = list(
-    surface = c(PEG = "#1b9e77", silicon = "#d95f02",
-                fluorinated = "#7570b3", zwitterionic = "#e7298a")
-  )
-)
-
-
-
-```
-
-
-## Scatter plot
-
 It is important to inspect the raw curves before formal analysis. We can use the "plot_deflection_curves" function to plot curves in batch. Here, we split curves into sub-panels by column "surface", and color code them by column "region".
 
-```{r plot deflection curves, fig.height=12,fig.width=10,eval=FALSE}
+```{r plot deflection curves, fig.height=12,fig.width=10}
 plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'region',
                        alpha = 0.5,point_size = 0.5,
                        color_map = list(`1` = 'darkred',
