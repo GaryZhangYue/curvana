@@ -92,6 +92,27 @@ view_df(test@metadata,'metadata')
 
 It is important to inspect the raw curves before formal analysis. We can use the "plot_deflection_curves" function to plot curves in batch. Here, we split curves into sub-panels by column "surface", and color code them by column "region".
 
+## Heatmap across each sampling event
+
+Here we use the "plot_raw_deflection_heatmap" function to plot a heatmap of raw deflection values across each sampling event (i.e., each column is a curve, and each row is a data point along the curve). We also annotate columns by "surface" and "region", and set custom colors for each surface type.
+
+This helps us visualize the overall pattern of deflection values across curves, and identify the baseline and sensitivity calibration regions for each curve. We can also check if there are any curves with abnormal patterns (e.g., unstable baseline, extremely high noise level) that may need to be excluded from downstream analysis.
+
+```{r plot deflection heatmap, fig.height=12,fig.width=10,eval=TRUE}
+plot_raw_deflection_heatmap(
+  fdobj             = test,
+  annotate_columns  = c("surface", "region"),
+  annotation_colors = list(
+    surface = c(PEG = "#1b9e77", silicon = "#d95f02",
+                fluorinated = "#7570b3", zwitterionic = "#e7298a")
+  )
+)
+
+
+
+```
+
+
 ```{r plot deflection curves, fig.height=12,fig.width=10}
 plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'region',
                        alpha = 0.5,point_size = 0.5,
