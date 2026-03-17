@@ -94,7 +94,7 @@ It is important to inspect the raw curves before formal analysis. We can use the
 
 ## Heatmap across each sampling event
 
-Here we use the "plot_raw_deflection_heatmap" function to plot a heatmap of raw deflection values across each sampling event (i.e., each column is a curve, and each row is a data point along the curve). We also annotate columns by "surface" and "region", and set custom colors for each surface type.
+Here we use the "plot_raw_deflection_heatmap" function to plot a heatmap of min-max scaled deflection values across each sampling event (i.e., each column is a curve, and each row is a data point along the curve). We also annotate columns by "surface" and "region", and set custom colors for each surface type.
 
 This helps us visualize the overall pattern of deflection values across curves, and identify the baseline and sensitivity calibration regions for each curve. We can also check if there are any curves with abnormal patterns (e.g., unstable baseline, extremely high noise level) that may need to be excluded from downstream analysis.
 
@@ -113,6 +113,22 @@ plot_raw_deflection_heatmap(
 ```
 
 
+## Preset baseline length
+
+We can see that for all approach curves, deflection remains largely constant after approximately 100 data points. The total number data points per curve is 512, so we will set the last 400 points as baseline region for all curves. For retract curves, however, the fluorinated samples have a longer interaction region and shorter baseline, so we set their baseline region to the last 200 data points. For all other retract curves, we set the last 400 points to baseline regions.
+
+```{r set baseline length}
+test@metadata <- test@metadata %>%
+  mutate(baseline_span_retract = case_when(
+           surface == 'fluorinated' ~ 200,
+           TRUE ~ 400
+         ))
+  
+
+```
+
+## Scatter plot of deflection curves
+
 ```{r plot deflection curves, fig.height=12,fig.width=10}
 plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'region',
                        alpha = 0.5,point_size = 0.5,
@@ -122,12 +138,9 @@ plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'regio
 ```
 
 
-# Curve transformation
+One advantage of curvana is that each step of the data analysis is modularized, enabling a flexible and customizable workflow. Curve transformation in curvana involves several steps, including smoothing, sensitivity calculation, baseline offset calculation, and the application of these parameters to convert raw data into interaction force–separation distance curves. To execute all necessary steps at once, we can use a convenient function transform_curves.
 
-One advantage of curvana is that each step of the data analysis is modularized, enabling a flexible and customizable workflow. Curve transformation in curvana involves several steps, including sensitivity calculation, baseline offset calculation, and the application of these parameters to convert raw data into interaction force–separation distance curves. To execute all necessary steps at once, we can use a convenient function transform_curves.
-
-
-Here we set the spring constant to 0.08 N/m for all curves, and set the least length of of the curve for baseline calculation to 200, which means the function will use the last 200 points of each curve to calculate the baseline offset. We also set the slope threshold to 0.01 and standard deviation threshold to 0.01 for filtering out curves with unstable baseline. For sensitivity calculation, as we have a small contact region, we set end = 20 to only use the first 20 points of the curve to calculate sensitivity.
+Here we start with smoothing the raw curves with moving average of three consecutive points, set the spring constant to 0.08 N/m for all curves, and the slope threshold to 0.01 and standard deviation threshold to 0.01 for filtering out curves with unstable baseline. For sensitivity calculation, we set end = 100 to use at most the first 100 points of the curve to calculate sensitivity.
 
 ```{r transform curves approach,warning=TRUE, message=TRUE,results='hold', echo=TRUE}
 t = 1
@@ -138,7 +151,7 @@ test = transform_curves(test,
                         spring_constant = 0.08, # spring constant
                         useCurve = 'approach', # analyze the approach curve
                         # baseline determination and filtering
-                        least_length = 200, # set the 200 data points at the far right side of each curve as the baseline region (the part of the curve presuming to be under zero force)
+                        least_length = 400, # use the last 400 points as baseline
                         slp_threshold = 0.01, # any curves with the baseline region having slope > 0.01 will be discarded
                         std_threshold = 0.01, # any curves with the baseline region having standard deviation of y values > 0.01 will be discarded
                         # sensitivity calibration
@@ -151,7 +164,7 @@ test = transform_curves(test,
                         spring_constant = 0.08, # spring constant
                         useCurve = 'retract', # analyze the retract curve
                         # baseline determination and filtering
-                        least_length = 200, # set the 200 data points at the far right side of each curve as the baseline region (the part of the curve presuming to be under zero force)
+                        least_length = 'automatic', # set it to automatic so it will use numbers in baseline_span_retract column
                         slp_threshold = 0.01, # any curves with the baseline region having slope > 0.01 will be discarded
                         std_threshold = 0.01, # any curves with the baseline region having standard deviation of y values > 0.01 will be discarded
                         # sensitivity calibration
