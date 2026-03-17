@@ -177,7 +177,7 @@ ui <- bs4Dash::dashboardPage(
         shiny::fluidRow(
           bs4Dash::bs4Card(
             title       = "Load Raw Curves",
-            width       = 6,
+            width       = 8,
             status      = "primary",
             solidHeader = TRUE,
             shiny::radioButtons(
@@ -188,73 +188,61 @@ ui <- bs4Dash::dashboardPage(
             shiny::conditionalPanel(
               condition = "input.data_source == 'custom'",
               shiny::textInput(
-                "custom_folder", tooltip_label("Folder path", "Folder passed to createFdObjFromFolder(folder = ...)."), value = "",
+                "custom_folder", tooltip_label("Folder path", "Folder contains the raw AFM curves."), value = "",
                 placeholder = "e.g. C:/data/my_experiment"
-              )
-            ),
-
-            shiny::textInput("load_suffix", tooltip_label("suffix", "File suffix used by createFdObjFromFolder, e.g. .txt."), value = ".txt"),
-            shiny::textInput("load_pattern", tooltip_label("pattern", "Optional filename pattern used to filter files before loading."), value = ""),
-
-            shiny::fluidRow(
-              shiny::column(6,
-                shiny::textInput("load_calc_ramp_ex_nm", tooltip_label("Calc_Ramp_Ex_nm", "Column name for approach distance in raw files."), value = "Calc_Ramp_Ex_nm")
               ),
-              shiny::column(6,
-                shiny::textInput("load_calc_ramp_rt_nm", tooltip_label("Calc_Ramp_Rt_nm", "Column name for retract distance in raw files."), value = "Calc_Ramp_Rt_nm")
-              )
-            ),
-            shiny::fluidRow(
-              shiny::column(6,
-                shiny::textInput("load_defl_v_ex", tooltip_label("Defl_V_Ex", "Column name for approach deflection in raw files."), value = "Defl_V_Ex")
+              shiny::textInput("load_suffix", tooltip_label("suffix", "File suffix of the raw AFM curves, e.g. .txt."), value = ".txt"),
+              shiny::textInput("load_pattern", tooltip_label("pattern", "Optional filename pattern used to filter files before loading."), value = ""),
+              shiny::fluidRow(
+                shiny::column(6,
+                  shiny::textInput("load_calc_ramp_ex_nm", tooltip_label("Calc_Ramp_Ex_nm", "Column name for approach distance in raw files."), value = "Calc_Ramp_Ex_nm")
+                ),
+                shiny::column(6,
+                  shiny::textInput("load_calc_ramp_rt_nm", tooltip_label("Calc_Ramp_Rt_nm", "Column name for retract distance in raw files."), value = "Calc_Ramp_Rt_nm")
+                )
               ),
-              shiny::column(6,
-                shiny::textInput("load_defl_v_rt", tooltip_label("Defl_V_Rt", "Column name for retract deflection in raw files."), value = "Defl_V_Rt")
-              )
+              shiny::fluidRow(
+                shiny::column(6,
+                  shiny::textInput("load_defl_v_ex", tooltip_label("Defl_V_Ex", "Column name for approach deflection in raw files."), value = "Defl_V_Ex")
+                ),
+                shiny::column(6,
+                  shiny::textInput("load_defl_v_rt", tooltip_label("Defl_V_Rt", "Column name for retract deflection in raw files."), value = "Defl_V_Rt")
+                )
+              ),
+              shiny::checkboxInput(
+                "use_metadata_for_load",
+                tooltip_label("Use uploaded metadata", "When enabled, used the metadata uploaded here to select raw curve files in the folder"),
+                value = FALSE
+              ),
+              shiny::conditionalPanel(
+                condition = "input.use_metadata_for_load",
+                shiny::hr(),
+                shiny::h4("Import Metadata File (optional)"),
+                shiny::helpText("Upload a CSV, TXT (tab-separated), or XLSX file if you want to replace or enrich the metadata generated when the curves are loaded."),
+                shiny::fileInput(
+                  "meta_file", tooltip_label("Choose file", "Upload metadata table (CSV/TXT/XLSX) for matching or replacement."),
+                  accept = c("text/csv", "text/plain",
+                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             ".csv", ".txt", ".xlsx")
+                ),
+                shiny::textInput("meta_key_col", tooltip_label("Key column name in uploaded file", "Column in uploaded metadata that identifies each sample (e.g., sample or filename)."),
+                                 value = "sample", placeholder = "e.g. sample or filename"),
+                shiny::tags$div(
+                  style = "margin-top:12px;",
+                  shiny::actionButton("import_meta_btn", "Import Metadata", class = "btn-info btn-block",
+                                      icon = shiny::icon("file-import"))
+                )
+              ),
+              shiny::numericInput("threads_load", tooltip_label("Threads", "Number of parallel workers used for loading files."), value = 1, min = 1, step = 1)
             ),
-
-            shiny::checkboxInput(
-              "use_metadata_for_load",
-              tooltip_label("Use uploaded metadata in createFdObjFromFolder(metadata = ...)", "When enabled, uploaded metadata is passed to the metadata argument during loading."),
-              value = FALSE
-            ),
-            shiny::numericInput("threads_load", tooltip_label("Threads", "Number of parallel workers used for loading files."), value = 1, min = 1, step = 1),
             shiny::tags$div(
               style = "margin-top:12px;",
               shiny::actionButton("load_btn", "Load Data", class = "btn-primary btn-block",
                                   icon = shiny::icon("upload"))
             )
           ),
-
           bs4Dash::bs4Card(
-            title       = "Import Metadata File (optional)",
-            width       = 6,
-            status      = "info",
-            solidHeader = TRUE,
-            shiny::helpText("Upload a CSV, TXT (tab-separated), or XLSX file if you want to replace or enrich the metadata generated when the curves are loaded."),
-            shiny::fileInput(
-              "meta_file", tooltip_label("Choose file", "Upload metadata table (CSV/TXT/XLSX) for matching or replacement."),
-              accept = c("text/csv", "text/plain",
-                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                         ".csv", ".txt", ".xlsx")
-            ),
-            shiny::checkboxInput("meta_match_by_col", tooltip_label("Match rows using a key column", "Match uploaded metadata rows to samples using the key column value."), value = TRUE),
-            shiny::conditionalPanel(
-              condition = "input.meta_match_by_col || input.use_metadata_for_load",
-              shiny::textInput("meta_key_col", tooltip_label("Key column name in uploaded file", "Column in uploaded metadata that identifies each sample (e.g., sample or filename)."),
-                               value = "sample", placeholder = "e.g. sample or filename")
-            ),
-            shiny::tags$div(
-              style = "margin-top:12px;",
-              shiny::actionButton("import_meta_btn", "Import Metadata", class = "btn-info btn-block",
-                                  icon = shiny::icon("file-import"))
-            )
-          )
-        ),
-
-        shiny::fluidRow(
-          bs4Dash::bs4Card(
-            title = "Status", width = 12, collapsible = TRUE,
+            title = "Status", width = 4, collapsible = TRUE,
             shiny::verbatimTextOutput("status_text")
           )
         ),
@@ -528,6 +516,20 @@ server <- function(input, output, session) {
     })
   }
 
+  find_demo_metadata_file <- function() {
+    demo_meta_path <- system.file("extdata_demo_metadata.csv", package = "curvana")
+    if (nzchar(demo_meta_path) && file.exists(demo_meta_path)) {
+      return(demo_meta_path)
+    }
+
+    local_demo_meta_path <- file.path(getwd(), "inst", "extdata_demo_metadata.csv")
+    if (file.exists(local_demo_meta_path)) {
+      return(local_demo_meta_path)
+    }
+
+    NULL
+  }
+
   prepare_metadata_for_loading <- function(meta_df, key_col) {
     if (is.null(meta_df)) {
       return(NULL)
@@ -562,6 +564,7 @@ server <- function(input, output, session) {
     }
 
     rownames(meta_df) <- key_vals
+    meta_df[[key_col]] <- NULL
     meta_df
   }
 
@@ -588,9 +591,17 @@ server <- function(input, output, session) {
   }
 
   update_choices <- function(fdobj) {
-    md_cols     <- colnames(fdobj@metadata)
+    md_cols <- colnames(fdobj@metadata)
+    if (is.null(md_cols)) md_cols <- character(0)
+    md_cols <- trimws(as.character(md_cols))
+    md_cols <- unique(md_cols[nzchar(md_cols) & !is.na(md_cols)])
+
     curve_names <- names(fdobj@rawCurves)
-    chooser     <- c("None" = "", md_cols)
+    if (is.null(curve_names)) curve_names <- character(0)
+    curve_names <- trimws(as.character(curve_names))
+    curve_names <- unique(curve_names[nzchar(curve_names) & !is.na(curve_names)])
+
+    chooser <- c("None" = "", stats::setNames(md_cols, md_cols))
 
     default_choice <- function(preferred = character(0), fallback_index = 1L) {
       hit <- intersect(preferred, md_cols)
@@ -617,9 +628,11 @@ server <- function(input, output, session) {
       choices = chooser, selected = default_choice(c("surface"), 2L))
     shiny::updateSelectInput(session, "summary_group_by",
       choices = chooser, selected = default_choice(c("surface"), 1L))
+
+    curve_choices <- stats::setNames(curve_names, curve_names)
     shiny::updateSelectInput(session, "metric_curve_name",
-      choices  = curve_names,
-      selected = if (length(curve_names) > 0) curve_names[[1]] else character(0))
+      choices  = curve_choices,
+      selected = if (length(curve_names) > 0) curve_names[[1]] else NULL)
     metric_candidates <- c(
       "adhesive_force_nN_retract",   "adhesive_energy_aJ_retract",
       "repulsive_energy_aJ_retract", "rupture_distance_nm_retract",
@@ -629,9 +642,10 @@ server <- function(input, output, session) {
       "repulsive_distance_nm_approach"
     )
     metric_choices <- intersect(metric_candidates, md_cols)
+    metric_choices <- stats::setNames(metric_choices, metric_choices)
     shiny::updateSelectInput(session, "violin_metric",
       choices  = metric_choices,
-      selected = if (length(metric_choices) > 0) metric_choices[[1]] else character(0))
+      selected = if (length(metric_choices) > 0) unname(metric_choices[[1]]) else NULL)
   }
 
   # Load Data
@@ -666,7 +680,25 @@ server <- function(input, output, session) {
       }
 
       metadata_for_load <- NULL
-      if (isTRUE(input$use_metadata_for_load)) {
+      metadata_source_note <- ""
+      if (identical(input$data_source, "demo")) {
+        demo_meta_path <- find_demo_metadata_file()
+        if (is.null(demo_meta_path)) {
+          shiny::showNotification("Demo metadata file 'extdata_demo_metadata.csv' could not be found.", type = "error", duration = NULL)
+          return(NULL)
+        }
+
+        metadata_for_load <- read_metadata_file(list(
+          datapath = demo_meta_path,
+          name = basename(demo_meta_path)
+        ))
+        if (is.null(metadata_for_load)) return(NULL)
+
+        metadata_for_load <- prepare_metadata_for_loading(metadata_for_load, "filename")
+        if (is.null(metadata_for_load)) return(NULL)
+
+        metadata_source_note <- sprintf("\nDemo metadata source: %s", basename(demo_meta_path))
+      } else if (isTRUE(input$use_metadata_for_load)) {
         if (is.null(input$meta_file)) {
           shiny::showNotification("Upload a metadata file first, or uncheck metadata loading option.", type = "error")
           return(NULL)
@@ -700,13 +732,14 @@ server <- function(input, output, session) {
       shiny::incProgress(0.3)
       rv$fdobj  <- fdobj
       rv$status <- sprintf(
-        "Loaded %d raw curves from:\n%s\nGenerated metadata: %d rows x %d columns.\ncreateFdObjFromFolder args: suffix='%s', pattern='%s'.",
+        "Loaded %d raw curves from:\n%s\nGenerated metadata: %d rows x %d columns.\ncreateFdObjFromFolder args: suffix='%s', pattern='%s'.%s",
         length(fdobj@rawCurves),
         folder,
         nrow(fdobj@metadata),
         ncol(fdobj@metadata),
         suffix,
-        pattern
+        pattern,
+        metadata_source_note
       )
       update_choices(fdobj)
       shiny::incProgress(0.3)
@@ -723,35 +756,24 @@ server <- function(input, output, session) {
     imported_df <- read_metadata_file(input$meta_file)
     if (is.null(imported_df)) return(NULL)
     md <- rv$fdobj@metadata
-    if (isTRUE(input$meta_match_by_col)) {
-      key_col <- trimws(input$meta_key_col)
-      if (!nzchar(key_col) || !(key_col %in% colnames(imported_df))) {
-        shiny::showNotification(
-          sprintf("Key column '%s' not found. Available: %s",
-                  key_col, paste(colnames(imported_df), collapse = ", ")),
-          type = "error", duration = NULL)
-        return(NULL)
-      }
-      matched_idx <- match(rownames(md), as.character(imported_df[[key_col]]))
-      if (all(is.na(matched_idx))) {
-        shiny::showNotification(
-          "No rows matched. Ensure the key column contains the sample names.",
-          type = "error", duration = NULL)
-        return(NULL)
-      }
-      imported_df              <- imported_df[matched_idx, , drop = FALSE]
-      imported_df[[key_col]]   <- NULL
-      rownames(imported_df)    <- rownames(md)
-    } else {
-      if (nrow(imported_df) != nrow(md)) {
-        shiny::showNotification(
-          sprintf("Row count mismatch: file has %d rows, metadata has %d rows.",
-                  nrow(imported_df), nrow(md)),
-          type = "error")
-        return(NULL)
-      }
-      rownames(imported_df) <- rownames(md)
+    key_col <- trimws(input$meta_key_col)
+    if (!nzchar(key_col) || !(key_col %in% colnames(imported_df))) {
+      shiny::showNotification(
+        sprintf("Key column '%s' not found. Available: %s",
+                key_col, paste(colnames(imported_df), collapse = ", ")),
+        type = "error", duration = NULL)
+      return(NULL)
     }
+    matched_idx <- match(rownames(md), as.character(imported_df[[key_col]]))
+    if (all(is.na(matched_idx))) {
+      shiny::showNotification(
+        "No rows matched. Ensure the key column contains the sample names.",
+        type = "error", duration = NULL)
+      return(NULL)
+    }
+    imported_df            <- imported_df[matched_idx, , drop = FALSE]
+    imported_df[[key_col]] <- NULL
+    rownames(imported_df)  <- rownames(md)
     rv$fdobj@metadata <- imported_df
     rv$status <- sprintf("Metadata imported from '%s' (%d rows x %d columns).",
                          file_name, nrow(imported_df), ncol(imported_df))
