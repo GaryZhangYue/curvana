@@ -14,4 +14,5 @@ check if all functions works if i just have approach/retract raw curves (not all
 
 Shiny App tests to do
 done 1. check if import metadata works 
-
+     2. in curve transform settings, everthing except spring constant should be approach/retract specific; maybe make approach on one side and retract on one side, and it spands the whole width.
+     make heatmap above it, and make it shorter.

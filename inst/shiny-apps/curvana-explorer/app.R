@@ -279,91 +279,117 @@ ui <- bs4Dash::dashboardPage(
         tabName = "transform",
 
         shiny::fluidRow(
-          class = "align-items-stretch",
-          style = "min-height: 1020px; margin-bottom: 12px;",
-          shiny::column(
-            width = 4,
-            shiny::tags$div(
-              style = "height: 980px;",
-              bs4Dash::bs4Card(
-                title       = "Curve Transform Settings",
-                width       = NULL,
-                status      = "warning",
-                solidHeader = TRUE,
-                style       = "height: 980px; overflow-y: auto;",
-                shiny::hr(),
-
-                shiny::numericInput("spring_constant", tooltip_label("Spring constant (N/m)", "Cantilever spring constant used to convert deflection to force during transform_curves."), value = 0.08, min = 0),
-                shiny::hr(),
-
-                shiny::checkboxInput("denoise_first", tooltip_label("Denoise with Savitzky-Golay filter", "Apply Savitzky-Golay smoothing before baseline and sensitivity calculations."), value = TRUE),
-                shiny::fluidRow(
-                  shiny::column(6, shiny::numericInput("denoise_p", tooltip_label("Polynomial Degree", "Savitzky-Golay polynomial order p."), value = 1, min = 0, step = 1)),
-                  shiny::column(6, shiny::numericInput("denoise_n", tooltip_label("Window Size", "Savitzky-Golay window size n (odd integer)."), value = 3, min = 3, step = 2)),
-                  shiny::column(6, shiny::numericInput("denoise_m", tooltip_label("Derivative Order", "Savitzky-Golay derivative order m; 0 keeps smoothed signal."), value = 0, min = 0, step = 1)),
-                  shiny::column(6, shiny::numericInput("denoise_ts", tooltip_label("Sample Spacing", "Sampling interval ts used in Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
-                ),
-
-                shiny::hr(),
-                shiny::h5(shiny::tags$b("Baseline span"),style = "font-size: 18px; font-weight: bold;"),
-                shiny::h5("Approach",style = "font-size: 16px"),
-                shiny::fluidRow(
-                  shiny::column(6, shiny::selectInput("least_mode_approach", tooltip_label("Mode", "fixed: use least_length value; automatic: use baseline_span_approach in metadata."),
-                    choices = c("fixed", "automatic"), selected = "fixed")),
-                  shiny::column(6, shiny::numericInput("least_length_approach", tooltip_label("least_length", "Minimum baseline span length for approach curve."),
-                    value = 400, min = 1, step = 1))
-                ),
-                shiny::h5("Retract",style = "font-size: 16px"),
-                shiny::fluidRow(
-                  shiny::column(6, shiny::selectInput("least_mode_retract", tooltip_label("Mode", "fixed: use least_length value; automatic: use baseline_span_retract in metadata."),
-                    choices = c("fixed", "automatic"), selected = "fixed")),
-                  shiny::column(6, shiny::numericInput("least_length_retract", tooltip_label("least_length", "Minimum baseline span length for retract curve."),
-                    value = 400, min = 1, step = 1))
-                ),
-
-                shiny::hr(),
-                shiny::h5("Baseline threshold",style = "font-size: 18px; font-weight: bold;"),
-                shiny::numericInput("slp_threshold", tooltip_label("Maximum slope", "Discard curves whose baseline slope exceeds this threshold."),
-                    value = 0.01, min = 0, step = 0.001),
-                  shiny::numericInput("std_threshold", tooltip_label("Maximum standard deviation of deflection", "Discard curves whose baseline deflection SD exceeds this threshold."),
-                    value = 0.01, min = 0, step = 0.001),
-
-                shiny::hr(),
-                shiny::h5("Sensitivity Calculation",style = "font-size: 18px; font-weight: bold;"),
-                shiny::numericInput("sens_end", tooltip_label("End of Contact region", "Maximum index used for sensitivity calibration near initial contact region."), value = 100, min = 1, step = 1),
-
-                shiny::hr(),
-                shiny::numericInput("threads_transform", tooltip_label("Threads", "Number of workers used by transform_curves."), value = 1, min = 1, step = 1),
-
-                shiny::tags$div(
-                  style = "margin-top:12px;",
-                  shiny::actionButton("transform_btn", "Run Transform", class = "btn-warning btn-block",
-                                      icon = shiny::icon("play"))
-                )
-
+          bs4Dash::bs4Card(
+            title       = "Raw Deflection Heatmap",
+            width       = 12,
+            status      = "warning",
+            solidHeader = TRUE,
+            shiny::fluidRow(
+              shiny::column(3, shiny::selectInput("raw_anno_col1", tooltip_label("Annotate col 1", "First metadata column used for top annotation on raw heatmap."),
+                choices = c("None" = ""), selected = "")),
+              shiny::column(3, shiny::selectInput("raw_anno_col2", tooltip_label("Annotate col 2", "Second metadata column used for top annotation on raw heatmap."),
+                choices = c("None" = ""), selected = "")),
+              shiny::column(3, shiny::numericInput("heatmap_tick_interval", tooltip_label("Row tick interval", "Index interval used for row tick marks on the heatmap."),
+                value = 100, min = 1, step = 1)),
+              shiny::column(3,
+                shiny::tags$br(),
+                shiny::actionButton("plot_raw_heatmap_btn", "Plot", class = "btn-warning btn-block", icon = shiny::icon("chart-area"))
+              )
+            ),
+            tooltip_plot("raw_heatmap", "740px", "Min-max scaled raw deflection heatmap. Columns are sample segments (approach/retract), rows are measurement index."),
+            shiny::fluidRow(
+              shiny::column(3, shiny::numericInput("raw_heatmap_download_width", tooltip_label("Download width (in)", "Width in inches for exported heatmap image."), value = 12, min = 1, step = 0.5)),
+              shiny::column(3, shiny::numericInput("raw_heatmap_download_height", tooltip_label("Download height (in)", "Height in inches for exported heatmap image."), value = 9, min = 1, step = 0.5)),
+              shiny::column(6,
+                shiny::tags$br(),
+                shiny::downloadButton("download_raw_heatmap", "Download heatmap", class = "btn-info btn-block")
               )
             )
-          ),
+          )
+        ),
 
-          shiny::column(
-            width = 8,
-            shiny::tags$div(
-              style = "height: 980px;",
-              bs4Dash::bs4Card(
-                title = "Raw Deflection Heatmap",
-                width = NULL,
-                style = "height: 980px; overflow: hidden;",
-                shiny::fluidRow(
-                  shiny::column(4, shiny::selectInput("raw_anno_col1", tooltip_label("Annotate col 1", "First metadata column used for top annotation on raw heatmap."),
-                    choices = c("None" = ""), selected = "")),
-                  shiny::column(4, shiny::selectInput("raw_anno_col2", tooltip_label("Annotate col 2", "Second metadata column used for top annotation on raw heatmap."),
-                    choices = c("None" = ""), selected = "")),
-                  shiny::column(4, shiny::numericInput("heatmap_tick_interval", tooltip_label("Row tick interval", "Index interval used for row tick marks on the heatmap."),
-                    value = 100, min = 1, step = 1))
-                ),
-                tooltip_plot("raw_heatmap", "740px", "Min-max scaled raw deflection heatmap. Columns are sample segments (approach/retract), rows are measurement index."),
-                shiny::downloadButton("download_raw_heatmap", "Download heatmap", class = "btn-info")
+        shiny::fluidRow(
+          bs4Dash::bs4Card(
+            title       = "Curve Transform Settings",
+            width       = 12,
+            status      = "warning",
+            solidHeader = TRUE,
+            shiny::fluidRow(
+              shiny::column(
+                width = 6,
+                bs4Dash::bs4Card(
+                  title = "Approach Curve Settings",
+                  width = NULL,
+                  collapsible = TRUE,
+                  shiny::numericInput("spring_constant_approach", tooltip_label("Spring constant (N/m)", "Cantilever spring constant used to convert deflection to force during approach transform."), value = 0.08, min = 0),
+                  shiny::checkboxInput("denoise_first_approach", tooltip_label("Denoise with Savitzky-Golay filter", "Apply Savitzky-Golay smoothing before baseline and sensitivity calculations for approach curves."), value = TRUE),
+                  shiny::fluidRow(
+                    shiny::column(6, shiny::numericInput("denoise_p_approach", tooltip_label("Polynomial Degree", "Savitzky-Golay polynomial order p."), value = 1, min = 0, step = 1)),
+                    shiny::column(6, shiny::numericInput("denoise_n_approach", tooltip_label("Window Size", "Savitzky-Golay window size n (odd integer)."), value = 3, min = 3, step = 2)),
+                    shiny::column(6, shiny::numericInput("denoise_m_approach", tooltip_label("Derivative Order", "Savitzky-Golay derivative order m; set to 0 for denoising."), value = 0, min = 0, step = 1)),
+                    shiny::column(6, shiny::numericInput("denoise_ts_approach", tooltip_label("Sample Spacing", "Sampling interval ts used in Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
+                  ),
+                  shiny::hr(),
+                  shiny::h5("Baseline span", style = "font-size: 18px; font-weight: bold;"),
+                  shiny::fluidRow(
+                    shiny::column(6, shiny::selectInput("least_mode_approach", tooltip_label("Mode", "fixed: use least_length value; automatic: use baseline_span_approach in metadata."),
+                      choices = c("fixed", "automatic"), selected = "fixed")),
+                    shiny::column(6, shiny::numericInput("least_length_approach", tooltip_label("least_length", "Minimum baseline span length for approach curve; this value is only used when selecting 'fixed' mode for baseline span determination."),
+                      value = 400, min = 1, step = 1))
+                  ),
+                  shiny::hr(),
+                  shiny::h5("Baseline threshold", style = "font-size: 18px; font-weight: bold;"),
+                  shiny::numericInput("slp_threshold_approach", tooltip_label("Maximum slope (absolute value)", "Discard approach curves whose baseline slope (absolute value) exceeds this threshold."),
+                    value = 0.01, min = 0, step = 0.001),
+                  shiny::numericInput("std_threshold_approach", tooltip_label("Maximum standard deviation of deflection", "Discard approach curves whose baseline deflection SD exceeds this threshold."),
+                    value = 0.01, min = 0, step = 0.001),
+                  shiny::hr(),
+                  shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
+                  shiny::numericInput("sens_end_approach", tooltip_label("End of Contact region", "Maximum number of data points to use for approach sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
+                  shiny::hr(),
+                  shiny::numericInput("threads_transform_approach", tooltip_label("Threads", "Number of workers used for transforming approach curves."), value = 1, min = 1, step = 1)
+                )
+              ),
+              shiny::column(
+                width = 6,
+                bs4Dash::bs4Card(
+                  title = "Retract Curve Settings",
+                  width = NULL,
+                  collapsible = TRUE,
+                  shiny::numericInput("spring_constant_retract", tooltip_label("Spring constant (N/m)", "Cantilever spring constant used to convert deflection to force during retract transform."), value = 0.08, min = 0),
+                  shiny::checkboxInput("denoise_first_retract", tooltip_label("Denoise with Savitzky-Golay filter", "Apply Savitzky-Golay smoothing before baseline and sensitivity calculations for retract curves."), value = TRUE),
+                  shiny::fluidRow(
+                    shiny::column(6, shiny::numericInput("denoise_p_retract", tooltip_label("Polynomial Degree", "Savitzky-Golay polynomial order p."), value = 1, min = 0, step = 1)),
+                    shiny::column(6, shiny::numericInput("denoise_n_retract", tooltip_label("Window Size", "Savitzky-Golay window size n (odd integer)."), value = 3, min = 3, step = 2)),
+                    shiny::column(6, shiny::numericInput("denoise_m_retract", tooltip_label("Derivative Order", "Savitzky-Golay derivative order m; set to 0 for denoising."), value = 0, min = 0, step = 1)),
+                    shiny::column(6, shiny::numericInput("denoise_ts_retract", tooltip_label("Sample Spacing", "Sampling interval ts used in Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
+                  ),
+                  shiny::hr(),
+                  shiny::h5("Baseline span", style = "font-size: 18px; font-weight: bold;"),
+                  shiny::fluidRow(
+                    shiny::column(6, shiny::selectInput("least_mode_retract", tooltip_label("Mode", "fixed: use least_length value; automatic: use baseline_span_retract in metadata."),
+                      choices = c("fixed", "automatic"), selected = "fixed")),
+                    shiny::column(6, shiny::numericInput("least_length_retract", tooltip_label("least_length", "Minimum baseline span length for retract curve; this value is only used when selecting 'fixed' mode for baseline span determination."),
+                      value = 400, min = 1, step = 1))
+                  ),
+                  shiny::hr(),
+                  shiny::h5("Baseline threshold", style = "font-size: 18px; font-weight: bold;"),
+                  shiny::numericInput("slp_threshold_retract", tooltip_label("Maximum slope (absolute value)", "Discard retract curves whose baseline slope (absolute value) exceeds this threshold."),
+                    value = 0.01, min = 0, step = 0.001),
+                  shiny::numericInput("std_threshold_retract", tooltip_label("Maximum standard deviation of deflection", "Discard retract curves whose baseline deflection SD exceeds this threshold."),
+                    value = 0.01, min = 0, step = 0.001),
+                  shiny::hr(),
+                  shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
+                  shiny::numericInput("sens_end_retract", tooltip_label("End of Contact region", "Maximum number of data points to use for retract sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
+                  shiny::hr(),
+                  shiny::numericInput("threads_transform_retract", tooltip_label("Threads", "Number of workers used for transforming retract curves."), value = 1, min = 1, step = 1)
+                )
               )
+            ),
+            shiny::tags$div(
+              style = "margin-top:12px;",
+              shiny::actionButton("transform_btn", "Run Transform", class = "btn-warning btn-block",
+                                  icon = shiny::icon("play"))
             )
           )
         ),
@@ -372,26 +398,52 @@ ui <- bs4Dash::dashboardPage(
           bs4Dash::bs4Card(
             title = "Raw Deflection Curves",
             width = 6,
+            status = "warning",
+            solidHeader = TRUE,
             shiny::fluidRow(
-              shiny::column(6, shiny::selectInput("raw_group_by", tooltip_label("Group by", "Metadata column used for grouping/color in raw deflection curves."),
+              shiny::column(4, shiny::selectInput("raw_group_by", tooltip_label("Group by", "Metadata column used for grouping/color in raw deflection curves."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(6, shiny::selectInput("raw_split_by", tooltip_label("Split by", "Metadata column used for panel split in raw deflection curves."),
-                choices = c("None" = ""), selected = ""))
+              shiny::column(4, shiny::selectInput("raw_split_by", tooltip_label("Split by", "Metadata column used for panel split in raw deflection curves."),
+                choices = c("None" = ""), selected = "")),
+              shiny::column(4,
+                shiny::tags$br(),
+                shiny::actionButton("plot_raw_curves_btn", "Plot", class = "btn-warning btn-block", icon = shiny::icon("chart-line"))
+              )
             ),
             tooltip_plot("raw_curves_plot", "640px", "Raw deflection curves across samples. Use Group by / Split by to compare metadata-defined groups."),
-            shiny::downloadButton("download_raw_curves", "Download raw curves plot", class = "btn-info")
+            shiny::fluidRow(
+              shiny::column(3, shiny::numericInput("raw_curves_download_width", tooltip_label("Download width (in)", "Width in inches for exported raw deflection curves plot."), value = 12, min = 1, step = 0.5)),
+              shiny::column(3, shiny::numericInput("raw_curves_download_height", tooltip_label("Download height (in)", "Height in inches for exported raw deflection curves plot."), value = 8, min = 1, step = 0.5)),
+              shiny::column(6,
+                shiny::tags$br(),
+                shiny::downloadButton("download_raw_curves", "Download raw curves plot", class = "btn-info btn-block")
+              )
+            )
           ),
           bs4Dash::bs4Card(
             title = "FD Curves (Transformed)",
             width = 6,
+            status = "warning",
+            solidHeader = TRUE,
             shiny::fluidRow(
-              shiny::column(6, shiny::selectInput("fd_group_by", tooltip_label("Group by", "Metadata column used for grouping/color in transformed FD curves."),
+              shiny::column(4, shiny::selectInput("fd_group_by", tooltip_label("Group by", "Metadata column used for grouping/color in transformed FD curves."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(6, shiny::selectInput("fd_split_by", tooltip_label("Split by", "Metadata column used for panel split in transformed FD curves."),
-                choices = c("None" = ""), selected = ""))
+              shiny::column(4, shiny::selectInput("fd_split_by", tooltip_label("Split by", "Metadata column used for panel split in transformed FD curves."),
+                choices = c("None" = ""), selected = "")),
+              shiny::column(4,
+                shiny::tags$br(),
+                shiny::actionButton("plot_fd_curves_btn", "Plot", class = "btn-warning btn-block", icon = shiny::icon("chart-line"))
+              )
             ),
             tooltip_plot("fd_curves_plot", "640px", "Transformed force-distance curves generated by transform_curves for available curve segments."),
-            shiny::downloadButton("download_fd_curves", "Download transformed curves plot", class = "btn-info")
+            shiny::fluidRow(
+              shiny::column(3, shiny::numericInput("fd_curves_download_width", tooltip_label("Download width (in)", "Width in inches for exported transformed FD curves plot."), value = 12, min = 1, step = 0.5)),
+              shiny::column(3, shiny::numericInput("fd_curves_download_height", tooltip_label("Download height (in)", "Height in inches for exported transformed FD curves plot."), value = 8, min = 1, step = 0.5)),
+              shiny::column(6,
+                shiny::tags$br(),
+                shiny::downloadButton("download_fd_curves", "Download transformed curves plot", class = "btn-info btn-block")
+              )
+            )
           )
         )
       ),
@@ -614,18 +666,25 @@ server <- function(input, output, session) {
       ""
     }
 
+    keep_or_none <- function(current_value) {
+      if (!is.null(current_value) && nzchar(current_value) && (current_value %in% md_cols)) {
+        return(current_value)
+      }
+      ""
+    }
+
     shiny::updateSelectInput(session, "raw_anno_col1",
-      choices = chooser, selected = default_choice(c("surface"), 1L))
+      choices = chooser, selected = keep_or_none(input$raw_anno_col1))
     shiny::updateSelectInput(session, "raw_anno_col2",
-      choices = chooser, selected = default_choice(c("region"), 2L))
+      choices = chooser, selected = keep_or_none(input$raw_anno_col2))
     shiny::updateSelectInput(session, "raw_group_by",
-      choices = chooser, selected = default_choice(c("region"), 1L))
+      choices = chooser, selected = keep_or_none(input$raw_group_by))
     shiny::updateSelectInput(session, "raw_split_by",
-      choices = chooser, selected = default_choice(c("surface"), 2L))
+      choices = chooser, selected = keep_or_none(input$raw_split_by))
     shiny::updateSelectInput(session, "fd_group_by",
-      choices = chooser, selected = default_choice(c("region"), 1L))
+      choices = chooser, selected = keep_or_none(input$fd_group_by))
     shiny::updateSelectInput(session, "fd_split_by",
-      choices = chooser, selected = default_choice(c("surface"), 2L))
+      choices = chooser, selected = keep_or_none(input$fd_split_by))
     shiny::updateSelectInput(session, "summary_group_by",
       choices = chooser, selected = default_choice(c("surface"), 1L))
 
@@ -791,27 +850,27 @@ server <- function(input, output, session) {
       fdobj <- tryCatch({
         shiny::incProgress(0.35, detail = "Approach")
         fdobj <- curvana::transform_curves(
-          fdObj = fdobj, spring_constant = input$spring_constant, useCurve = "approach",
-          threads = max(1L, as.integer(input$threads_transform)),
-          denoise_first = isTRUE(input$denoise_first),
-          p = as.integer(input$denoise_p), n = as.integer(input$denoise_n),
-          m = as.integer(input$denoise_m), ts = as.numeric(input$denoise_ts),
+          fdObj = fdobj, spring_constant = as.numeric(input$spring_constant_approach), useCurve = "approach",
+          threads = max(1L, as.integer(input$threads_transform_approach)),
+          denoise_first = isTRUE(input$denoise_first_approach),
+          p = as.integer(input$denoise_p_approach), n = as.integer(input$denoise_n_approach),
+          m = as.integer(input$denoise_m_approach), ts = as.numeric(input$denoise_ts_approach),
           least_length  = least_app,
-          slp_threshold = as.numeric(input$slp_threshold),
-          std_threshold = as.numeric(input$std_threshold),
-          end           = as.integer(input$sens_end)
+          slp_threshold = as.numeric(input$slp_threshold_approach),
+          std_threshold = as.numeric(input$std_threshold_approach),
+          end           = as.integer(input$sens_end_approach)
         )
         shiny::incProgress(0.45, detail = "Retract")
         curvana::transform_curves(
-          fdObj = fdobj, spring_constant = input$spring_constant, useCurve = "retract",
-          threads = max(1L, as.integer(input$threads_transform)),
-          denoise_first = isTRUE(input$denoise_first),
-          p = as.integer(input$denoise_p), n = as.integer(input$denoise_n),
-          m = as.integer(input$denoise_m), ts = as.numeric(input$denoise_ts),
+          fdObj = fdobj, spring_constant = as.numeric(input$spring_constant_retract), useCurve = "retract",
+          threads = max(1L, as.integer(input$threads_transform_retract)),
+          denoise_first = isTRUE(input$denoise_first_retract),
+          p = as.integer(input$denoise_p_retract), n = as.integer(input$denoise_n_retract),
+          m = as.integer(input$denoise_m_retract), ts = as.numeric(input$denoise_ts_retract),
           least_length  = least_ret,
-          slp_threshold = as.numeric(input$slp_threshold),
-          std_threshold = as.numeric(input$std_threshold),
-          end           = as.integer(input$sens_end)
+          slp_threshold = as.numeric(input$slp_threshold_retract),
+          std_threshold = as.numeric(input$std_threshold_retract),
+          end           = as.integer(input$sens_end_retract)
         )
       }, error = function(e) {
         shiny::showNotification(paste("Transform failed:", e$message), type = "error", duration = NULL)
@@ -930,7 +989,18 @@ server <- function(input, output, session) {
   save_plot_png <- function(file, plot_fun, width = 10, height = 7, res = 300) {
     grDevices::png(filename = file, width = width, height = height, units = "in", res = res)
     on.exit(grDevices::dev.off(), add = TRUE)
-    plot_fun()
+    plot_obj <- plot_fun()
+    if (inherits(plot_obj, "ggplot")) {
+      print(plot_obj)
+    }
+  }
+
+  resolve_download_dim <- function(value, default_value) {
+    dim_val <- suppressWarnings(as.numeric(value))
+    if (!is.finite(dim_val) || dim_val <= 0) {
+      return(default_value)
+    }
+    dim_val
   }
 
   draw_raw_heatmap <- function() {
@@ -1097,7 +1167,8 @@ server <- function(input, output, session) {
 
   # Raw heatmap
   output$raw_heatmap <- shiny::renderPlot({
-    draw_raw_heatmap()
+    shiny::req(input$plot_raw_heatmap_btn > 0)
+    isolate(draw_raw_heatmap())
   })
 
   output$download_raw_heatmap <- shiny::downloadHandler(
@@ -1105,13 +1176,20 @@ server <- function(input, output, session) {
       paste0("curvana_raw_deflection_heatmap_", Sys.Date(), ".png")
     },
     content = function(file) {
-      save_plot_png(file, draw_raw_heatmap, width = 12, height = 9, res = 300)
+      save_plot_png(
+        file,
+        draw_raw_heatmap,
+        width = resolve_download_dim(input$raw_heatmap_download_width, 12),
+        height = resolve_download_dim(input$raw_heatmap_download_height, 9),
+        res = 300
+      )
     }
   )
 
   # Raw deflection curves
   output$raw_curves_plot <- shiny::renderPlot({
-    draw_raw_curves()
+    shiny::req(input$plot_raw_curves_btn > 0)
+    isolate(draw_raw_curves())
   })
 
   output$download_raw_curves <- shiny::downloadHandler(
@@ -1119,13 +1197,20 @@ server <- function(input, output, session) {
       paste0("curvana_raw_deflection_curves_", Sys.Date(), ".png")
     },
     content = function(file) {
-      save_plot_png(file, draw_raw_curves, width = 12, height = 8, res = 300)
+      save_plot_png(
+        file,
+        draw_raw_curves,
+        width = resolve_download_dim(input$raw_curves_download_width, 12),
+        height = resolve_download_dim(input$raw_curves_download_height, 8),
+        res = 300
+      )
     }
   )
 
   # FD curves
   output$fd_curves_plot <- shiny::renderPlot({
-    draw_fd_curves()
+    shiny::req(input$plot_fd_curves_btn > 0)
+    isolate(draw_fd_curves())
   })
 
   output$download_fd_curves <- shiny::downloadHandler(
@@ -1133,7 +1218,13 @@ server <- function(input, output, session) {
       paste0("curvana_transformed_fd_curves_", Sys.Date(), ".png")
     },
     content = function(file) {
-      save_plot_png(file, draw_fd_curves, width = 12, height = 8, res = 300)
+      save_plot_png(
+        file,
+        draw_fd_curves,
+        width = resolve_download_dim(input$fd_curves_download_width, 12),
+        height = resolve_download_dim(input$fd_curves_download_height, 8),
+        res = 300
+      )
     }
   )
 
