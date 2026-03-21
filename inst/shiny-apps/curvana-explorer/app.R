@@ -284,6 +284,9 @@ ui <- bs4Dash::dashboardPage(
             width       = 12,
             status      = "warning",
             solidHeader = TRUE,
+            shiny::helpText(
+              "This heatmap provides a quick overview of raw deflection behavior across all loaded curves before transformation. Each column corresponds to one curve segment (approach or retract), each row corresponds to the data point index, and colors reflect min-max scaled deflection values within each curve. Use the annotation columns to compare sample groupings and the tick interval to control row-axis readability."
+            ),
             shiny::fluidRow(
               shiny::column(3, shiny::selectInput("raw_anno_col1", tooltip_label("Annotate col 1", "First metadata column used for top annotation on raw heatmap."),
                 choices = c("None" = ""), selected = "")),
@@ -335,7 +338,7 @@ ui <- bs4Dash::dashboardPage(
                     shiny::column(6, shiny::selectInput("least_mode_approach", tooltip_label("Mode", "fixed: use least_length value; automatic: use baseline_span_approach in metadata."),
                       choices = c("fixed", "automatic"), selected = "fixed")),
                     shiny::column(6, shiny::numericInput("least_length_approach", tooltip_label("least_length", "Minimum baseline span length for approach curve; this value is only used when selecting 'fixed' mode for baseline span determination."),
-                      value = 400, min = 1, step = 1))
+                      value = 100, min = 1, step = 1))
                   ),
                   shiny::hr(),
                   shiny::h5("Baseline threshold", style = "font-size: 18px; font-weight: bold;"),
@@ -370,7 +373,7 @@ ui <- bs4Dash::dashboardPage(
                     shiny::column(6, shiny::selectInput("least_mode_retract", tooltip_label("Mode", "fixed: use least_length value; automatic: use baseline_span_retract in metadata."),
                       choices = c("fixed", "automatic"), selected = "fixed")),
                     shiny::column(6, shiny::numericInput("least_length_retract", tooltip_label("least_length", "Minimum baseline span length for retract curve; this value is only used when selecting 'fixed' mode for baseline span determination."),
-                      value = 400, min = 1, step = 1))
+                      value = 100, min = 1, step = 1))
                   ),
                   shiny::hr(),
                   shiny::h5("Baseline threshold", style = "font-size: 18px; font-weight: bold;"),
@@ -453,43 +456,214 @@ ui <- bs4Dash::dashboardPage(
       # ===========================================================
       bs4Dash::tabItem(
         tabName = "metrics",
+
+        # --- Settings row: Approach (left) | Retract (right) ---
+        shiny::fluidRow(
+
+          # ---- Approach ----
+          bs4Dash::bs4Card(
+            title       = "Approach Curve Analysis Settings",
+            width       = 6,
+            status      = "primary",
+            solidHeader = TRUE,
+            collapsible = TRUE,
+
+            shiny::checkboxInput("analyze_approach",
+              tooltip_label("Analyze approach curves", "Uncheck to skip approach curve analysis (e.g. if approach curves are absent or not needed."),
+              value = TRUE),
+            shiny::conditionalPanel(
+              condition = "input.analyze_approach == true",
+            shiny::h6(shiny::strong("Noise Band Estimation")),
+            shiny::textInput("noise_baseline_span_approach",
+              tooltip_label("Window size", "Number of terminal points used for noise band estimation. For example, for a curve with 512 points, setting this to 100 uses indices 413–512. Set to 'automatic' to use the predefined baseline segment."),
+              value = "automatic"),
+            shiny::selectInput("noise_threshold_method_approach",
+              tooltip_label("Noise band size estimation method", "Method used to estimate the noise band. sd: standard deviation of force values in the baseline segment; mad: median absolute deviation of force values in the baseline segment; quantile: quantile range of force values in the baseline segment, defined by the low and high quantile; fixed: use fixed noise threshold values defined by the user."),
+              choices = c("sd", "mad", "quantile", "fixed"), selected = "sd"),
+            shiny::conditionalPanel(
+              condition = "input.noise_threshold_method_approach == 'mad'",
+              shiny::numericInput("noise_mad_constant_approach",
+                tooltip_label("MAD constant", "Scaling constant for the median absolute deviation."),
+                value = 1.4826, step = 0.0001)
+            ),
+            shiny::conditionalPanel(
+              condition = "input.noise_threshold_method_approach == 'quantile'",
+              shiny::fluidRow(
+                shiny::column(6, shiny::numericInput("noise_quantile_low_approach",
+                  tooltip_label("Quantile low", "Lower quantile bound for noise estimation (e.g., setting this to 0.05 returns the value at the 5th percentile of the force within the defined region)."),
+                  value = 0.05, min = 0, max = 1, step = 0.01)),
+                shiny::column(6, shiny::numericInput("noise_quantile_high_approach",
+                  tooltip_label("Quantile high", "Upper quantile bound for noise estimation (e.g., setting this to 0.95 returns the value at the 95th percentile of the force within the defined region)."),
+                  value = 0.95, min = 0, max = 1, step = 0.01))
+              )
+            ),
+            shiny::conditionalPanel(
+              condition = "input.noise_threshold_method_approach == 'fixed'",
+              shiny::fluidRow(
+                shiny::column(6, shiny::numericInput("noise_fixed_low_approach",
+                  tooltip_label("Fixed low", "Use this value as the lower bound of the noise band."),
+                  value = NA, step = 1)),
+                shiny::column(6, shiny::numericInput("noise_fixed_high_approach",
+                  tooltip_label("Fixed high", "Use this value as the upper bound of the noise band."),
+                  value = NA, step = 1))
+              )
+            ),
+            shiny::numericInput("noise_multiplier_approach",
+              tooltip_label("Noise band multiplier", "Multiplier applied to the band defined with the method selected above to adjust the band size (used for all methods)."),
+              value = 3, min = 0, step = 0.1),
+
+            shiny::hr(),
+            shiny::h6(shiny::strong("Metrics to Compute")),
+            shiny::checkboxInput("do_adhesive_force_approach",
+              tooltip_label("Adhesive force", "Calculate the maximum adhesive force in the curve (the absolute value of the most negative force value in the curve)."), value = TRUE),
+            shiny::checkboxInput("do_energy_approach",
+              tooltip_label("Energies", "Calculate adhesive and repulsive interaction energies. Adhesive energy: the total area above the curve and below the lower bound of the noise band; repulsive energy: the total area below the curve and above the upper bound of the noise band (in the first quadrant)."), value = TRUE),
+            shiny::checkboxInput("do_rupture_approach",
+              tooltip_label("Rupture distance", "Calculate adhesive/rupture distance. The function scans the curve from right to left to look for the first point where force < lower bound of noise band (i.e., where the curve enters the adhesive region)."), value = TRUE),
+            shiny::conditionalPanel(
+              condition = "input.do_rupture_approach == true",
+              shiny::fluidRow(
+                shiny::column(10, shiny::textInput("rupture_baseline_span_approach",
+                  tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
+                  value = "automatic"))
+              )
+            ),
+            shiny::checkboxInput("do_repulsive_approach",
+              tooltip_label("Repulsive distance", "Calculate repulsive distance. The function scans the curve from left to right to look for the last point where force > upper bound of noise band (i.e., where the curve exits the repulsive region)"), value = TRUE),
+            shiny::conditionalPanel(
+              condition = "input.do_repulsive_approach == true",
+              shiny::fluidRow(
+                shiny::column(10, shiny::textInput("repulsive_baseline_span_approach",
+                  tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
+                  value = "automatic"))
+              )
+            )
+            ) # end conditionalPanel analyze_approach
+          ),
+
+          # ---- Retract ----
+          bs4Dash::bs4Card(
+            title       = "Retract Curve Analysis Settings",
+            width       = 6,
+            status      = "danger",
+            solidHeader = TRUE,
+            collapsible = TRUE,
+
+            shiny::checkboxInput("analyze_retract",
+              tooltip_label("Analyze retract curves", "Uncheck to skip retract curve analysis (e.g. if retract curves are absent or not needed)."),
+              value = TRUE),
+            shiny::conditionalPanel(
+              condition = "input.analyze_retract == true",
+            shiny::h6(shiny::strong("Noise Band Estimation")),
+            shiny::textInput("noise_baseline_span_retract",
+              tooltip_label("Window size", "Number of terminal points used for noise band estimation. For example, for a curve with 512 points, setting this to 100 uses indices 413–512. Set to 'automatic' to use the predefined baseline segment."),
+              value = "automatic"),
+            shiny::selectInput("noise_threshold_method_retract",
+              tooltip_label("Noise band size estimation method", "Method used to estimate the noise band. sd: standard deviation of force values in the baseline segment; mad: median absolute deviation of force values in the baseline segment; quantile: quantile range of force values in the baseline segment, defined by the low and high quantile; fixed: use fixed noise threshold values defined by the user."),
+              choices = c("sd", "mad", "quantile", "fixed"), selected = "sd"),
+            shiny::conditionalPanel(
+              condition = "input.noise_threshold_method_retract == 'mad'",
+              shiny::numericInput("noise_mad_constant_retract",
+                tooltip_label("MAD constant", "Scaling constant for the median absolute deviation."),
+                value = 1.4826, step = 0.0001)
+            ),
+            shiny::conditionalPanel(
+              condition = "input.noise_threshold_method_retract == 'quantile'",
+              shiny::fluidRow(
+                shiny::column(6, shiny::numericInput("noise_quantile_low_retract",
+                  tooltip_label("Quantile low", "Lower quantile bound for noise estimation (e.g., setting this to 0.05 returns the value at the 5th percentile of the force within the defined region)."),
+                  value = 0.05, min = 0, max = 1, step = 0.01)),
+                shiny::column(6, shiny::numericInput("noise_quantile_high_retract",
+                  tooltip_label("Quantile high", "Upper quantile bound for noise estimation (e.g., setting this to 0.95 returns the value at the 95th percentile of the force within the defined region)."),
+                  value = 0.95, min = 0, max = 1, step = 0.01))
+              )
+            ),
+            shiny::conditionalPanel(
+              condition = "input.noise_threshold_method_retract == 'fixed'",
+              shiny::fluidRow(
+                shiny::column(6, shiny::numericInput("noise_fixed_low_retract",
+                  tooltip_label("Fixed low", "Use this value as the lower bound of the noise band."),
+                  value = NA, step = 1)),
+                shiny::column(6, shiny::numericInput("noise_fixed_high_retract",
+                  tooltip_label("Fixed high", "Use this value as the upper bound of the noise band."),
+                  value = NA, step = 1))
+              )
+            ),
+            shiny::numericInput("noise_multiplier_retract",
+              tooltip_label("Noise band multiplier", "Multiplier applied to the band defined with the method selected above to adjust the band size (used for all methods)."),
+              value = 3, min = 0, step = 0.1),
+
+            shiny::hr(),
+            shiny::h6(shiny::strong("Metrics to Compute")),
+            shiny::checkboxInput("do_adhesive_force_retract",
+              tooltip_label("Adhesive force", "Calculate the maximum adhesive force in the curve (the absolute value of the most negative force value in the curve)."), value = TRUE),
+            shiny::checkboxInput("do_energy_retract",
+              tooltip_label("Energies", "Calculate adhesive and repulsive interaction energies. Adhesive energy: the total area above the curve and below the lower bound of the noise band; repulsive energy: the total area below the curve and above the upper bound of the noise band (in the first quadrant)."), value = TRUE),
+            shiny::checkboxInput("do_rupture_retract",
+              tooltip_label("Rupture distance", "Calculate adhesive/rupture distance. The function scans the curve from right to left to look for the first point where force < lower bound of noise band (i.e., where the curve enters the adhesive region)."), value = TRUE),
+            shiny::conditionalPanel(
+              condition = "input.do_rupture_retract == true",
+              shiny::fluidRow(
+                shiny::column(10, shiny::textInput("rupture_baseline_span_retract",
+                  tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
+                  value = "automatic"))
+              )
+            ),
+            shiny::checkboxInput("do_repulsive_retract",
+              tooltip_label("Repulsive distance", "Calculate repulsive distance The function scans the curve from left to right to look for the last point where force > upper bound of noise band (i.e., where the curve exits the repulsive region)"), value = TRUE),
+            shiny::conditionalPanel(
+              condition = "input.do_repulsive_retract == true",
+              shiny::fluidRow(
+                shiny::column(10, shiny::textInput("repulsive_baseline_span_retract",
+                  tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
+                  value = "automatic"))
+              )
+            )
+            ) # end conditionalPanel analyze_retract
+          )
+        ),
+
+        # --- Threads + Run button ---
         shiny::fluidRow(
           bs4Dash::bs4Card(
-            title       = "Metrics Settings",
-            width       = 4,
-            status      = "success",
-            solidHeader = TRUE,
-            shiny::selectInput("noise_threshold_method", tooltip_label("Noise threshold method", "Method used to estimate baseline noise band for downstream metrics."),
-              choices = c("quantile", "sd", "mad", "fixed"), selected = "quantile"),
-            shiny::numericInput("noise_quantile_low",  tooltip_label("Noise quantile low", "Lower quantile bound used when threshold method is quantile."),
-              value = 0, min = 0, max = 1, step = 0.01),
-            shiny::numericInput("noise_quantile_high", tooltip_label("Noise quantile high", "Upper quantile bound used when threshold method is quantile."),
-              value = 1, min = 0, max = 1, step = 0.01),
-            shiny::numericInput("noise_multiplier", tooltip_label("Noise multiplier", "Multiplier applied to noise band for metric detection thresholds."),
-              value = 1, min = 0, step = 0.1),
-            shiny::hr(),
-            shiny::checkboxInput("do_adhesive_force", tooltip_label("Adhesive force", "Calculate minimum-force based adhesion metric."), value = TRUE),
-            shiny::checkboxInput("do_energy", tooltip_label("Energies", "Calculate adhesive and repulsive interaction energies."), value = TRUE),
-            shiny::checkboxInput("do_rupture", tooltip_label("Rupture distance", "Calculate adhesive/rupture distance metric."), value = TRUE),
-            shiny::checkboxInput("do_repulsive", tooltip_label("Repulsive distance", "Calculate repulsive distance metric."), value = TRUE),
-            shiny::numericInput("threads_metrics", tooltip_label("Threads", "Number of workers used by analyze_curves_all_analytical_metrics."), value = 1, min = 1, step = 1),
-            shiny::tags$div(
-              style = "margin-top:12px;",
-              shiny::actionButton("metrics_btn", "Run Metrics", class = "btn-success btn-block",
-                                  icon = shiny::icon("calculator"))
+            width  = 12,
+            status = "success",
+            shiny::fluidRow(
+              shiny::column(3,
+                shiny::numericInput("threads_metrics",
+                  tooltip_label("Threads", "Number of parallel workers for metrics computation."),
+                  value = 1, min = 1, step = 1)
+              ),
+              shiny::column(9,
+                shiny::tags$div(style = "margin-top:24px;",
+                  shiny::actionButton("metrics_btn", "Analyze",
+                    class = "btn-success btn-block", icon = shiny::icon("calculator"))
+                )
+              )
             )
-          ),
+          )
+        ),
+
+        # --- Single Curve Inspector ---
+        shiny::fluidRow(
           bs4Dash::bs4Card(
             title = "Single Curve Inspector",
-            width = 8,
+            solidHeader = TRUE,
+            status = 'info',
+            width = 12,
             shiny::fluidRow(
-              shiny::column(8, shiny::selectInput("metric_curve_name", tooltip_label("Curve name", "Sample/curve identifier to visualize in the single-curve inspector."),
+              shiny::column(8, shiny::selectInput("metric_curve_name",
+                tooltip_label("Curve name", "Sample/curve identifier to visualize in the single-curve inspector."),
                 choices = character(0))),
-              shiny::column(4, shiny::selectInput("metric_use_curve", tooltip_label("Segment", "Choose approach or retract segment for single-curve metrics display."),
+              shiny::column(4, shiny::selectInput("metric_use_curve",
+                tooltip_label("Segment", "Choose approach or retract segment for single-curve metrics display."),
                 choices = c("retract", "approach"), selected = "retract"))
             ),
             tooltip_plot("single_curve_plot", "480px", "Single selected curve with analytical metric annotations. Toggle segment to inspect approach or retract."),
-            shiny::downloadButton("download_single_curve", "Download single curve plot", class = "btn-info")
+            shiny::fluidRow(
+              shiny::column(6, shiny::downloadButton("download_single_curve", "Download plot", class = "btn-info btn-block")),
+              shiny::column(6, shiny::downloadButton("download_single_curve_data", "Download data", class = "btn-info btn-block"))
+            )
           )
         )
       ),
@@ -530,7 +704,8 @@ ui <- bs4Dash::dashboardPage(
 server <- function(input, output, session) {
 
   rv <- shiny::reactiveValues(
-    fdobj = NULL,
+    fdobj       = NULL,
+    fdobj_clean = NULL,
     status = "No data loaded yet."
   )
 
@@ -789,7 +964,8 @@ server <- function(input, output, session) {
       )
       if (is.null(fdobj)) return(NULL)
       shiny::incProgress(0.3)
-      rv$fdobj  <- fdobj
+      rv$fdobj       <- fdobj
+      rv$fdobj_clean <- fdobj
       rv$status <- sprintf(
         "Loaded %d raw curves from:\n%s\nGenerated metadata: %d rows x %d columns.\ncreateFdObjFromFolder args: suffix='%s', pattern='%s'.%s",
         length(fdobj@rawCurves),
@@ -842,9 +1018,9 @@ server <- function(input, output, session) {
 
   # Transform Curves
   shiny::observeEvent(input$transform_btn, {
-    shiny::req(rv$fdobj)
+    shiny::req(rv$fdobj_clean)
     shiny::withProgress(message = "Running transform_curves...", value = 0.1, {
-      fdobj     <- rv$fdobj
+      fdobj     <- rv$fdobj_clean
       least_app <- if (identical(input$least_mode_approach, "automatic")) "automatic" else as.integer(input$least_length_approach)
       least_ret <- if (identical(input$least_mode_retract,  "automatic")) "automatic" else as.integer(input$least_length_retract)
       fdobj <- tryCatch({
@@ -888,36 +1064,103 @@ server <- function(input, output, session) {
   # Analytical Metrics
   shiny::observeEvent(input$metrics_btn, {
     shiny::req(rv$fdobj)
-    shiny::withProgress(message = "Computing analytical metrics...", value = 0.2, {
-      fdobj <- tryCatch(
-        curvana::analyze_curves_all_analytical_metrics(
-          fdObj                                    = rv$fdobj,
-          useCurve                                 = "both",
-          threads                                  = max(1L, as.integer(input$threads_metrics)),
-          noise_baseline_span                      = "automatic",
-          noise_threshold_method                   = input$noise_threshold_method,
-          noise_multiplier                         = as.numeric(input$noise_multiplier),
-          noise_quantile_low                       = as.numeric(input$noise_quantile_low),
-          noise_quantile_high                      = as.numeric(input$noise_quantile_high),
-          analyze_adhesive_force                   = isTRUE(input$do_adhesive_force),
-          analyze_energy                           = isTRUE(input$do_energy),
-          analyze_rupture_distance                 = isTRUE(input$do_rupture),
-          analyze_rupture_distance_baseline_span   = "automatic",
-          analyze_rupture_distance_x_direction     = "left",
-          analyze_repulsive_distance               = isTRUE(input$do_repulsive),
-          analyze_repulsive_distance_baseline_span = "automatic",
-          analyze_repulsive_distance_x_direction   = "right"
-        ),
+    shiny::withProgress(message = "Computing analytical metrics...", value = 0.1, {
+
+      # Helper: parse baseline span — "automatic" or positive integer
+      parse_span <- function(x) {
+        x <- trimws(as.character(x))
+        if (tolower(x) == "automatic") return("automatic")
+        v <- suppressWarnings(as.integer(x))
+        if (!is.na(v) && v >= 1L) v else "automatic"
+      }
+
+      # Helper: NA numeric input → NULL (for noise_fixed_low/high)
+      get_fixed <- function(val) {
+        v <- suppressWarnings(as.numeric(val))
+        if (is.na(v)) NULL else v
+      }
+
+      # validate at least one segment is selected
+      if (!isTRUE(input$analyze_approach) && !isTRUE(input$analyze_retract)) {
+        shiny::showNotification("Please enable analysis for at least one curve segment (approach or retract).", type = "warning")
+        return(NULL)
+      }
+
+      fdobj_current <- rv$fdobj
+
+      # ---- Approach ----
+      if (isTRUE(input$analyze_approach)) {
+      approach_args <- list(
+        fdObj                                    = fdobj_current,
+        useCurve                                 = "approach",
+        threads                                  = max(1L, as.integer(input$threads_metrics)),
+        noise_baseline_span                      = parse_span(input$noise_baseline_span_approach),
+        noise_threshold_method                   = input$noise_threshold_method_approach,
+        noise_multiplier                         = as.numeric(input$noise_multiplier_approach),
+        noise_mad_constant                       = as.numeric(input$noise_mad_constant_approach),
+        noise_quantile_low                       = as.numeric(input$noise_quantile_low_approach),
+        noise_quantile_high                      = as.numeric(input$noise_quantile_high_approach),
+        noise_fixed_low                          = get_fixed(input$noise_fixed_low_approach),
+        noise_fixed_high                         = get_fixed(input$noise_fixed_high_approach),
+        analyze_adhesive_force                   = isTRUE(input$do_adhesive_force_approach),
+        analyze_energy                           = isTRUE(input$do_energy_approach),
+        analyze_rupture_distance                 = isTRUE(input$do_rupture_approach),
+        analyze_rupture_distance_baseline_span   = parse_span(input$rupture_baseline_span_approach),
+        analyze_rupture_distance_x_direction     = "left",
+        analyze_repulsive_distance               = isTRUE(input$do_repulsive_approach),
+        analyze_repulsive_distance_baseline_span = parse_span(input$repulsive_baseline_span_approach),
+        analyze_repulsive_distance_x_direction   = "right"
+      )
+
+      fdobj_current <- tryCatch(
+        do.call(curvana::analyze_curves_all_analytical_metrics, approach_args),
         error = function(e) {
-          shiny::showNotification(paste("Metrics failed:", e$message), type = "error", duration = NULL)
+          shiny::showNotification(paste("Approach metrics failed:", e$message), type = "error", duration = NULL)
           NULL
         }
       )
-      if (is.null(fdobj)) return(NULL)
-      rv$fdobj  <- fdobj
+      if (is.null(fdobj_current)) return(NULL)
+      } # end if analyze_approach
+      shiny::incProgress(0.45)
+
+      # ---- Retract ----
+      if (isTRUE(input$analyze_retract)) {
+      retract_args <- list(
+        fdObj                                    = fdobj_current,
+        useCurve                                 = "retract",
+        threads                                  = max(1L, as.integer(input$threads_metrics)),
+        noise_baseline_span                      = parse_span(input$noise_baseline_span_retract),
+        noise_threshold_method                   = input$noise_threshold_method_retract,
+        noise_multiplier                         = as.numeric(input$noise_multiplier_retract),
+        noise_mad_constant                       = as.numeric(input$noise_mad_constant_retract),
+        noise_quantile_low                       = as.numeric(input$noise_quantile_low_retract),
+        noise_quantile_high                      = as.numeric(input$noise_quantile_high_retract),
+        noise_fixed_low                          = get_fixed(input$noise_fixed_low_retract),
+        noise_fixed_high                         = get_fixed(input$noise_fixed_high_retract),
+        analyze_adhesive_force                   = isTRUE(input$do_adhesive_force_retract),
+        analyze_energy                           = isTRUE(input$do_energy_retract),
+        analyze_rupture_distance                 = isTRUE(input$do_rupture_retract),
+        analyze_rupture_distance_baseline_span   = parse_span(input$rupture_baseline_span_retract),
+        analyze_rupture_distance_x_direction     = "left",
+        analyze_repulsive_distance               = isTRUE(input$do_repulsive_retract),
+        analyze_repulsive_distance_baseline_span = parse_span(input$repulsive_baseline_span_retract),
+        analyze_repulsive_distance_x_direction   = "right"
+      )
+
+      fdobj_current <- tryCatch(
+        do.call(curvana::analyze_curves_all_analytical_metrics, retract_args),
+        error = function(e) {
+          shiny::showNotification(paste("Retract metrics failed:", e$message), type = "error", duration = NULL)
+          NULL
+        }
+      )
+      if (is.null(fdobj_current)) return(NULL)
+      } # end if analyze_retract
+
+      rv$fdobj  <- fdobj_current
       rv$status <- "Analytical metrics completed."
-      update_choices(fdobj)
-      shiny::incProgress(0.8)
+      update_choices(fdobj_current)
+      shiny::incProgress(0.9)
       shiny::showNotification("Metrics complete.", type = "message")
     })
   })
@@ -1239,6 +1482,71 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       save_plot_png(file, draw_single_curve, width = 14, height = 7, res = 300)
+    }
+  )
+
+  output$download_single_curve_data <- shiny::downloadHandler(
+    filename = function() {
+      shiny::req(rv$fdobj)
+      shiny::req(nzchar(input$metric_curve_name))
+      curve_name <- input$metric_curve_name
+      use_curve <- input$metric_use_curve
+      safe_curve_name <- gsub("[^A-Za-z0-9._-]+", "_", curve_name)
+      paste0(safe_curve_name, "_", use_curve, ".data.zip")
+    },
+    content = function(file) {
+      shiny::req(rv$fdobj)
+      shiny::req(nzchar(input$metric_curve_name))
+      fdobj <- rv$fdobj
+      curve_name <- input$metric_curve_name
+      use_curve <- input$metric_use_curve
+      safe_curve_name <- gsub("[^A-Za-z0-9._-]+", "_", curve_name)
+
+      if (!(curve_name %in% names(fdobj@rawCurves))) {
+        stop("Selected curve not found in raw curves.")
+      }
+
+      transformed_list <- if (identical(use_curve, "approach")) {
+        fdobj@approachCurves
+      } else {
+        fdobj@retractCurves
+      }
+
+      if (!(curve_name %in% names(transformed_list))) {
+        stop("Selected curve not found in transformed curves.")
+      }
+
+      raw_df <- fdobj@rawCurves[[curve_name]]
+      transformed_df <- transformed_list[[curve_name]]
+
+      if (!is.data.frame(raw_df)) {
+        raw_df <- data.frame()
+      }
+      if (!is.data.frame(transformed_df)) {
+        transformed_df <- data.frame()
+      }
+
+      tmp_dir <- tempfile("single_curve_data_")
+      dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
+      on.exit(unlink(tmp_dir, recursive = TRUE, force = TRUE), add = TRUE)
+
+      raw_csv <- file.path(tmp_dir, paste0(safe_curve_name, "_", use_curve, "_raw.csv"))
+      transformed_csv <- file.path(tmp_dir, paste0(safe_curve_name, "_", use_curve, "_transformed.csv"))
+
+      utils::write.csv(raw_df, file = raw_csv, row.names = FALSE, na = "")
+      utils::write.csv(transformed_df, file = transformed_csv, row.names = FALSE, na = "")
+
+      zip_cmd <- Sys.which("zip")
+      if (nzchar(zip_cmd)) {
+        old_wd <- getwd()
+        on.exit(setwd(old_wd), add = TRUE)
+        setwd(tmp_dir)
+        utils::zip(zipfile = file, files = c(basename(raw_csv), basename(transformed_csv)))
+      } else if (requireNamespace("zip", quietly = TRUE)) {
+        zip::zipr(zipfile = file, files = c(raw_csv, transformed_csv), include_directories = FALSE)
+      } else {
+        stop("No ZIP utility available. Install package 'zip' to enable this download.")
+      }
     }
   )
 
