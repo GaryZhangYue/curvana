@@ -878,7 +878,7 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 #'   \\code{c("sd", "mad", "quantile", "fixed")} (default \\code{"sd"}):
 #'   \\itemize{
 #'     \\item \\code{"sd"}: symmetric bands from baseline SD, i.e. \\eqn{\\pm\\,sd(y_{base})\\times multiplier}.
-#'     \\item \\code{"mad"}: symmetric robust bands from MAD, i.e. \\eqn{\\pm\\,mad(y_{base})\\times mad\\_constant\\times multiplier}.
+#'     \\item \\code{"mad"}: symmetric bands from MAD, i.e. \\eqn{\\pm\\,mad(y_{base})\\times mad\\_constant\\times multiplier}.
 #'     \\item \\code{"quantile"}: asymmetric empirical bands using \\code{quantile\\_low} and \\code{quantile\\_high}, each scaled by \\code{multiplier}.
 #'     \\item \\code{"fixed"}: user-specified \\code{fixed\\_low} and \\code{fixed\\_high}, each scaled by \\code{multiplier}.
 #'   }
@@ -1111,13 +1111,13 @@ analyze_curves_noise <- function(
 #' marking rupture length (negative excursion) or repulsive distance (positive excursion).
 #' This function uses user-provided noise-band thresholds directly.
 #' Scanning can proceed from right-to-left (default) or left-to-right.
-#' When y-direction is negative, the function looks for the first point where force < -noise_cutoff (i.e., the curve enters the adhesive region).
-#' When y-direction is positive, it looks for the last point where force > noise_cutoff (i.e., the curve exits the repulsive region).
+#' When y-direction is negative, the function scans the curve to look for the first point where force <  lower bound of noise band (i.e., the curve enters the adhesive region).
+#' When y-direction is positive, the function scans the curve to look for the last point where force >  upper bound of noise band (i.e., the curve exits the repulsive region).
 #'
 #' @param curve_df data.frame with columns:
 #'   - separation_distance_nm (numeric): x values (distance, nm)
 #'   - force_nN (numeric): y values (force, nN)
-#' @param baseline_span Integer >= 1. Number of last points used as the baseline window.
+#' @param baseline_span Integer >= 1. Number of last points used as the baseline window. The baseline region will not be scanned.
 #' @param y_direction "negative" or "positive".
 #'   - "negative": find first y < threshold (rupture-like; threshold is typically negative)
 #'   - "positive": find first y > threshold (repulsion-like; threshold is typically positive)
@@ -1161,7 +1161,7 @@ analyze_a_curve_interaction_distance <- function(
 
   x <- curve_df$separation_distance_nm
   y <- curve_df$force_nN
-  b_start <- n - baseline_span + 1L
+  b_start <- n - baseline_span
 
   threshold <- if (y_direction == "negative") {
     if (is.null(noiseBand_low) || !is.numeric(noiseBand_low) || length(noiseBand_low) != 1 || is.na(noiseBand_low)) {
@@ -1178,10 +1178,10 @@ analyze_a_curve_interaction_distance <- function(
   # ---- choose scan indices based on x_direction ----
   if (x_direction == "left") {
     # right -> left (from just before baseline toward origin)
-    scan_idx <- seq.int(from = b_start - 1L, to = 1L, by = -1L)
+    scan_idx <- seq.int(from = b_start, to = 1L, by = -1L)
   } else {
     # left -> right (from origin up to just before baseline)
-    scan_idx <- seq.int(from = 1L, to = max(b_start - 1L, 1L), by = 1L)
+    scan_idx <- seq.int(from = 1L, to = max(b_start, 1L), by = 1L)
     if (b_start <= 1L) scan_idx <- integer(0)  # no room before baseline
   }
 
@@ -1197,7 +1197,7 @@ analyze_a_curve_interaction_distance <- function(
     y_scan > threshold
   }
 
-  hit <- if (y_direction == "negative") which(hit_mask)[1L] - 1L else which(!hit_mask)[1L]
+  hit <- if (y_direction == "negative") which(hit_mask)[1L] else which(!hit_mask)[1L] - 1L
 
   if (is.na(hit)) return(c(distance = NA_real_, threshold = threshold))
 
