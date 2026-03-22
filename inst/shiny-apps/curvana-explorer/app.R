@@ -53,7 +53,7 @@ ui <- bs4Dash::dashboardPage(
       bs4Dash::menuItem("Load Data",          tabName = "load",      icon = shiny::icon("folder-open")),
       bs4Dash::menuItem("Transform Curves",   tabName = "transform", icon = shiny::icon("cogs")),
       bs4Dash::menuItem("Analytical Metrics", tabName = "metrics",   icon = shiny::icon("chart-bar")),
-      bs4Dash::menuItem("Summary",            tabName = "summary",   icon = shiny::icon("chart-line"))
+      bs4Dash::menuItem("Results",            tabName = "results",   icon = shiny::icon("chart-line"))
     )
   ),
 
@@ -107,6 +107,25 @@ ui <- bs4Dash::dashboardPage(
           "  border-style: solid;\n",
           "  border-color: transparent transparent rgba(35, 35, 35, 0.95) transparent;\n",
           "  z-index: 10000;\n",
+          "}\n",
+          ".pca-checkbox-grid .shiny-options-group {\n",
+          "  display: grid;\n",
+          "  grid-template-columns: repeat(3, minmax(0, 1fr));\n",
+          "  gap: 6px 14px;\n",
+          "}\n",
+          ".pca-checkbox-grid .checkbox {\n",
+          "  margin-top: 0;\n",
+          "  margin-bottom: 0;\n",
+          "}\n",
+          "@media (max-width: 900px) {\n",
+          "  .pca-checkbox-grid .shiny-options-group {\n",
+          "    grid-template-columns: repeat(2, minmax(0, 1fr));\n",
+          "  }\n",
+          "}\n",
+          "@media (max-width: 600px) {\n",
+          "  .pca-checkbox-grid .shiny-options-group {\n",
+          "    grid-template-columns: 1fr;\n",
+          "  }\n",
           "}\n"
         )
       ))
@@ -154,7 +173,7 @@ ui <- bs4Dash::dashboardPage(
                   " Inspect individual curves with full annotation overlays."
                 ),
                 shiny::tags$li(
-                  shiny::tags$strong("Summary"), " \u2014 Compare results across samples and conditions",
+                  shiny::tags$strong("Results"), " \u2014 Compare results across samples and conditions",
                   " using PCA biplots and violin plots."
                 )
               ),
@@ -404,7 +423,7 @@ ui <- bs4Dash::dashboardPage(
             status = "warning",
             solidHeader = TRUE,
             shiny::fluidRow(
-              shiny::column(4, shiny::selectInput("raw_group_by", tooltip_label("Group by", "Metadata column used for grouping/color in raw deflection curves."),
+              shiny::column(4, shiny::selectInput("raw_group_by", tooltip_label("Color by", "Metadata column used for grouping/color in raw deflection curves."),
                 choices = c("None" = ""), selected = "")),
               shiny::column(4, shiny::selectInput("raw_split_by", tooltip_label("Split by", "Metadata column used for panel split in raw deflection curves."),
                 choices = c("None" = ""), selected = "")),
@@ -429,7 +448,7 @@ ui <- bs4Dash::dashboardPage(
             status = "warning",
             solidHeader = TRUE,
             shiny::fluidRow(
-              shiny::column(4, shiny::selectInput("fd_group_by", tooltip_label("Group by", "Metadata column used for grouping/color in transformed FD curves."),
+              shiny::column(4, shiny::selectInput("fd_group_by", tooltip_label("Color by", "Metadata column used for grouping/color in transformed FD curves."),
                 choices = c("None" = ""), selected = "")),
               shiny::column(4, shiny::selectInput("fd_split_by", tooltip_label("Split by", "Metadata column used for panel split in transformed FD curves."),
                 choices = c("None" = ""), selected = "")),
@@ -523,9 +542,12 @@ ui <- bs4Dash::dashboardPage(
             shiny::conditionalPanel(
               condition = "input.do_rupture_approach == true",
               shiny::fluidRow(
-                shiny::column(10, shiny::textInput("rupture_baseline_span_approach",
+                shiny::column(8, shiny::textInput("rupture_baseline_span_approach",
                   tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
-                  value = "automatic"))
+                  value = "automatic")),
+                shiny::column(4, shiny::numericInput("rupture_min_consecutive_approach",
+                  tooltip_label("Min consecutive", "Minimum number of consecutive points below the noise band required to call an adhesive event."),
+                  value = 3, min = 1, step = 1))
               )
             ),
             shiny::checkboxInput("do_repulsive_approach",
@@ -533,9 +555,12 @@ ui <- bs4Dash::dashboardPage(
             shiny::conditionalPanel(
               condition = "input.do_repulsive_approach == true",
               shiny::fluidRow(
-                shiny::column(10, shiny::textInput("repulsive_baseline_span_approach",
+                shiny::column(8, shiny::textInput("repulsive_baseline_span_approach",
                   tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
-                  value = "automatic"))
+                  value = "automatic")),
+                shiny::column(4, shiny::numericInput("repulsive_min_consecutive_approach",
+                  tooltip_label("Min consecutive", "Minimum number of consecutive points above the noise band required to call a repulsive event."),
+                  value = 1, min = 1, step = 1))
               )
             )
             ) # end conditionalPanel analyze_approach
@@ -604,9 +629,12 @@ ui <- bs4Dash::dashboardPage(
             shiny::conditionalPanel(
               condition = "input.do_rupture_retract == true",
               shiny::fluidRow(
-                shiny::column(10, shiny::textInput("rupture_baseline_span_retract",
+                shiny::column(8, shiny::textInput("rupture_baseline_span_retract",
                   tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
-                  value = "automatic"))
+                  value = "automatic")),
+                shiny::column(4, shiny::numericInput("rupture_min_consecutive_retract",
+                  tooltip_label("Min consecutive", "Minimum number of consecutive points below the noise band required to call a adhesive event."),
+                  value = 3, min = 1, step = 1))
               )
             ),
             shiny::checkboxInput("do_repulsive_retract",
@@ -614,9 +642,12 @@ ui <- bs4Dash::dashboardPage(
             shiny::conditionalPanel(
               condition = "input.do_repulsive_retract == true",
               shiny::fluidRow(
-                shiny::column(10, shiny::textInput("repulsive_baseline_span_retract",
+                shiny::column(8, shiny::textInput("repulsive_baseline_span_retract",
                   tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
-                  value = "automatic"))
+                  value = "automatic")),
+                shiny::column(4, shiny::numericInput("repulsive_min_consecutive_retract",
+                  tooltip_label("Min consecutive", "Minimum number of consecutive points above the noise band required to call a repulsive event."),
+                  value = 1, min = 1, step = 1))
               )
             )
             ) # end conditionalPanel analyze_retract
@@ -661,6 +692,11 @@ ui <- bs4Dash::dashboardPage(
             ),
             tooltip_plot("single_curve_plot", "480px", "Single selected curve with analytical metric annotations. Toggle segment to inspect approach or retract."),
             shiny::fluidRow(
+              shiny::column(3, shiny::numericInput("single_curve_download_width", tooltip_label("Download width (in)", "Width in inches for exported single-curve plot."), value = 14, min = 1, step = 0.5)),
+              shiny::column(3, shiny::numericInput("single_curve_download_height", tooltip_label("Download height (in)", "Height in inches for exported single-curve plot."), value = 7, min = 1, step = 0.5)),
+              shiny::column(6)
+            ),
+            shiny::fluidRow(
               shiny::column(6, shiny::downloadButton("download_single_curve", "Download plot", class = "btn-info btn-block")),
               shiny::column(6, shiny::downloadButton("download_single_curve_data", "Download data", class = "btn-info btn-block"))
             )
@@ -669,28 +705,117 @@ ui <- bs4Dash::dashboardPage(
       ),
 
       # ===========================================================
-      # Page 5 -- Summary
+      # Page 5 -- Results
       # ===========================================================
       bs4Dash::tabItem(
-        tabName = "summary",
+        tabName = "results",
         shiny::fluidRow(
           bs4Dash::bs4Card(
-            title = "PCA Biplot",
-            width = 7,
-            tooltip_plot("pca_plot", "460px", "PCA biplot built from selected analytical metrics; points are samples and arrows are feature loadings."),
-            shiny::downloadButton("download_pca", "Download PCA plot", class = "btn-info")
-          ),
-          bs4Dash::bs4Card(
-            title = "Violin Plot",
-            width = 5,
+            title       = "PCA Biplot",
+            width       = 12,
+            status      = "info",
+            solidHeader = TRUE,
+            
             shiny::fluidRow(
-              shiny::column(6, shiny::selectInput("violin_metric", tooltip_label("Metric", "Analytical metric column to display in violin plot."),
-                choices = character(0))),
-              shiny::column(6, shiny::selectInput("summary_group_by", tooltip_label("Group by", "Metadata column used to group samples in violin and PCA coloring."),
+              shiny::column(12, shiny::selectInput("summary_group_by", tooltip_label("Group by", "Metadata column used to group samples in violin and PCA coloring."),
                 choices = c("None" = ""), selected = ""))
             ),
+            shiny::fluidRow(
+              shiny::column(12, shiny::div(
+                class = "pca-checkbox-grid",
+                shiny::checkboxGroupInput("pca_include_columns", tooltip_label("PCA include columns", "Choose metadata columns to include in PCA. Only columns containing terms like force, energy, or distance are offered."),
+                  choices = character(0), selected = character(0), inline = FALSE)
+              ))
+            ),
+            shiny::fluidRow(
+              shiny::column(2, shiny::numericInput("pca_point_size", tooltip_label("Point size", "Point size for PCA sample markers."), value = 2.2, min = 0.1, step = 0.1)),
+              shiny::column(2, shiny::numericInput("pca_point_alpha", tooltip_label("Point alpha", "Transparency for PCA sample markers."), value = 0.9, min = 0, max = 1, step = 0.05)),
+              shiny::column(2, shiny::textInput("pca_arrow_color", tooltip_label("Arrow color", "Color used for PCA loading arrows and feature labels."), value = "grey30")),
+              shiny::column(2, shiny::numericInput("pca_arrow_alpha", tooltip_label("Arrow alpha", "Transparency for PCA loading arrows."), value = 0.85, min = 0, max = 1, step = 0.05)),
+              shiny::column(2, shiny::numericInput("pca_arrow_scale", tooltip_label("Arrow scale", "Multiplier controlling PCA loading arrow length."), value = 1.1, min = 0.1, step = 0.1)),
+              shiny::column(2, shiny::checkboxInput("pca_show_feature_labels", tooltip_label("Show feature labels", "Show or hide labels for PCA loading arrows."), value = TRUE))
+            ),
+            shiny::fluidRow(
+              shiny::column(6, shiny::numericInput("pca_feature_label_size", tooltip_label("Feature label size", "Text size for PCA feature labels."), value = 3.5, min = 0.1, step = 0.1)),
+              shiny::column(6, shiny::numericInput("pca_base_size", tooltip_label("Base size", "Base font size for the PCA plot."), value = 12, min = 1, step = 1))
+            ),
+            tooltip_plot("pca_plot", "460px", "PCA biplot built from selected analytical metrics; points are samples and arrows are feature loadings."),
+            shiny::fluidRow(
+              shiny::column(3, shiny::numericInput("pca_download_width", tooltip_label("Download width (in)", "Width in inches for exported PCA plot."), value = 10, min = 1, step = 0.5)),
+              shiny::column(3, shiny::numericInput("pca_download_height", tooltip_label("Download height (in)", "Height in inches for exported PCA plot."), value = 7, min = 1, step = 0.5)),
+              shiny::column(6, shiny::tags$br(), shiny::downloadButton("download_pca", "Download PCA plot", class = "btn-info btn-block"))
+            )
+          )
+        ),
+        shiny::fluidRow(
+          bs4Dash::bs4Card(
+            title = "Violin Plot",
+            width = 12,
+            status      = "info",
+            solidHeader = TRUE,
+            shiny::fluidRow(
+              shiny::column(4, shiny::selectInput("violin_metric", tooltip_label("Metric", "Analytical metric column to display in violin plot."),
+                choices = character(0))),
+              shiny::column(4, shiny::selectInput("violin_group_by", tooltip_label("Group by", "Metadata column used for grouping on the violin-plot x-axis."),
+                choices = c("None" = ""), selected = "")),
+              shiny::column(4, shiny::selectInput("violin_color_by", tooltip_label("Color by", "Metadata column used to color violins and points. If set to None, uses Violin Group by."),
+                choices = c("None" = ""), selected = ""))
+            ),
+            shiny::fluidRow(
+              shiny::column(2, shiny::checkboxInput("violin_add_points", tooltip_label("Add points", "Overlay jittered points on top of violin distributions."), value = FALSE)),
+              shiny::column(2, shiny::checkboxInput("violin_show_whisker_box", tooltip_label("Show whisker box", "Overlay a whisker boxplot on top of each violin."), value = TRUE)),
+              shiny::column(2, shiny::checkboxInput("violin_log10", tooltip_label("Log10", "Apply log10 transform to positive metric values before plotting and testing."), value = FALSE)),
+              shiny::column(3, shiny::selectInput("violin_global_test", tooltip_label("Global test", "Global significance test across groups."),
+                choices = c("none", "anova", "kruskal"), selected = "anova")),
+              shiny::column(3, shiny::selectInput("violin_pairwise_test", tooltip_label("Pairwise test", "Pairwise group-comparison test."),
+                choices = c("none", "t.test", "wilcox"), selected = "t.test"))
+            ),
+            shiny::fluidRow(
+              shiny::column(6, shiny::selectInput("violin_p_adjust_method", tooltip_label("p adjust method", "Multiple-testing correction method for pairwise comparisons."),
+                choices = stats::p.adjust.methods, selected = "BH")),
+              shiny::column(6)
+            ),
             tooltip_plot("violin_plot", "400px", "Distribution of selected metric across groups from the selected metadata column."),
-            shiny::downloadButton("download_violin", "Download violin plot", class = "btn-info")
+            shiny::fluidRow(
+              shiny::column(3, shiny::numericInput("violin_download_width", tooltip_label("Download width (in)", "Width in inches for exported violin plot."), value = 9, min = 1, step = 0.5)),
+              shiny::column(3, shiny::numericInput("violin_download_height", tooltip_label("Download height (in)", "Height in inches for exported violin plot."), value = 7, min = 1, step = 0.5)),
+              shiny::column(6, shiny::tags$br(), shiny::downloadButton("download_violin", "Download violin plot", class = "btn-info btn-block"))
+            )
+          )
+        ),
+        shiny::fluidRow(
+          bs4Dash::bs4Card(
+            title = "Complex Heatmap",
+            width = 12,
+            status = "info",
+            solidHeader = TRUE,
+            shiny::fluidRow(
+              shiny::column(12, shiny::div(
+                class = "pca-checkbox-grid",
+                shiny::checkboxGroupInput("heatmap_include_columns", tooltip_label("Heatmap include columns", "Choose metadata feature columns to display as heatmap rows."),
+                  choices = character(0), selected = character(0), inline = FALSE)
+              ))
+            ),
+            shiny::fluidRow(
+              shiny::column(3, shiny::selectInput("heatmap_anno_col1", tooltip_label("Annotate col 1", "First metadata column for heatmap column annotation."),
+                choices = c("None" = ""), selected = "")),
+              shiny::column(3, shiny::selectInput("heatmap_anno_col2", tooltip_label("Annotate col 2", "Second metadata column for heatmap column annotation."),
+                choices = c("None" = ""), selected = "")),
+              shiny::column(3),
+              shiny::column(3)
+            ),
+            shiny::fluidRow(
+              shiny::column(3, shiny::checkboxInput("heatmap_show_row_names", tooltip_label("Show row names", "Show feature names on the heatmap y-axis."), value = TRUE)),
+              shiny::column(3, shiny::checkboxInput("heatmap_show_column_names", tooltip_label("Show column names", "Show sample names on the heatmap x-axis."), value = FALSE)),
+              shiny::column(3, shiny::checkboxInput("heatmap_cluster_rows", tooltip_label("Cluster rows", "Cluster feature rows in the heatmap."), value = TRUE)),
+              shiny::column(3, shiny::checkboxInput("heatmap_cluster_columns", tooltip_label("Cluster columns", "Cluster sample columns in the heatmap."), value = TRUE))
+            ),
+            tooltip_plot("complex_heatmap_plot", "680px", "Scaled feature heatmap with optional metadata annotations."),
+            shiny::fluidRow(
+              shiny::column(3, shiny::numericInput("heatmap_download_width", tooltip_label("Download width (in)", "Width in inches for exported complex heatmap."), value = 11, min = 1, step = 0.5)),
+              shiny::column(3, shiny::numericInput("heatmap_download_height", tooltip_label("Download height (in)", "Height in inches for exported complex heatmap."), value = 8, min = 1, step = 0.5)),
+              shiny::column(6, shiny::tags$br(), shiny::downloadButton("download_complex_heatmap", "Download complex heatmap", class = "btn-info btn-block"))
+            )
           )
         )
       )
@@ -704,8 +829,9 @@ ui <- bs4Dash::dashboardPage(
 server <- function(input, output, session) {
 
   rv <- shiny::reactiveValues(
-    fdobj       = NULL,
-    fdobj_clean = NULL,
+    fdobj             = NULL,
+    fdobj_clean       = NULL,
+    fdobj_transformed = NULL,
     status = "No data loaded yet."
   )
 
@@ -862,6 +988,14 @@ server <- function(input, output, session) {
       choices = chooser, selected = keep_or_none(input$fd_split_by))
     shiny::updateSelectInput(session, "summary_group_by",
       choices = chooser, selected = default_choice(c("surface"), 1L))
+    shiny::updateSelectInput(session, "violin_group_by",
+      choices = chooser, selected = default_choice(c("surface"), 1L))
+    shiny::updateSelectInput(session, "violin_color_by",
+      choices = chooser, selected = keep_or_none(input$violin_color_by))
+    shiny::updateSelectInput(session, "heatmap_anno_col1",
+      choices = chooser, selected = keep_or_none(input$heatmap_anno_col1))
+    shiny::updateSelectInput(session, "heatmap_anno_col2",
+      choices = chooser, selected = keep_or_none(input$heatmap_anno_col2))
 
     curve_choices <- stats::setNames(curve_names, curve_names)
     shiny::updateSelectInput(session, "metric_curve_name",
@@ -880,6 +1014,41 @@ server <- function(input, output, session) {
     shiny::updateSelectInput(session, "violin_metric",
       choices  = metric_choices,
       selected = if (length(metric_choices) > 0) unname(metric_choices[[1]]) else NULL)
+
+    pca_candidates <- md_cols[grepl("energy|force|distance", md_cols, ignore.case = TRUE)]
+    pca_candidates <- unique(pca_candidates)
+    current_pca <- input$pca_include_columns
+    default_pca <- intersect(c(
+      "adhesive_force_nN_retract",
+      "adhesive_energy_aJ_retract",
+      "repulsive_energy_aJ_retract",
+      "rupture_distance_nm_retract",
+      "repulsive_distance_nm_retract"
+    ), pca_candidates)
+    selected_pca <- if (!is.null(current_pca) && length(current_pca) > 0) {
+      intersect(current_pca, pca_candidates)
+    } else {
+      default_pca
+    }
+    if (length(selected_pca) == 0 && length(pca_candidates) > 0) {
+      selected_pca <- pca_candidates
+    }
+    shiny::updateCheckboxGroupInput(session, "pca_include_columns",
+      choices = stats::setNames(pca_candidates, pca_candidates),
+      selected = selected_pca)
+
+    current_heatmap <- input$heatmap_include_columns
+    selected_heatmap <- if (!is.null(current_heatmap) && length(current_heatmap) > 0) {
+      intersect(current_heatmap, pca_candidates)
+    } else {
+      default_pca
+    }
+    if (length(selected_heatmap) == 0 && length(pca_candidates) > 0) {
+      selected_heatmap <- pca_candidates
+    }
+    shiny::updateCheckboxGroupInput(session, "heatmap_include_columns",
+      choices = stats::setNames(pca_candidates, pca_candidates),
+      selected = selected_heatmap)
   }
 
   # Load Data
@@ -964,8 +1133,9 @@ server <- function(input, output, session) {
       )
       if (is.null(fdobj)) return(NULL)
       shiny::incProgress(0.3)
-      rv$fdobj       <- fdobj
-      rv$fdobj_clean <- fdobj
+      rv$fdobj             <- fdobj
+      rv$fdobj_clean       <- fdobj
+      rv$fdobj_transformed <- NULL
       rv$status <- sprintf(
         "Loaded %d raw curves from:\n%s\nGenerated metadata: %d rows x %d columns.\ncreateFdObjFromFolder args: suffix='%s', pattern='%s'.%s",
         length(fdobj@rawCurves),
@@ -1010,6 +1180,12 @@ server <- function(input, output, session) {
     imported_df[[key_col]] <- NULL
     rownames(imported_df)  <- rownames(md)
     rv$fdobj@metadata <- imported_df
+    if (!is.null(rv$fdobj_clean)) {
+      rv$fdobj_clean@metadata <- imported_df
+    }
+    if (!is.null(rv$fdobj_transformed)) {
+      rv$fdobj_transformed@metadata <- imported_df
+    }
     rv$status <- sprintf("Metadata imported from '%s' (%d rows x %d columns).",
                          file_name, nrow(imported_df), ncol(imported_df))
     update_choices(rv$fdobj)
@@ -1053,7 +1229,8 @@ server <- function(input, output, session) {
         NULL
       })
       if (is.null(fdobj)) return(NULL)
-      rv$fdobj  <- fdobj
+      rv$fdobj             <- fdobj
+      rv$fdobj_transformed <- fdobj
       rv$status <- "Transformation completed for approach and retract curves."
       update_choices(fdobj)
       shiny::incProgress(0.1)
@@ -1063,7 +1240,10 @@ server <- function(input, output, session) {
 
   # Analytical Metrics
   shiny::observeEvent(input$metrics_btn, {
-    shiny::req(rv$fdobj)
+    if (is.null(rv$fdobj_transformed)) {
+      shiny::showNotification("Run Transform Curves on Page 3 before analyzing metrics.", type = "warning")
+      return(NULL)
+    }
     shiny::withProgress(message = "Computing analytical metrics...", value = 0.1, {
 
       # Helper: parse baseline span — "automatic" or positive integer
@@ -1086,7 +1266,7 @@ server <- function(input, output, session) {
         return(NULL)
       }
 
-      fdobj_current <- rv$fdobj
+      fdobj_current <- rv$fdobj_transformed
 
       # ---- Approach ----
       if (isTRUE(input$analyze_approach)) {
@@ -1106,9 +1286,11 @@ server <- function(input, output, session) {
         analyze_energy                           = isTRUE(input$do_energy_approach),
         analyze_rupture_distance                 = isTRUE(input$do_rupture_approach),
         analyze_rupture_distance_baseline_span   = parse_span(input$rupture_baseline_span_approach),
+        analyze_rupture_distance_min_consecutive = as.integer(input$rupture_min_consecutive_approach),
         analyze_rupture_distance_x_direction     = "left",
         analyze_repulsive_distance               = isTRUE(input$do_repulsive_approach),
         analyze_repulsive_distance_baseline_span = parse_span(input$repulsive_baseline_span_approach),
+        analyze_repulsive_distance_min_consecutive = as.integer(input$repulsive_min_consecutive_approach),
         analyze_repulsive_distance_x_direction   = "right"
       )
 
@@ -1141,9 +1323,11 @@ server <- function(input, output, session) {
         analyze_energy                           = isTRUE(input$do_energy_retract),
         analyze_rupture_distance                 = isTRUE(input$do_rupture_retract),
         analyze_rupture_distance_baseline_span   = parse_span(input$rupture_baseline_span_retract),
+        analyze_rupture_distance_min_consecutive = as.integer(input$rupture_min_consecutive_retract),
         analyze_rupture_distance_x_direction     = "left",
         analyze_repulsive_distance               = isTRUE(input$do_repulsive_retract),
         analyze_repulsive_distance_baseline_span = parse_span(input$repulsive_baseline_span_retract),
+        analyze_repulsive_distance_min_consecutive = as.integer(input$repulsive_min_consecutive_retract),
         analyze_repulsive_distance_x_direction   = "right"
       )
 
@@ -1193,6 +1377,12 @@ server <- function(input, output, session) {
                    rep(as.character(default_val), n)
     )
     rv$fdobj@metadata <- md
+    if (!is.null(rv$fdobj_clean)) {
+      rv$fdobj_clean@metadata <- md
+    }
+    if (!is.null(rv$fdobj_transformed)) {
+      rv$fdobj_transformed@metadata <- md
+    }
     rv$status <- sprintf("Added metadata column '%s'.", new_col)
     update_choices(rv$fdobj)
   })
@@ -1225,6 +1415,12 @@ server <- function(input, output, session) {
       }
     }
     rv$fdobj@metadata <- hot_df
+    if (!is.null(rv$fdobj_clean)) {
+      rv$fdobj_clean@metadata <- hot_df
+    }
+    if (!is.null(rv$fdobj_transformed)) {
+      rv$fdobj_transformed@metadata <- hot_df
+    }
     rv$status <- "Metadata updated from spreadsheet editor."
     update_choices(rv$fdobj)
   }, ignoreInit = TRUE)
@@ -1310,14 +1506,9 @@ server <- function(input, output, session) {
   draw_pca <- function() {
     shiny::req(rv$fdobj)
     md <- rv$fdobj@metadata
-    pca_features <- intersect(
-      c("adhesive_force_nN_retract",   "adhesive_energy_aJ_retract",
-        "repulsive_energy_aJ_retract", "rupture_distance_nm_retract",
-        "repulsive_distance_nm_retract"),
-      colnames(md)
-    )
+    pca_features <- intersect(input$pca_include_columns, colnames(md))
     if (length(pca_features) < 2) {
-      stop("Run analytical metrics first (need at least 2 feature columns).")
+      stop("Select at least 2 PCA feature columns.")
     }
     color_by <- if (nzchar(input$summary_group_by) && input$summary_group_by %in% colnames(md)) {
       input$summary_group_by
@@ -1332,31 +1523,86 @@ server <- function(input, output, session) {
       include_columns     = pca_features,
       color_by            = color_by,
       color_map           = color_map,
-      arrow_scale         = 1.1,
-      show_feature_labels = TRUE
+      point_size          = as.numeric(input$pca_point_size),
+      point_alpha         = as.numeric(input$pca_point_alpha),
+      arrow_color         = if (nzchar(trimws(input$pca_arrow_color))) trimws(input$pca_arrow_color) else "grey30",
+      arrow_alpha         = as.numeric(input$pca_arrow_alpha),
+      arrow_scale         = as.numeric(input$pca_arrow_scale),
+      show_feature_labels = isTRUE(input$pca_show_feature_labels),
+      feature_label_size  = as.numeric(input$pca_feature_label_size),
+      base_size           = as.numeric(input$pca_base_size)
     )
   }
 
   draw_violin <- function() {
     shiny::req(rv$fdobj)
     shiny::req(nzchar(input$violin_metric))
-    if (!nzchar(input$summary_group_by)) {
+    if (!nzchar(input$violin_group_by)) {
       stop("Select a grouping column.")
     }
     md <- rv$fdobj@metadata
-    if (!(input$summary_group_by %in% colnames(md))) {
+    if (!(input$violin_group_by %in% colnames(md))) {
       stop("Grouping column not found.")
     }
     if (!(input$violin_metric %in% colnames(md))) {
       stop("Metric column not found.")
     }
+
+    violin_color_by <- if (nzchar(input$violin_color_by) && input$violin_color_by %in% colnames(md)) {
+      input$violin_color_by
+    } else {
+      input$violin_group_by
+    }
+
     curvana::plot_metric_violin(
       df          = md,
       metric_name = input$violin_metric,
-      group_by    = input$summary_group_by,
-      color_by    = input$summary_group_by,
-      color_map   = make_discrete_color_map(md[[input$summary_group_by]]),
+      group_by    = input$violin_group_by,
+      color_by    = violin_color_by,
+      color_map   = make_discrete_color_map(md[[violin_color_by]]),
+      log10       = isTRUE(input$violin_log10),
+      add_points  = isTRUE(input$violin_add_points),
+      show_whisker_box = isTRUE(input$violin_show_whisker_box),
+      global_test = input$violin_global_test,
+      pairwise_test = input$violin_pairwise_test,
+      p_adjust_method = input$violin_p_adjust_method,
       base_size   = 11
+    )
+  }
+
+  draw_complex_heatmap <- function() {
+    shiny::req(rv$fdobj)
+    md <- rv$fdobj@metadata
+
+    include_cols <- intersect(input$heatmap_include_columns, colnames(md))
+    if (length(include_cols) < 1) {
+      stop("Select at least 1 heatmap feature column.")
+    }
+
+    anno_cols <- c(input$heatmap_anno_col1, input$heatmap_anno_col2)
+    anno_cols <- intersect(anno_cols[nzchar(anno_cols)], colnames(md))
+
+    anno_color_list <- list()
+    if (length(anno_cols) > 0) {
+      for (cn in anno_cols) {
+        cmap <- make_discrete_color_map(md[[cn]])
+        if (!is.null(cmap)) {
+          anno_color_list[[cn]] <- cmap
+        }
+      }
+    }
+
+    curvana::plot_complex_heatmap(
+      df = md,
+      include_columns = include_cols,
+      annotate_columns = if (length(anno_cols) > 0) anno_cols else NULL,
+      annotation_colors = if (length(anno_color_list) > 0) anno_color_list else NULL,
+      cluster_rows = isTRUE(input$heatmap_cluster_rows),
+      cluster_columns = isTRUE(input$heatmap_cluster_columns),
+      show_row_names = isTRUE(input$heatmap_show_row_names),
+      show_column_names = isTRUE(input$heatmap_show_column_names),
+      heatmap_name = "z-score",
+      draw = TRUE
     )
   }
 
@@ -1481,7 +1727,13 @@ server <- function(input, output, session) {
       paste0("curvana_single_curve_", Sys.Date(), ".png")
     },
     content = function(file) {
-      save_plot_png(file, draw_single_curve, width = 14, height = 7, res = 300)
+      save_plot_png(
+        file,
+        draw_single_curve,
+        width = resolve_download_dim(input$single_curve_download_width, 14),
+        height = resolve_download_dim(input$single_curve_download_height, 7),
+        res = 300
+      )
     }
   )
 
@@ -1560,7 +1812,13 @@ server <- function(input, output, session) {
       paste0("curvana_pca_biplot_", Sys.Date(), ".png")
     },
     content = function(file) {
-      save_plot_png(file, draw_pca, width = 10, height = 7, res = 300)
+      save_plot_png(
+        file,
+        draw_pca,
+        width = resolve_download_dim(input$pca_download_width, 10),
+        height = resolve_download_dim(input$pca_download_height, 7),
+        res = 300
+      )
     }
   )
 
@@ -1574,7 +1832,33 @@ server <- function(input, output, session) {
       paste0("curvana_violin_plot_", Sys.Date(), ".png")
     },
     content = function(file) {
-      save_plot_png(file, draw_violin, width = 9, height = 7, res = 300)
+      save_plot_png(
+        file,
+        draw_violin,
+        width = resolve_download_dim(input$violin_download_width, 9),
+        height = resolve_download_dim(input$violin_download_height, 7),
+        res = 300
+      )
+    }
+  )
+
+  # Complex heatmap
+  output$complex_heatmap_plot <- shiny::renderPlot({
+    draw_complex_heatmap()
+  })
+
+  output$download_complex_heatmap <- shiny::downloadHandler(
+    filename = function() {
+      paste0("curvana_complex_heatmap_", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      save_plot_png(
+        file,
+        draw_complex_heatmap,
+        width = resolve_download_dim(input$heatmap_download_width, 11),
+        height = resolve_download_dim(input$heatmap_download_height, 8),
+        res = 300
+      )
     }
   )
 }
