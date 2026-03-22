@@ -1111,6 +1111,8 @@ analyze_curves_noise <- function(
 #' marking rupture length (negative excursion) or repulsive distance (positive excursion).
 #' This function uses user-provided noise-band thresholds directly.
 #' Scanning can proceed from right-to-left (default) or left-to-right.
+#' A detection is accepted only when at least \\code{min_consecutive}
+#' consecutive points satisfy the excursion criterion.
 #' When y-direction is negative, the function scans the curve to look for the first point where force <  lower bound of noise band (i.e., the curve enters the adhesive region).
 #' When y-direction is positive, the function scans the curve to look for the last point where force >  upper bound of noise band (i.e., the curve exits the repulsive region).
 #'
@@ -1120,10 +1122,13 @@ analyze_curves_noise <- function(
 #' @param baseline_span Integer >= 1. Number of last points used as the baseline window. The baseline region will not be scanned.
 #' @param y_direction "negative" or "positive".
 #'   - "negative": find first y < threshold (rupture-like; threshold is typically negative)
-#'   - "positive": find first y > threshold (repulsion-like; threshold is typically positive)
+#'   - "positive": find the last point of the first run of y > threshold
+#'     (repulsion-like; threshold is typically positive)
 #' @param x_direction "left" or "right".
 #'   - "left": scan from right to left (from just before baseline toward the origin)
 #'   - "right": scan from left to right (from origin up to just before baseline)
+#' @param min_consecutive Integer >= 1. Minimum number of consecutive points that
+#'   must satisfy the threshold criterion for an interaction event to be called.
 #' @param noiseBand_low Numeric scalar threshold for negative-direction detection.
 #'   Required when \code{y_direction = "negative"}.
 #' @param noiseBand_high Numeric scalar threshold for positive-direction detection.
@@ -1136,6 +1141,7 @@ analyze_a_curve_interaction_distance <- function(
     baseline_span,
     y_direction = c("negative", "positive"),
     x_direction = c("left", "right"),
+  min_consecutive = 1,
     noiseBand_low = NULL,
     noiseBand_high = NULL
 ) {
@@ -1155,9 +1161,14 @@ analyze_a_curve_interaction_distance <- function(
     warning("baseline_span must be a single integer >= 1. Returning NA as results.")
     return(c(distance = NA_real_, threshold = NA_real_))
   }
+  if (!is.numeric(min_consecutive) || length(min_consecutive) != 1 || !is.finite(min_consecutive) || min_consecutive < 1) {
+    warning("min_consecutive must be a single integer >= 1. Returning NA as results.")
+    return(c(distance = NA_real_, threshold = NA_real_))
+  }
 
   n <- nrow(curve_df)
   baseline_span <- min(as.integer(baseline_span), n)
+  min_consecutive <- as.integer(min_consecutive)
 
   x <- curve_df$separation_distance_nm
   y <- curve_df$force_nN
@@ -1197,9 +1208,17 @@ analyze_a_curve_interaction_distance <- function(
     y_scan > threshold
   }
 
-  hit <- if (y_direction == "negative") which(hit_mask)[1L] else which(!hit_mask)[1L] - 1L
+  runs <- rle(hit_mask)
+  run_ends <- cumsum(runs$lengths)
+  run_starts <- run_ends - runs$lengths + 1L
+  qualifying_runs <- which(runs$values & runs$lengths >= min_consecutive)
 
-  if (is.na(hit)) return(c(distance = NA_real_, threshold = threshold))
+  if (length(qualifying_runs) == 0L) {
+    return(c(distance = NA_real_, threshold = threshold))
+  }
+
+  run_id <- qualifying_runs[1L]
+  hit <- if (y_direction == "negative") run_starts[run_id] else run_ends[run_id]
 
   c(distance = x[scan_idx[hit]], threshold = threshold)
 }
@@ -1229,6 +1248,8 @@ analyze_a_curve_interaction_distance <- function(
 #'     \item \code{"left"}: right-to-left, from just before baseline toward origin.
 #'     \item \code{"right"}: left-to-right, from origin toward just before baseline.
 #'   }
+#' @param min_consecutive Integer >= 1. Minimum number of consecutive points that
+#'   must satisfy the excursion criterion to call an interaction event.
 #'
 #' @details
 #' This function assumes precomputed noise-band columns already exist in
@@ -1252,7 +1273,8 @@ analyze_curves_interaction_distance <- function(
     threads = 1,
     baseline_span,
     y_direction = c("negative", "positive"),
-    x_direction = c("left", "right")
+  x_direction = c("left", "right"),
+  min_consecutive = 1
 ) {
   # ---- Validation ----
   if (!inherits(fdObj, "fdObj"))
@@ -1261,6 +1283,10 @@ analyze_curves_interaction_distance <- function(
   useCurve <- match.arg(useCurve)
   y_direction <- match.arg(y_direction)
   x_direction <- match.arg(x_direction)
+  if (!is.numeric(min_consecutive) || length(min_consecutive) != 1 || !is.finite(min_consecutive) || min_consecutive < 1) {
+    stop("min_consecutive must be a single integer >= 1.")
+  }
+  min_consecutive <- as.integer(min_consecutive)
 
   curve_list <- if (useCurve == "approach") fdObj@approachCurves else fdObj@retractCurves
   dir_tag <- useCurve
@@ -1336,6 +1362,7 @@ analyze_curves_interaction_distance <- function(
         baseline_span = bs_value,
         y_direction = y_direction,
         x_direction = x_direction,
+        min_consecutive = min_consecutive,
         noiseBand_low = as.numeric(curve_threshold),
         noiseBand_high = NULL
       )
@@ -1345,6 +1372,7 @@ analyze_curves_interaction_distance <- function(
         baseline_span = bs_value,
         y_direction = y_direction,
         x_direction = x_direction,
+        min_consecutive = min_consecutive,
         noiseBand_low = NULL,
         noiseBand_high = as.numeric(curve_threshold)
       )
@@ -1738,6 +1766,8 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
 #' @param analyze_rupture_distance_x_direction Character; one of \code{c("left", "right")}.
 #'   Default \code{"left"}. Passed to negative-direction
 #'   \code{analyze_curves_interaction_distance()}.
+#' @param analyze_rupture_distance_min_consecutive Integer >= 1. Minimum
+#'   consecutive points below threshold required to call a rupture event.
 #'
 #' @param analyze_repulsive_distance Logical. If \code{TRUE}, runs interaction-distance analysis with
 #'   \code{y_direction = "positive"}. Default \code{TRUE}.
@@ -1746,6 +1776,8 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
 #' @param analyze_repulsive_distance_x_direction Character; one of \code{c("right", "left")}.
 #'   Default \code{"right"}. Passed to positive-direction
 #'   \code{analyze_curves_interaction_distance()}.
+#' @param analyze_repulsive_distance_min_consecutive Integer >= 1. Minimum
+#'   consecutive points above threshold required to call a repulsive event.
 #'
 #' @return Updated \code{fdObj} with analytical metrics written to metadata.
 #' @export
@@ -1766,9 +1798,11 @@ analyze_curves_all_analytical_metrics <- function(
     analyze_rupture_distance = TRUE,
     analyze_rupture_distance_baseline_span = "automatic",
     analyze_rupture_distance_x_direction = c("left", "right"),
+    analyze_rupture_distance_min_consecutive = 1,
     analyze_repulsive_distance = TRUE,
     analyze_repulsive_distance_baseline_span = "automatic",
-    analyze_repulsive_distance_x_direction = c("right", "left")
+    analyze_repulsive_distance_x_direction = c("right", "left"),
+    analyze_repulsive_distance_min_consecutive = 1
 ) {
   if (!inherits(fdObj, "fdObj")) {
     stop("fdObj must be of class 'fdObj'")
@@ -1791,6 +1825,21 @@ analyze_curves_all_analytical_metrics <- function(
   if (!is.logical(analyze_energy) || length(analyze_energy) != 1 || is.na(analyze_energy)) {
     stop("analyze_energy must be a single TRUE/FALSE value.")
   }
+  if (!is.numeric(analyze_rupture_distance_min_consecutive) ||
+      length(analyze_rupture_distance_min_consecutive) != 1 ||
+      !is.finite(analyze_rupture_distance_min_consecutive) ||
+      analyze_rupture_distance_min_consecutive < 1) {
+    stop("analyze_rupture_distance_min_consecutive must be a single integer >= 1.")
+  }
+  if (!is.numeric(analyze_repulsive_distance_min_consecutive) ||
+      length(analyze_repulsive_distance_min_consecutive) != 1 ||
+      !is.finite(analyze_repulsive_distance_min_consecutive) ||
+      analyze_repulsive_distance_min_consecutive < 1) {
+    stop("analyze_repulsive_distance_min_consecutive must be a single integer >= 1.")
+  }
+
+  analyze_rupture_distance_min_consecutive <- as.integer(analyze_rupture_distance_min_consecutive)
+  analyze_repulsive_distance_min_consecutive <- as.integer(analyze_repulsive_distance_min_consecutive)
 
   directions <- if (useCurve == "both") c("approach", "retract") else useCurve
 
@@ -1833,7 +1882,8 @@ analyze_curves_all_analytical_metrics <- function(
         threads = threads,
         baseline_span = analyze_rupture_distance_baseline_span,
         y_direction = "negative",
-        x_direction = analyze_rupture_distance_x_direction
+        x_direction = analyze_rupture_distance_x_direction,
+        min_consecutive = analyze_rupture_distance_min_consecutive
       )
     }
 
@@ -1844,7 +1894,8 @@ analyze_curves_all_analytical_metrics <- function(
         threads = threads,
         baseline_span = analyze_repulsive_distance_baseline_span,
         y_direction = "positive",
-        x_direction = analyze_repulsive_distance_x_direction
+        x_direction = analyze_repulsive_distance_x_direction,
+        min_consecutive = analyze_repulsive_distance_min_consecutive
       )
     }
   }
