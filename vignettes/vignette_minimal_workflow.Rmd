@@ -206,7 +206,8 @@ test = analyze_curves_all_analytical_metrics(
   analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
   analyze_repulsive_distance = TRUE, # whether to analyze repulsive distance
   analyze_rupture_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for rupture distance analysis
-  analyze_rupture_distance_x_direction = "left", # scan from right to left to find the last data point before a curve enters the adhesive region from the noise band region
+  analyze_rupture_distance_x_direction = "left", # scan from right to left to find the first data point at which a curve enters the adhesive region from the noise band region
+  analyze_rupture_distance_min_consecutive = 3, # to reduce false positives from random fluctuations, require at least 3 consecutive points below the lower noise-band threshold for classifying the curve as entering the adhesive region.
   analyze_repulsive_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for repulsive distance analysis
   analyze_repulsive_distance_x_direction = "right" # scan from left to right to find the last data point before a curve enters the noise band region from the repulsive region
 )
