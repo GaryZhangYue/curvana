@@ -1237,6 +1237,8 @@ plot_all_curve_metrics <- function(
 #' @param log10 Logical. If \code{TRUE}, applies \code{log10} transform to the
 #'   metric values before plotting and testing. Non-positive values are removed.
 #' @param add_points Logical. If \code{TRUE}, overlays jittered points.
+#' @param show_whisker_box Logical. If \code{TRUE}, overlays a whisker boxplot
+#'   on top of each violin.
 #' @param add_smooth Logical. If \code{TRUE}, overlays \code{geom_smooth(method = "lm")}
 #'   within each facet.
 #' @param point_alpha Numeric point transparency.
@@ -1267,6 +1269,7 @@ plot_metric_violin <- function(
     p_adjust_method = "BH",
     log10 = FALSE,
     add_points = TRUE,
+    show_whisker_box = FALSE,
     add_smooth = FALSE,
     point_alpha = 0.6,
     point_color = "black",
@@ -1350,6 +1353,9 @@ plot_metric_violin <- function(
   if (!is.logical(log10) || length(log10) != 1 || is.na(log10)) {
     stop("log10 must be TRUE or FALSE.")
   }
+  if (!is.logical(show_whisker_box) || length(show_whisker_box) != 1 || is.na(show_whisker_box)) {
+    stop("show_whisker_box must be TRUE or FALSE.")
+  }
   if (isTRUE(log10)) {
     plot_df <- plot_df[plot_df$Value > 0, , drop = FALSE]
     if (nrow(plot_df) == 0) {
@@ -1366,6 +1372,17 @@ plot_metric_violin <- function(
 
   p <- ggplot(plot_df, aes(x = Group, y = Value, fill = ColorGroup, color = ColorGroup)) +
     geom_violin(alpha = violin_alpha, trim = FALSE)
+
+  if (isTRUE(show_whisker_box)) {
+    p <- p + geom_boxplot(
+      aes(color = ColorGroup, group = Group),
+      width = 0.16,
+      outlier.shape = NA,
+      fill = NA,
+      alpha = 1,
+      linewidth = 0.35
+    )
+  }
 
   if (isTRUE(add_points)) {
     p <- p + geom_point(
