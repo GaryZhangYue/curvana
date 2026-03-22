@@ -288,7 +288,8 @@ plot_metric_violin(
   df = test@metadata,
   metric_name = "adhesive_force_nN_retract",
   group_by = "surface",
-  color_by = "surface",
+  color_by = "surface",add_points = F,
+  show_whisker_box = T,
   color_map = c(
     PEG = "#1b9e77",
     silicon = "#d95f02",
