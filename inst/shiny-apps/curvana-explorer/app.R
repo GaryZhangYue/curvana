@@ -53,7 +53,9 @@ ui <- bs4Dash::dashboardPage(
       bs4Dash::menuItem("Load Data",          tabName = "load",      icon = shiny::icon("folder-open")),
       bs4Dash::menuItem("Transform Curves",   tabName = "transform", icon = shiny::icon("cogs")),
       bs4Dash::menuItem("Analytical Metrics", tabName = "metrics",   icon = shiny::icon("chart-bar")),
-      bs4Dash::menuItem("Results",            tabName = "results",   icon = shiny::icon("chart-line"))
+      bs4Dash::menuItem("Results",            tabName = "results",   icon = shiny::icon("table")),
+      bs4Dash::menuItem("Figures",            tabName = "figures",   icon = shiny::icon("chart-line")),
+      bs4Dash::menuItem("Download",           tabName = "download",  icon = shiny::icon("download"))
     )
   ),
 
@@ -173,8 +175,14 @@ ui <- bs4Dash::dashboardPage(
                   " Inspect individual curves with full annotation overlays."
                 ),
                 shiny::tags$li(
-                  shiny::tags$strong("Results"), " \u2014 Compare results across samples and conditions",
+                  shiny::tags$strong("Results"), " \u2014 Review the current metadata table and export it as CSV or XLSX."
+                ),
+                shiny::tags$li(
+                  shiny::tags$strong("Figures"), " \u2014 Compare results across samples and conditions",
                   " using PCA biplots and violin plots."
+                ),
+                shiny::tags$li(
+                  shiny::tags$strong("Download"), " \u2014 Download all raw curves, transformed curves, or the full fdobj object."
                 )
               ),
               shiny::tags$hr(),
@@ -280,9 +288,11 @@ ui <- bs4Dash::dashboardPage(
                 shiny::actionButton("add_meta_col_btn", "Add column", class = "btn-secondary"))
             ),
             shiny::fluidRow(
-              shiny::column(
-                width = 12,
-                shiny::downloadButton("download_metadata_csv", "Download metadata (CSV)", class = "btn-info")
+              shiny::column(6,
+                shiny::downloadButton("download_metadata_csv", "Download metadata (.csv)", class = "btn-info btn-block")
+              ),
+              shiny::column(6,
+                shiny::downloadButton("download_metadata_xlsx", "Download metadata (.xlsx)", class = "btn-info btn-block")
               )
             ),
             shiny::helpText("Edit cells directly, drag the fill handle to autofill like Excel, or right-click for a context menu."),
@@ -709,6 +719,70 @@ ui <- bs4Dash::dashboardPage(
       # ===========================================================
       bs4Dash::tabItem(
         tabName = "results",
+        shiny::fluidRow(
+          bs4Dash::bs4Card(
+            title       = "Results",
+            width       = 12,
+            status      = "info",
+            solidHeader = TRUE,
+            shiny::fluidRow(
+              shiny::column(3, shiny::textInput("results_new_meta_col_name", tooltip_label("New column name", "Name of the new metadata column to add to all samples."), value = "")),
+              shiny::column(3, shiny::selectInput("results_new_meta_col_type", tooltip_label("Column type", "Data type used for the new metadata column values."),
+                choices = c("character", "numeric", "integer", "logical"), selected = "character")),
+              shiny::column(3, shiny::textInput("results_new_meta_col_default", tooltip_label("Default value", "Initial value filled for all rows in the new metadata column."), value = "")),
+              shiny::column(3, shiny::tags$br(),
+                shiny::actionButton("add_meta_col_results_btn", "Add column", class = "btn-secondary"))
+            ),
+            shiny::helpText("Edit cells directly, drag the fill handle to autofill like Excel, or right-click for a context menu."),
+            rhandsontable::rHandsontableOutput("results_metadata_hot"),
+            shiny::fluidRow(
+              shiny::column(6, shiny::downloadButton("download_results_metadata_csv", "Download metadata (.csv)", class = "btn-info btn-block")),
+              shiny::column(6, shiny::downloadButton("download_results_metadata_xlsx", "Download metadata (.xlsx)", class = "btn-info btn-block"))
+            )
+          )
+        )
+      ),
+
+      # ===========================================================
+      # Page 6 -- Download
+      # ===========================================================
+      bs4Dash::tabItem(
+        tabName = "download",
+        shiny::fluidRow(
+          bs4Dash::bs4Card(
+            title       = "Download Data",
+            width       = 12,
+            status      = "info",
+            solidHeader = TRUE,
+            shiny::fluidRow(
+              shiny::column(12,
+                shiny::helpText("Download raw curves: download all untransformed curves. If smoothing step is included, the smoothed curves are included."),
+                shiny::downloadButton("download_all_raw_curves_zip", "Download raw curves (.zip)", class = "btn-info btn-block")
+              )
+            ),
+            shiny::tags$br(),
+            shiny::fluidRow(
+              shiny::column(12,
+                shiny::helpText("Download all force-distance curves."),
+                shiny::downloadButton("download_all_transformed_curves_zip", "Download transformed curves (.zip)", class = "btn-info btn-block")
+              )
+            ),
+            shiny::tags$br(),
+            shiny::fluidRow(
+              shiny::column(12,
+                shiny::helpText("Download the fdObj, a S4 container including all raw and transformed curves, metadata, and sensitivity and baseline segment."),
+                shiny::downloadButton("download_fdobj_rds", "Download fdObj (.rds)", class = "btn-info btn-block")
+              )
+            )
+          )
+        )
+      ),
+
+      # ===========================================================
+      # Page 7 -- Figures
+      # ===========================================================
+      bs4Dash::tabItem(
+        tabName = "figures",
         shiny::fluidRow(
           bs4Dash::bs4Card(
             title       = "PCA Biplot",
@@ -1350,9 +1424,9 @@ server <- function(input, output, session) {
   })
 
   # Add metadata column
-  shiny::observeEvent(input$add_meta_col_btn, {
+  add_metadata_column <- function(new_col, col_type, default_text) {
     shiny::req(rv$fdobj)
-    new_col <- trimws(input$new_meta_col_name)
+    new_col <- trimws(as.character(new_col))
     if (!nzchar(new_col)) {
       shiny::showNotification("Please provide a non-empty column name.", type = "error")
       return(NULL)
@@ -1362,10 +1436,15 @@ server <- function(input, output, session) {
       shiny::showNotification("Column already exists in metadata.", type = "error")
       return(NULL)
     }
-    col_type    <- input$new_meta_col_type
-    default_val <- cast_value(input$new_meta_col_default, col_type)
+    col_type <- trimws(as.character(col_type))
+    if (!(col_type %in% c("character", "numeric", "integer", "logical"))) {
+      shiny::showNotification("Invalid column type.", type = "error")
+      return(NULL)
+    }
+    default_text <- as.character(default_text)
+    default_val <- cast_value(default_text, col_type)
     if ((identical(col_type, "numeric") || identical(col_type, "integer")) &&
-        nzchar(trimws(input$new_meta_col_default)) && is.na(default_val)) {
+        nzchar(trimws(default_text)) && is.na(default_val)) {
       shiny::showNotification("Default value is not valid for the selected type.", type = "error")
       return(NULL)
     }
@@ -1385,44 +1464,85 @@ server <- function(input, output, session) {
     }
     rv$status <- sprintf("Added metadata column '%s'.", new_col)
     update_choices(rv$fdobj)
+  }
+
+  shiny::observeEvent(input$add_meta_col_btn, {
+    add_metadata_column(
+      new_col = input$new_meta_col_name,
+      col_type = input$new_meta_col_type,
+      default_text = input$new_meta_col_default
+    )
+  })
+
+  shiny::observeEvent(input$add_meta_col_results_btn, {
+    add_metadata_column(
+      new_col = input$results_new_meta_col_name,
+      col_type = input$results_new_meta_col_type,
+      default_text = input$results_new_meta_col_default
+    )
   })
 
   # Handsontable edits
-  shiny::observeEvent(input$metadata_hot, {
-    shiny::req(rv$fdobj)
-    hot_df <- rhandsontable::hot_to_r(input$metadata_hot)
-    if (is.null(hot_df) || nrow(hot_df) == 0 || !("sample" %in% colnames(hot_df))) return(NULL)
-    md_old     <- rv$fdobj@metadata
-    sample_ids <- as.character(hot_df$sample)
-    hot_df$sample <- NULL
-    if (length(sample_ids) != nrow(hot_df)) return(NULL)
-    rownames(hot_df) <- sample_ids
-    if (!all(rownames(md_old) %in% rownames(hot_df))) return(NULL)
-    hot_df <- hot_df[rownames(md_old), , drop = FALSE]
-    for (cn in intersect(colnames(md_old), colnames(hot_df))) {
-      old_col      <- md_old[[cn]]
-      new_col      <- hot_df[[cn]]
-      hot_df[[cn]] <- if (is.factor(old_col)) {
-        as.factor(as.character(new_col))
-      } else if (is.logical(old_col)) {
-        vapply(new_col, function(z) cast_value(z, "logical"), logical(1))
-      } else if (is.integer(old_col)) {
-        suppressWarnings(as.integer(new_col))
-      } else if (is.numeric(old_col)) {
-        suppressWarnings(as.numeric(new_col))
-      } else {
-        as.character(new_col)
+  apply_metadata_hot_edit <- function(hot_df) {
+    tryCatch({
+      shiny::req(rv$fdobj)
+      if (is.null(hot_df) || nrow(hot_df) == 0 || !("sample" %in% colnames(hot_df))) return(NULL)
+      md_old     <- rv$fdobj@metadata
+      sample_ids <- as.character(hot_df$sample)
+      hot_df$sample <- NULL
+      if (length(sample_ids) != nrow(hot_df)) return(NULL)
+
+      bad_sample_ids <- is.na(sample_ids) | !nzchar(trimws(sample_ids))
+      if (any(bad_sample_ids) || anyDuplicated(sample_ids) > 0) {
+        shiny::showNotification(
+          "Invalid metadata row key detected. Keep sample names non-empty and unique.",
+          type = "warning"
+        )
+        return(NULL)
       }
-    }
-    rv$fdobj@metadata <- hot_df
-    if (!is.null(rv$fdobj_clean)) {
-      rv$fdobj_clean@metadata <- hot_df
-    }
-    if (!is.null(rv$fdobj_transformed)) {
-      rv$fdobj_transformed@metadata <- hot_df
-    }
-    rv$status <- "Metadata updated from spreadsheet editor."
-    update_choices(rv$fdobj)
+
+      rownames(hot_df) <- sample_ids
+      if (!all(rownames(md_old) %in% rownames(hot_df))) return(NULL)
+      hot_df <- hot_df[rownames(md_old), , drop = FALSE]
+      for (cn in intersect(colnames(md_old), colnames(hot_df))) {
+        old_col      <- md_old[[cn]]
+        new_col      <- hot_df[[cn]]
+        hot_df[[cn]] <- if (is.factor(old_col)) {
+          as.factor(as.character(new_col))
+        } else if (is.logical(old_col)) {
+          vapply(new_col, function(z) cast_value(z, "logical"), logical(1))
+        } else if (is.integer(old_col)) {
+          suppressWarnings(as.integer(new_col))
+        } else if (is.numeric(old_col)) {
+          suppressWarnings(as.numeric(new_col))
+        } else {
+          as.character(new_col)
+        }
+      }
+      rv$fdobj@metadata <- hot_df
+      if (!is.null(rv$fdobj_clean)) {
+        rv$fdobj_clean@metadata <- hot_df
+      }
+      if (!is.null(rv$fdobj_transformed)) {
+        rv$fdobj_transformed@metadata <- hot_df
+      }
+      rv$status <- "Metadata updated from spreadsheet editor."
+      update_choices(rv$fdobj)
+    }, error = function(e) {
+      shiny::showNotification(
+        paste("Metadata edit was ignored:", e$message),
+        type = "error"
+      )
+      NULL
+    })
+  }
+
+  shiny::observeEvent(input$metadata_hot, {
+    apply_metadata_hot_edit(rhandsontable::hot_to_r(input$metadata_hot))
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input$results_metadata_hot, {
+    apply_metadata_hot_edit(rhandsontable::hot_to_r(input$results_metadata_hot))
   }, ignoreInit = TRUE)
 
   save_plot_png <- function(file, plot_fun, width = 10, height = 7, res = 300) {
@@ -1440,6 +1560,87 @@ server <- function(input, output, session) {
       return(default_value)
     }
     dim_val
+  }
+
+  metadata_export_df <- function() {
+    shiny::req(rv$fdobj)
+    md <- rv$fdobj@metadata
+    data.frame(sample = rownames(md), md, check.names = FALSE, stringsAsFactors = FALSE)
+  }
+
+  write_metadata_xlsx <- function(out, file) {
+    if (requireNamespace("writexl", quietly = TRUE)) {
+      writexl::write_xlsx(out, path = file)
+    } else if (requireNamespace("openxlsx", quietly = TRUE)) {
+      wb <- openxlsx::createWorkbook()
+      openxlsx::addWorksheet(wb, "metadata")
+      openxlsx::writeData(wb, "metadata", out)
+      openxlsx::saveWorkbook(wb, file = file, overwrite = TRUE)
+    } else {
+      stop("To export .xlsx, install package 'writexl' or 'openxlsx'.")
+    }
+  }
+
+  sanitize_file_name <- function(x) {
+    x <- trimws(as.character(x))
+    if (is.na(x) || !nzchar(x)) {
+      x <- "curve"
+    }
+    gsub("[^A-Za-z0-9._-]+", "_", x)
+  }
+
+  write_curve_slot_csvs <- function(curve_list, out_dir, slot_prefix) {
+    if (is.null(curve_list) || length(curve_list) == 0) {
+      return(character(0))
+    }
+    curve_names <- names(curve_list)
+    if (is.null(curve_names) || length(curve_names) != length(curve_list)) {
+      curve_names <- rep("", length(curve_list))
+    }
+
+    out_files <- character(0)
+    for (i in seq_along(curve_list)) {
+      curve_df <- curve_list[[i]]
+      if (is.null(curve_df)) {
+        next
+      }
+      if (!is.data.frame(curve_df)) {
+        curve_df <- tryCatch(as.data.frame(curve_df), error = function(e) NULL)
+      }
+      if (is.null(curve_df)) {
+        next
+      }
+
+      safe_curve_name <- sanitize_file_name(curve_names[[i]])
+      out_file <- file.path(out_dir, sprintf("%s_%04d_%s.csv", slot_prefix, i, safe_curve_name))
+      utils::write.csv(curve_df, file = out_file, row.names = FALSE, na = "")
+      out_files <- c(out_files, out_file)
+    }
+
+    out_files
+  }
+
+  zip_files_for_download <- function(zipfile, files, base_dir) {
+    files <- files[file.exists(files)]
+    if (length(files) == 0) {
+      stop("No files available for download.")
+    }
+
+    if (requireNamespace("zip", quietly = TRUE)) {
+      zip::zipr(zipfile = zipfile, files = files, include_directories = FALSE)
+      return(invisible(TRUE))
+    }
+
+    zip_cmd <- Sys.which("zip")
+    if (nzchar(zip_cmd)) {
+      old_wd <- getwd()
+      on.exit(setwd(old_wd), add = TRUE)
+      setwd(base_dir)
+      utils::zip(zipfile = zipfile, files = basename(files))
+      return(invisible(TRUE))
+    }
+
+    stop("No ZIP utility available. Install package 'zip' to enable this download.")
   }
 
   draw_raw_heatmap <- function() {
@@ -1623,8 +1824,8 @@ server <- function(input, output, session) {
   })
 
   # Metadata handsontable
-  output$metadata_hot <- rhandsontable::renderRHandsontable({
-    shiny::validate(shiny::need(!is.null(rv$fdobj), "Load curve data to preview the metadata generated by createFdObjFromFolder."))
+  render_metadata_hot <- function(validation_message) {
+    shiny::validate(shiny::need(!is.null(rv$fdobj), validation_message))
     md   <- rv$fdobj@metadata
     disp <- data.frame(
       sample = rownames(md),
@@ -1636,10 +1837,19 @@ server <- function(input, output, session) {
       rhandsontable::hot_col("sample", readOnly = TRUE) |>
       rhandsontable::hot_table(
         contextMenu = TRUE,
+        allowInsertRow = FALSE,
         manualColumnResize = TRUE,
         fillHandle = TRUE,
         columnSorting = TRUE
       )
+  }
+
+  output$metadata_hot <- rhandsontable::renderRHandsontable({
+    render_metadata_hot("Load curve data to preview the metadata generated by createFdObjFromFolder.")
+  })
+
+  output$results_metadata_hot <- rhandsontable::renderRHandsontable({
+    render_metadata_hot("Load curve data to view metadata results.")
   })
 
   output$download_metadata_csv <- shiny::downloadHandler(
@@ -1647,10 +1857,95 @@ server <- function(input, output, session) {
       paste0("curvana_metadata_", Sys.Date(), ".csv")
     },
     content = function(file) {
-      shiny::req(rv$fdobj)
-      md <- rv$fdobj@metadata
-      out <- data.frame(sample = rownames(md), md, check.names = FALSE, stringsAsFactors = FALSE)
+      out <- metadata_export_df()
       utils::write.csv(out, file = file, row.names = FALSE, na = "")
+    }
+  )
+
+  output$download_metadata_xlsx <- shiny::downloadHandler(
+    filename = function() {
+      paste0("curvana_metadata_", Sys.Date(), ".xlsx")
+    },
+    content = function(file) {
+      out <- metadata_export_df()
+      write_metadata_xlsx(out, file)
+    }
+  )
+
+  output$download_results_metadata_csv <- shiny::downloadHandler(
+    filename = function() {
+      paste0("curvana_results_metadata_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      out <- metadata_export_df()
+      utils::write.csv(out, file = file, row.names = FALSE, na = "")
+    }
+  )
+
+  output$download_results_metadata_xlsx <- shiny::downloadHandler(
+    filename = function() {
+      paste0("curvana_results_metadata_", Sys.Date(), ".xlsx")
+    },
+    content = function(file) {
+      out <- metadata_export_df()
+      write_metadata_xlsx(out, file)
+    }
+  )
+
+  output$download_all_raw_curves_zip <- shiny::downloadHandler(
+    filename = function() {
+      paste0("curvana_raw_curves_", Sys.Date(), ".zip")
+    },
+    content = function(file) {
+      shiny::req(rv$fdobj)
+      raw_curves <- rv$fdobj@rawCurves
+      if (is.null(raw_curves) || length(raw_curves) == 0) {
+        stop("No raw curves available in rawCurves slot.")
+      }
+
+      tmp_dir <- tempfile("raw_curves_zip_")
+      dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
+      on.exit(unlink(tmp_dir, recursive = TRUE, force = TRUE), add = TRUE)
+
+      files <- write_curve_slot_csvs(raw_curves, tmp_dir, "raw")
+      if (length(files) == 0) {
+        stop("No raw curves could be exported.")
+      }
+      zip_files_for_download(file, files, tmp_dir)
+    }
+  )
+
+  output$download_all_transformed_curves_zip <- shiny::downloadHandler(
+    filename = function() {
+      paste0("curvana_transformed_curves_", Sys.Date(), ".zip")
+    },
+    content = function(file) {
+      shiny::req(rv$fdobj)
+      approach_curves <- rv$fdobj@approachCurves
+      retract_curves <- rv$fdobj@retractCurves
+
+      tmp_dir <- tempfile("transformed_curves_zip_")
+      dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
+      on.exit(unlink(tmp_dir, recursive = TRUE, force = TRUE), add = TRUE)
+
+      approach_files <- write_curve_slot_csvs(approach_curves, tmp_dir, "approach")
+      retract_files <- write_curve_slot_csvs(retract_curves, tmp_dir, "retract")
+      files <- c(approach_files, retract_files)
+
+      if (length(files) == 0) {
+        stop("No transformed curves found in approachCurves or retractCurves slots.")
+      }
+      zip_files_for_download(file, files, tmp_dir)
+    }
+  )
+
+  output$download_fdobj_rds <- shiny::downloadHandler(
+    filename = function() {
+      paste0("curvana_fdobj_", Sys.Date(), ".rds")
+    },
+    content = function(file) {
+      shiny::req(rv$fdobj)
+      saveRDS(rv$fdobj, file = file)
     }
   )
 
