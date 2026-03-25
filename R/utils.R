@@ -773,7 +773,7 @@ plot_a_curve_metrics <- function(
         "text",
         x = if (is.null(xlim)) x_max else max(xlim, na.rm = TRUE),
         y = noiseBand_high,
-        label = "Noise band",
+        label = sprintf("Noise band upper bound: %.3g nN", noiseBand_high),
         hjust = 1.05,
         vjust = -0.7,
         size = annotation_text_size,
@@ -783,7 +783,7 @@ plot_a_curve_metrics <- function(
         "text",
         x = if (is.null(xlim)) x_max else max(xlim, na.rm = TRUE),
         y = noiseBand_low,
-        label = "Noise band",
+        label = sprintf("Noise band lower bound: %.3g nN", noiseBand_low),
         hjust = 1.05,
         vjust = 1.5,
         size = annotation_text_size,
@@ -910,12 +910,42 @@ plot_a_curve_metrics <- function(
       stop("Raw curve has no finite x/y values for plotting.")
     }
 
+    raw_orig_col <- paste0(raw_y_col, "_original")
+    raw_region_colors <- region_colors
+    orig_df <- NULL
+    if (raw_orig_col %in% colnames(raw_curve)) {
+      orig_df <- data.frame(
+        x = suppressWarnings(as.numeric(raw_curve[[raw_x_col]])),
+        y = suppressWarnings(as.numeric(raw_curve[[raw_orig_col]]))
+      )
+      orig_df <- orig_df[is.finite(orig_df$x) & is.finite(orig_df$y), , drop = FALSE]
+      if (nrow(orig_df) > 0) {
+        raw_region_colors <- c("Before denoise" = "darkblue", raw_region_colors)
+      } else {
+        orig_df <- NULL
+      }
+    }
+
     p_raw <- ggplot(raw_df, aes(x = x, y = y)) +
       geom_vline(xintercept = 0, color = "black", linewidth = 0.5) +
-      geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+      geom_hline(yintercept = 0, color = "black", linewidth = 0.5)
+
+    if (!is.null(orig_df)) {
+      p_raw <- p_raw +
+        geom_point(
+          data = orig_df,
+          aes(x = x, y = y, color = "Before denoise"),
+          size = point_size,
+          alpha = point_alpha,
+          shape = 16,
+          inherit.aes = FALSE
+        )
+    }
+
+    p_raw <- p_raw +
       geom_path(color = line_color, linewidth = line_size, alpha = line_alpha) +
       geom_point(aes(color = point_region), size = point_size, alpha = point_alpha, show.legend = TRUE) +
-      scale_color_manual(values = region_colors, drop = FALSE, name = "Region") +
+      scale_color_manual(values = raw_region_colors, drop = FALSE, name = "Region") +
       labs(
         x = raw_x_col,
         y = raw_y_col,
@@ -923,6 +953,7 @@ plot_a_curve_metrics <- function(
       ) +
       ggplot2::theme_classic(base_size = base_size) +
       theme(legend.position = "top")
+
     raw_subtitle <- paste(
       sprintf("Sensitivity (V/nm) = %s", if (is.finite(sensitivity_val)) sprintf("%.3g", sensitivity_val) else "NA"),
       sprintf("Spring constant (N/nm) = %s", if (is.finite(spring_constant_val)) sprintf("%.3g", spring_constant_val) else "NA"),
@@ -1206,6 +1237,8 @@ plot_all_curve_metrics <- function(
 #' @param log10 Logical. If \code{TRUE}, applies \code{log10} transform to the
 #'   metric values before plotting and testing. Non-positive values are removed.
 #' @param add_points Logical. If \code{TRUE}, overlays jittered points.
+#' @param show_whisker_box Logical. If \code{TRUE}, overlays a whisker boxplot
+#'   on top of each violin.
 #' @param add_smooth Logical. If \code{TRUE}, overlays \code{geom_smooth(method = "lm")}
 #'   within each facet.
 #' @param point_alpha Numeric point transparency.
@@ -1236,6 +1269,7 @@ plot_metric_violin <- function(
     p_adjust_method = "BH",
     log10 = FALSE,
     add_points = TRUE,
+    show_whisker_box = FALSE,
     add_smooth = FALSE,
     point_alpha = 0.6,
     point_color = "black",
@@ -1319,6 +1353,9 @@ plot_metric_violin <- function(
   if (!is.logical(log10) || length(log10) != 1 || is.na(log10)) {
     stop("log10 must be TRUE or FALSE.")
   }
+  if (!is.logical(show_whisker_box) || length(show_whisker_box) != 1 || is.na(show_whisker_box)) {
+    stop("show_whisker_box must be TRUE or FALSE.")
+  }
   if (isTRUE(log10)) {
     plot_df <- plot_df[plot_df$Value > 0, , drop = FALSE]
     if (nrow(plot_df) == 0) {
@@ -1335,6 +1372,17 @@ plot_metric_violin <- function(
 
   p <- ggplot(plot_df, aes(x = Group, y = Value, fill = ColorGroup, color = ColorGroup)) +
     geom_violin(alpha = violin_alpha, trim = FALSE)
+
+  if (isTRUE(show_whisker_box)) {
+    p <- p + geom_boxplot(
+      aes(color = ColorGroup, group = Group),
+      width = 0.16,
+      outlier.shape = NA,
+      fill = NA,
+      alpha = 1,
+      linewidth = 0.35
+    )
+  }
 
   if (isTRUE(add_points)) {
     p <- p + geom_point(
@@ -1771,3 +1819,184 @@ plot_complex_heatmap <- function(
   return(ht)
 }
 
+#' Heatmap of raw deflection values across all curves in an fdObj
+#'
+#' Rows are measurement indices (position steps along the curve); columns are
+#' individual (sample, segment) pairs — one column per approach curve and one
+#' per retract curve.  A column annotation bar shows the segment
+#' (Approach / Retract) and up to two categorical metadata fields for each
+#' sample.  Curves shorter than the longest one are bottom-padded with
+#' \code{NA} so unequal lengths are visible.  Only \code{Defl_V_Ex} and
+#' \code{Defl_V_Rt} are used (never \code{_original} backups).
+#'
+#' @param fdobj An object of class \code{fdObj}.
+#' @param annotate_columns Character vector of up to 2 metadata column names to
+#'   display as column annotations alongside the Segment bar.  Defaults to
+#'   \code{NULL}.
+#' @param annotation_colors Named list of colour vectors for annotations,
+#'   e.g. \code{list(surface = c(PEG = "green", silicon = "orange"))}.
+#' @param approach_color Colour for the Approach segment annotation bar.
+#'   Default \code{"steelblue"}.
+#' @param retract_color Colour for the Retract segment annotation bar.
+#'   Default \code{"tomato"}.
+#' @param show_row_names Logical; show row index labels.  Default \code{FALSE}.
+#' @param show_column_names Logical; show column (sample) names.  Default
+#'   \code{FALSE}.
+#' @param heatmap_name Character; label for the colour-key legend.
+#' @param col_fun Optional \code{circlize::colorRamp2} colour function.  When
+#'   \code{NULL} a blue–white–red ramp scaled to the 1st/50th/99th percentile
+#'   of finite values is used.
+#' @param na_col Colour for padded \code{NA} cells.  Default \code{"grey90"}.
+#' @param draw Logical; if \code{TRUE} (default), calls
+#'   \code{ComplexHeatmap::draw()} before returning.
+#' @param ... Additional arguments forwarded to \code{ComplexHeatmap::Heatmap()}.
+#'
+#' @return A \code{ComplexHeatmap} object (drawn when \code{draw = TRUE}).
+#' @export
+plot_raw_deflection_heatmap <- function(
+  fdobj,
+  annotate_columns     = NULL,
+  annotation_colors    = list(),
+  approach_color       = "steelblue",
+  retract_color        = "tomato",
+  show_row_names       = FALSE,
+  show_column_names    = FALSE,
+  heatmap_name         = "Max-min Scaled Deflection",
+  col_fun              = NULL,
+  na_col               = "grey90",
+  index_tick_interval  = 100,
+  draw                 = TRUE,
+  ...
+) {
+  if (!inherits(fdobj, "fdObj")) stop("fdobj must be an object of class 'fdObj'.")
+  for (pkg in c("ComplexHeatmap", "circlize")) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      stop(sprintf("Package '%s' is required. Install it with install.packages('%s').", pkg, pkg))
+    }
+  }
+
+  raw_list <- fdobj@rawCurves
+  if (length(raw_list) == 0) stop("fdobj@rawCurves is empty.")
+  metadata <- fdobj@metadata
+
+  # Validate annotate_columns ---------------------------------------------
+  if (!is.null(annotate_columns)) {
+    if (length(annotate_columns) > 2) {
+      warning("annotate_columns has more than 2 elements; only the first 2 will be used.")
+      annotate_columns <- annotate_columns[seq_len(2)]
+    }
+    missing_cols <- setdiff(annotate_columns, colnames(metadata))
+    if (length(missing_cols) > 0)
+      stop(sprintf("Metadata columns not found: %s", paste(missing_cols, collapse = ", ")))
+  }
+
+  # Build one column per (sample, segment) --------------------------------
+  col_vectors <- list()   # deflection numeric vectors
+  col_sample  <- character()
+  col_seg     <- character()
+
+  for (nm in names(raw_list)) {
+    df <- raw_list[[nm]]
+    if ("Defl_V_Ex" %in% colnames(df)) {
+      col_vectors[[length(col_vectors) + 1]] <- suppressWarnings(as.numeric(df[["Defl_V_Ex"]]))
+      col_sample <- c(col_sample, nm)
+      col_seg    <- c(col_seg, "Approach")
+    }
+    if ("Defl_V_Rt" %in% colnames(df)) {
+      col_vectors[[length(col_vectors) + 1]] <- suppressWarnings(as.numeric(df[["Defl_V_Rt"]]))
+      col_sample <- c(col_sample, nm)
+      col_seg    <- c(col_seg, "Retract")
+    }
+  }
+
+  if (length(col_vectors) == 0)
+    stop("No Defl_V_Ex or Defl_V_Rt columns found in rawCurves.")
+
+  # Pad to common length (rows = measurement index) -----------------------
+  max_len <- max(vapply(col_vectors, length, integer(1)))
+  mat <- do.call(cbind, lapply(col_vectors, function(v) {
+    if (length(v) < max_len) c(v, rep(NA_real_, max_len - length(v))) else v
+  }))
+  col_ids <- paste0(col_sample, ".", tolower(col_seg))
+  colnames(mat) <- col_ids
+
+  # Re-order: all Approach columns first, then all Retract ---------------
+  col_order <- order(match(col_seg, c("Approach", "Retract")))
+  mat        <- mat[, col_order, drop = FALSE]
+  col_sample <- col_sample[col_order]
+  col_seg    <- col_seg[col_order]
+  col_ids    <- col_ids[col_order]
+
+  # Per-column Min-Max normalisation to [0, 1] ----------------------------
+  mat <- apply(mat, 2, function(v) {
+    mn <- min(v, na.rm = TRUE); mx <- max(v, na.rm = TRUE)
+    if (!is.finite(mn) || !is.finite(mx) || mx == mn) return(v)
+    (v - mn) / (mx - mn)
+  })
+
+  # Colour function -------------------------------------------------------
+  if (is.null(col_fun)) {
+    col_fun <- circlize::colorRamp2(c(0, 0.5, 1), c("blue", "white", "red"))
+  }
+
+  # Column annotation -----------------------------------------------------
+  seg_factor <- factor(col_seg, levels = c("Approach", "Retract"))
+  seg_present <- levels(droplevels(seg_factor))
+  seg_colors  <- c(Approach = approach_color, Retract = retract_color)[seg_present]
+
+  anno_df <- data.frame(Segment = seg_factor, row.names = col_ids, stringsAsFactors = FALSE)
+  anno_col <- list(Segment = seg_colors)
+
+  if (!is.null(annotate_columns)) {
+    for (mc in annotate_columns) {
+      vals_col <- metadata[col_sample, mc]
+      if (!is.factor(vals_col)) vals_col <- as.factor(vals_col)
+      anno_df[[mc]] <- vals_col
+      if (mc %in% names(annotation_colors)) {
+        anno_col[[mc]] <- annotation_colors[[mc]]
+      }
+    }
+  }
+
+  top_anno <- ComplexHeatmap::HeatmapAnnotation(
+    df    = anno_df,
+    col   = anno_col,
+    which = "column",
+    show_annotation_name = TRUE
+  )
+
+  # Row index tick annotation --------------------------------------------
+  right_anno <- NULL
+  if (!is.null(index_tick_interval) && is.numeric(index_tick_interval) &&
+      index_tick_interval > 0 && nrow(mat) > 0) {
+    tick_rows <- seq(index_tick_interval, nrow(mat), by = index_tick_interval)
+    if (length(tick_rows) > 0) {
+      right_anno <- ComplexHeatmap::rowAnnotation(
+        Index = ComplexHeatmap::anno_mark(
+          at     = tick_rows,
+          labels = as.character(tick_rows),
+          which  = "row",
+          side   = "right"
+        )
+      )
+    }
+  }
+
+  # Build heatmap ---------------------------------------------------------
+  ht <- ComplexHeatmap::Heatmap(
+    mat,
+    name               = heatmap_name,
+    col                = col_fun,
+    na_col             = na_col,
+    cluster_rows       = FALSE,
+    cluster_columns    = FALSE,
+    show_row_names     = show_row_names,
+    show_column_names  = show_column_names,
+    top_annotation     = top_anno,
+    right_annotation   = right_anno,
+    ...
+  )
+
+  if (isTRUE(draw)) return(ComplexHeatmap::draw(ht))
+  return(ht)
+}

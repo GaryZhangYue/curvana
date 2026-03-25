@@ -1,6 +1,8 @@
 #' An S4 class to hold AFM force-distance raw and processed curves with metadata
 #'
-#' @slot rawCurves A named list of data.frames, each with 4 columns (raw AFM data)
+#' @slot rawCurves A named list of data.frames containing raw AFM data. Each
+#'   data.frame must include columns \code{Calc_Ramp_Ex_nm}, \code{Calc_Ramp_Rt_nm},
+#'   \code{Defl_V_Ex}, and \code{Defl_V_Rt}; additional columns are allowed.
 #' @slot approachCurves A named list of 2-column data.frames (distance vs force from approach segment)
 #' @slot retractCurves A named list of 2-column data.frames (distance vs force from retract segment)
 #' @slot metadata A data.frame with row names matching names(rawCurves). Stores metadata and calculated features.
@@ -26,8 +28,30 @@ setClass(
     }
 
     # --- rawCurves ---
-    if (!check_named_list_of_dfs(object@rawCurves, names(object@rawCurves), 4)) {
-      return("rawCurves must be a named list of 4-column data.frames")
+    if (!check_named_list_of_dfs(object@rawCurves, names(object@rawCurves))) {
+      return("rawCurves must be a named list of data.frames")
+    }
+
+    approach_cols <- c("Calc_Ramp_Ex_nm", "Defl_V_Ex")
+    retract_cols <- c("Calc_Ramp_Rt_nm", "Defl_V_Rt")
+    
+    invalid_curves <- vapply(
+      object@rawCurves,
+      function(df) {
+        has_approach <- all(approach_cols %in% colnames(df))
+        has_retract <- all(retract_cols %in% colnames(df))
+        !has_approach && !has_retract
+      },
+      logical(1)
+    )
+    if (any(invalid_curves)) {
+      bad_names <- names(object@rawCurves)[invalid_curves]
+      return(sprintf(
+        "Each raw curve must include either approach columns (%s) or retract columns (%s), or both. Invalid: %s",
+        paste(approach_cols, collapse = ", "),
+        paste(retract_cols, collapse = ", "),
+        paste(bad_names, collapse = ", ")
+      ))
     }
 
     # --- approachCurves ---

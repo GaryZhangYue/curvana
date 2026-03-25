@@ -90,13 +90,21 @@ view_df(test@metadata,'metadata')
 
 # Preview the raw deflection curves
 
+## Scatter plot
+
 It is important to inspect the raw curves before formal analysis. We can use the "plot_deflection_curves" function to plot curves in batch. Here, we split curves into sub-panels by column "surface", and color code them by column "region".
+
+```{r plot deflection curves, fig.height=12,fig.width=10,eval=FALSE}
+plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'region',
+                       alpha = 0.5,point_size = 0.5,
+                       color_map = list(`1` = 'darkred',
+                                        `2` = 'orange',
+                                        `3` = 'steelblue'))
+```
 
 ## Heatmap across each sampling event
 
-Here we use the "plot_raw_deflection_heatmap" function to plot a heatmap of min-max scaled deflection values across each sampling event (i.e., each column is a curve, and each row is a data point along the curve). We also annotate columns by "surface" and "region", and set custom colors for each surface type.
-
-This helps us visualize the overall pattern of deflection values across curves, and identify the baseline and sensitivity calibration regions for each curve. We can also check if there are any curves with abnormal patterns (e.g., unstable baseline, extremely high noise level) that may need to be excluded from downstream analysis.
+This helps to judge where to set the baseline starting point
 
 ```{r plot deflection heatmap, fig.height=12,fig.width=10,eval=TRUE}
 plot_raw_deflection_heatmap(
@@ -112,10 +120,9 @@ plot_raw_deflection_heatmap(
 
 ```
 
-
 ## Preset baseline length
 
-We can see that for all approach curves, deflection remains largely constant after approximately 100 data points. The total number data points per curve is 512, so we will set the last 400 points as baseline region for all curves. For retract curves, however, the fluorinated samples have a longer interaction region and shorter baseline, so we set their baseline region to the last 200 data points. For all other retract curves, we set the last 400 points to baseline regions.
+We can see that for approach curves, deflection stopped changing after approximately 100 data points The total number data points per curve is 512, so we will set the last 400 points as baseline region for all curves. For retract curves, however, the fluorinated samples have a longer interaction region and shorter baseline, so we set their baseline to the last 200 data points. All the rest will be set to the last 400 points.
 
 ```{r set baseline length}
 test@metadata <- test@metadata %>%
@@ -127,20 +134,12 @@ test@metadata <- test@metadata %>%
 
 ```
 
-## Scatter plot of deflection curves
+# Curve transformation
 
-```{r plot deflection curves, fig.height=12,fig.width=10}
-plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'region',
-                       alpha = 0.5,point_size = 0.5,
-                       color_map = list(`1` = 'darkred',
-                                        `2` = 'orange',
-                                        `3` = 'steelblue'))
-```
+One advantage of curvana is that each step of the data analysis is modularized, enabling a flexible and customizable workflow. Curve transformation in curvana involves several steps, including sensitivity calculation, baseline offset calculation, and the application of these parameters to convert raw data into interaction force–separation distance curves. To execute all necessary steps at once, we can use a convenient function transform_curves.
 
 
-One advantage of curvana is that each step of the data analysis is modularized, enabling a flexible and customizable workflow. Curve transformation in curvana involves several steps, including smoothing, sensitivity calculation, baseline offset calculation, and the application of these parameters to convert raw data into interaction force–separation distance curves. To execute all necessary steps at once, we can use a convenient function transform_curves.
-
-Here we start with smoothing the raw curves with moving average of three consecutive points, set the spring constant to 0.08 N/m for all curves, and the slope threshold to 0.01 and standard deviation threshold to 0.01 for filtering out curves with unstable baseline. For sensitivity calculation, we set end = 100 to use at most the first 100 points of the curve to calculate sensitivity.
+Here we set the spring constant to 0.08 N/m for all curves, and set the least length of of the curve for baseline calculation to 200, which means the function will use the last 200 points of each curve to calculate the baseline offset. We also set the slope threshold to 0.01 and standard deviation threshold to 0.01 for filtering out curves with unstable baseline. For sensitivity calculation, as we have a small contact region, we set end = 20 to only use the first 20 points of the curve to calculate sensitivity.
 
 ```{r transform curves approach,warning=TRUE, message=TRUE,results='hold', echo=TRUE}
 t = 1
@@ -176,7 +175,7 @@ test = transform_curves(test,
 
 To visualize the transformed curves, we can use the "plot_fd_curves" function. Here we plot the approach and retract curves in separate panels, and color code them by column "surface".
 
-```{r plot transformed curves, fig.height=12,fig.width=10}
+```{r plot transformed curves, fig.height=12,fig.width=10,eval=FALSE}
 plot_fd_curves(test,group_curves_by = 'region', split_curves_by = 'surface',
                point_alpha = 0.5,line_alpha = 0.3, point_size = 0.5,
                color_map = list(`1` = 'darkred',
@@ -192,7 +191,7 @@ plot_fd_curves(test,group_curves_by = 'region', split_curves_by = 'surface',
 \code{analyze_curves_all_analytical_metrics()}, and toggle adhesive-force or energy analysis on/off.
 
 ```{r run all analytical metrics with toggles}
-test = analyze_curves_all_analytical_metrics(
+test.m1 = analyze_curves_all_analytical_metrics(
   test, # the object
   useCurve = "both", # run analysis for both approach and retract 
   threads = 1, 
@@ -206,31 +205,90 @@ test = analyze_curves_all_analytical_metrics(
   analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
   analyze_repulsive_distance = TRUE, # whether to analyze repulsive distance
   analyze_rupture_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for rupture distance analysis
-  analyze_rupture_distance_x_direction = "left", # scan from right to left to find the first data point at which a curve enters the adhesive region from the noise band region
-  analyze_rupture_distance_min_consecutive = 3, # to reduce false positives from random fluctuations, require at least 3 consecutive points below the lower noise-band threshold for classifying the curve as entering the adhesive region.
+  analyze_rupture_distance_x_direction = "left", # scan from right to left to find the last data point before a curve enters the adhesive region from the noise band region
   analyze_repulsive_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for repulsive distance analysis
   analyze_repulsive_distance_x_direction = "right" # scan from left to right to find the last data point before a curve enters the noise band region from the repulsive region
 )
+
+test.m2 = analyze_curves_all_analytical_metrics(
+  test, # the object
+  useCurve = "both", # run analysis for both approach and retract 
+  threads = 1, 
+  noise_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for noise band calculation
+  noise_threshold_method = "quantile", # use quantile method to define the noise band
+  noise_quantile_low = 0.00, # define the lower end of noise band as 0% percentile of y values of the baseline section
+  noise_quantile_high = 1, # define the upper end of noise band as 100% percentile of y values of the baseline section
+  noise_multiplier = 2, # multiply the noise band by 2 to get a more stringent threshold for metric analysis
+  analyze_adhesive_force = TRUE, # whether to analyze adhesive force
+  analyze_energy = TRUE, # whether to analyze interaction energy (repulsive and adhesive)
+  analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
+  analyze_repulsive_distance = TRUE, # whether to analyze repulsive distance
+  analyze_rupture_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for rupture distance analysis
+  analyze_rupture_distance_x_direction = "left", # scan from right to left to find the last data point before a curve enters the adhesive region from the noise band region
+  analyze_repulsive_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for repulsive distance analysis
+  analyze_repulsive_distance_x_direction = "right" # scan from left to right to find the last data point before a curve enters the noise band region from the repulsive region
+)
+
+test.m3 = analyze_curves_all_analytical_metrics(
+  test, # the object
+  useCurve = "both", # run analysis for both approach and retract 
+  threads = 1, 
+  noise_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for noise band calculation
+  noise_threshold_method = "quantile", # use quantile method to define the noise band
+  noise_quantile_low = 0.00, # define the lower end of noise band as 0% percentile of y values of the baseline section
+  noise_quantile_high = 1, # define the upper end of noise band as 100% percentile of y values of the baseline section
+  noise_multiplier = 3, # multiply the noise band by 2 to get a more stringent threshold for metric analysis
+  analyze_adhesive_force = TRUE, # whether to analyze adhesive force
+  analyze_energy = TRUE, # whether to analyze interaction energy (repulsive and adhesive)
+  analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
+  analyze_repulsive_distance = TRUE, # whether to analyze repulsive distance
+  analyze_rupture_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for rupture distance analysis
+  analyze_rupture_distance_x_direction = "left", # scan from right to left to find the last data point before a curve enters the adhesive region from the noise band region
+  analyze_repulsive_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for repulsive distance analysis
+  analyze_repulsive_distance_x_direction = "right" # scan from left to right to find the last data point before a curve enters the noise band region from the repulsive region
+)
+
 ```
 
-All calculated analytical metrics will be stored in the metadata table of the fdObj, and can be accessed by "test@metadata". The names of columns for each metric are self-explanatory, and include the metric name, the unit, and the curve type used for analysis (approach or retract).
-
-```{r view metrics}
-view_df(test@metadata,'metadata')
-```
 
 # View selected curves with metrics annotated
 
 To visualize the curves with analytical metrics annotated, we can use the "plot_curve_with_metrics" function. Here we plot the retract curve of a selected sample, with setting plot_raw = TRUE to display the raw data side by side with the annotated metrics.
 
-```{r plot curve with metrics, fig.height=6, fig.width=15}
+```{r plot curve with metrics, fig.height=10, fig.width=15}
+exp.name = 'silicon_wafer_2.spm-2658_ForceCurveIndex_22.spm'
+#exp.name = 'F_2.spm-6034_ForceCurveIndex_17.spm'
 plot_a_curve_metrics(
-  fdobj = test,
-  curve_name = 'F_1.spm-F4E1_ForceCurveIndex_1.spm'	,
+  fdobj = test.m1,
+  curve_name = exp.name	,
+  useCurve = "retract",plot_raw = T,base_size = 15,annotation_text_size = 4, point_alpha = 0.5
+)
+
+plot_a_curve_metrics(
+  fdobj = test.m2,
+  curve_name = exp.name	,
+  useCurve = "retract",plot_raw = T,base_size = 15,annotation_text_size = 4, point_alpha = 0.5
+)
+
+plot_a_curve_metrics(
+  fdobj = test.m3,
+  curve_name = exp.name	,
   useCurve = "retract",plot_raw = T,base_size = 15,annotation_text_size = 4, point_alpha = 0.5
 )
 ```
 
+```{r noiseband summary}
+test.m1@metadata %>%
+  group_by(surface) %>%
+  summarise(
+    mean   = mean(noiseBand_low_nN_retract, na.rm = TRUE),
+    median = median(noiseBand_low_nN_retract, na.rm = TRUE),
+    q25    = quantile(noiseBand_low_nN_retract, 0.25, na.rm = TRUE),
+    q75    = quantile(noiseBand_low_nN_retract, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
 
 # Summary statistics of analytical metrics
 
@@ -268,15 +326,29 @@ plot_pca_biplot(
 To visualize the distribution of each metric across different sample groups, we can use the "plot_metric_violin" function to plot violin plots. Here we plot the distribution of adhesive force, the separation distance at which the maximum adhesive force occurs, adhesive energy, repulsive energy, rupture distance, and repulsive distance for each surface type. We also set log10 = TRUE for metrics with a wide range of values to improve visualization.
 
 ```{r summary statistics of metrics, fig.height=5, fig.width=18}
-f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f3 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f4 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f5 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f1 = plot_metric_violin(test.m1@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f2 = plot_metric_violin(test.m1@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f3 = plot_metric_violin(test.m1@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f4 = plot_metric_violin(test.m1@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f5 = plot_metric_violin(test.m1@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
 
 plot_grid(f1,f2,f3,f4,f5, nrow = 1)
 
+f1 = plot_metric_violin(test.m2@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f2 = plot_metric_violin(test.m2@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f3 = plot_metric_violin(test.m2@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f4 = plot_metric_violin(test.m2@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f5 = plot_metric_violin(test.m2@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
 
+plot_grid(f1,f2,f3,f4,f5, nrow = 1)
+
+f1 = plot_metric_violin(test.m3@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f2 = plot_metric_violin(test.m3@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f3 = plot_metric_violin(test.m3@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f4 = plot_metric_violin(test.m3@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f5 = plot_metric_violin(test.m3@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+
+plot_grid(f1,f2,f3,f4,f5, nrow = 1)
 ```
 
 ## Violin plot with statistical annotations
@@ -288,8 +360,7 @@ plot_metric_violin(
   df = test@metadata,
   metric_name = "adhesive_force_nN_retract",
   group_by = "surface",
-  color_by = "surface",add_points = F,
-  show_whisker_box = T,
+  color_by = "surface",
   color_map = c(
     PEG = "#1b9e77",
     silicon = "#d95f02",

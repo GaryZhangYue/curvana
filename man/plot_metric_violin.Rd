@@ -17,6 +17,7 @@ plot_metric_violin(
   p_adjust_method = "BH",
   log10 = FALSE,
   add_points = TRUE,
+  show_whisker_box = FALSE,
   add_smooth = FALSE,
   point_alpha = 0.6,
   point_color = "black",
@@ -66,6 +67,9 @@ combinations are used.}
 metric values before plotting and testing. Non-positive values are removed.}
 
 \item{add_points}{Logical. If \code{TRUE}, overlays jittered points.}
+
+\item{show_whisker_box}{Logical. If \code{TRUE}, overlays a whisker boxplot
+on top of each violin.}
 
 \item{add_smooth}{Logical. If \code{TRUE}, overlays \code{geom_smooth(method = "lm")}
 within each facet.}

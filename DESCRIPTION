@@ -13,8 +13,10 @@ Encoding: UTF-8
 URL: https://github.com/GaryZhangYue/fdafmR
 BugReports: https://github.com/GaryZhangYue/fdafmR/issues
 Imports:
+    bs4Dash,
     circlize,
     ComplexHeatmap,
+    cowplot,
     future,
     future.apply,
     dplyr,
@@ -22,11 +24,15 @@ Imports:
     ggrepel,
     ggpubr,
     methods,
-    tibble
+    readxl,
+    rhandsontable,
+    signal,
+    shiny,
+    tibble,
+    writexl,
+    zip
 RoxygenNote: 7.3.2
 Suggests: 
     knitr,
-    rmarkdown,
-    DT,
-    cowplot
+    rmarkdown
 VignetteBuilder: knitr

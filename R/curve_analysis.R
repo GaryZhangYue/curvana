@@ -224,19 +224,49 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001
 #' and stores baseline values and segments in the fdObj.
 #'
 #' @param fdObj An object of class \code{fdObj}.
-#' @param least_length Integer. Minimum number of points in the baseline segment.
+#' @param least_length Either a single integer (minimum number of points in
+#'   the baseline segment) or \code{"automatic"}. When \code{"automatic"},
+#'   per-curve span values are read from
+#'   \code{fdObj@metadata$baseline_span_approach} or
+#'   \code{fdObj@metadata$baseline_span_retract} depending on \code{useCurve}.
 #' @param useCurve Character. Either "approach" or "retract" to specify which raw curve to use.
 #' @param slp_threshold Numeric. Maximum absolute slope allowed for baseline detection (default = 0.001).
 #' @param std_threshold Numeric. Maximum standard error of the slope (default = 0.005).
 #' @param threads Integer. Number of parallel threads to use (default = 1).
 #'
-#' @return An updated \code{fdObj} with baseline values in the metadata column \code{baseline_V}, the minimum number of points in the baseline segment \code{baseline_span}, and baseline segments in \code{baseline_segment}.
+#' @return An updated \code{fdObj} with baseline values in metadata and baseline
+#'   segments in \code{baseline_segment}. If \code{least_length} is numeric,
+#'   the corresponding \code{baseline_span_<dir>} column is updated; if
+#'   \code{least_length = "automatic"}, existing span columns are preserved.
 #' @export
 analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
                              slp_threshold = 0.001, std_threshold = 0.005,
                              threads = 1) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
   if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
+
+  least_length_mode <- if (is.character(least_length) && length(least_length) == 1 && least_length == "automatic") {
+    "automatic"
+  } else if (is.numeric(least_length) && length(least_length) == 1 && is.finite(least_length) && least_length >= 1) {
+    "fixed"
+  } else {
+    stop("least_length must be either a single numeric value >= 1 or 'automatic'.")
+  }
+
+  fixed_least_length <- if (least_length_mode == "fixed") as.integer(least_length) else NA_integer_
+  span_col <- paste0("baseline_span_", useCurve)
+  span_vec <- NULL
+
+  if (least_length_mode == "automatic") {
+    if (!(span_col %in% colnames(fdObj@metadata))) {
+      stop(sprintf(
+        "least_length = 'automatic' requires metadata column '%s'.",
+        span_col
+      ))
+    }
+    span_vec <- suppressWarnings(as.numeric(fdObj@metadata[[span_col]]))
+    names(span_vec) <- rownames(fdObj@metadata)
+  }
 
   # Set column names based on approach/retract; select the corresponding sensitivity value
   if (useCurve == "approach") {
@@ -260,8 +290,11 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
   find_result_for_curve <- function(name) {
     df <- raw_list[[name]]
     sensitivity <- sensitivity_vec[name]
+    curve_least_length <- if (least_length_mode == "automatic") span_vec[name] else fixed_least_length
 
-    if (is.na(sensitivity) || !(x_col %in% names(df)) || !(y_col %in% names(df))) {
+    if (is.na(sensitivity) ||
+        is.na(curve_least_length) || !is.finite(curve_least_length) || curve_least_length < 1 ||
+        !(x_col %in% names(df)) || !(y_col %in% names(df))) {
       return(list(baseline = NA_real_, segment = empty_seg))
     }
 
@@ -270,7 +303,7 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
     res <- find_baseline(
       x = x,
       y = y,
-      least_length = least_length,
+      least_length = as.integer(curve_least_length),
       sensitivity = sensitivity,
       slp_threshold = slp_threshold,
       std_threshold = std_threshold
@@ -297,10 +330,12 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
         find_baseline = find_baseline,
         raw_list = raw_list,
         sensitivity_vec = sensitivity_vec,
+        span_vec = span_vec,
+        least_length_mode = least_length_mode,
+        fixed_least_length = fixed_least_length,
         x_col = x_col,
         y_col = y_col,
         empty_seg = empty_seg,
-        least_length = least_length,
         slp_threshold = slp_threshold,
         std_threshold = std_threshold
       )
@@ -318,10 +353,14 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
   # Update fdObj
   if(useCurve == 'approach') {
     fdObj@metadata$baseline_V_approach <- baseline_values
-    fdObj@metadata$baseline_span_approach <- least_length
+    if (least_length_mode == "fixed") {
+      fdObj@metadata$baseline_span_approach <- fixed_least_length
+    }
     } else {
     fdObj@metadata$baseline_V_retract <- baseline_values
-    fdObj@metadata$baseline_span_retract <- least_length
+    if (least_length_mode == "fixed") {
+      fdObj@metadata$baseline_span_retract <- fixed_least_length
+    }
   }
   fdObj@baseline_segment[[useCurve]] <- baseline_segments
 
@@ -329,6 +368,133 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
   n_fail <- sum(is.na(baseline_values))
   message(sprintf("Processed %d curves; %d failed baseline detection.", length(curve_names), n_fail))
 
+  return(fdObj)
+}
+
+#' Denoise Deflection Columns in a Raw Curve Data Frame
+#'
+#' Applies Savitzky-Golay smoothing to deflection columns in a raw curve data frame.
+#' The original values are first copied to new columns with suffix
+#' \code{_original}, then the target columns are overwritten with smoothed values.
+#'
+#' @param raw_curve A raw curve data frame containing deflection columns.
+#' @param p Filter polynomial order.
+#' @param n Filter length (must be odd).
+#' @param m Order of the derivative to compute.
+#' @param ts Sampling interval.
+#' @param useCurve Character; one of \code{c("retract", "approach", "both")}.
+#'
+#' @return A data frame with original columns preserved and additional
+#' \code{*_original} backup column(s) for the smoothed deflection column(s).
+#' @export
+denoise_a_curve <- function(raw_curve,
+                    p = 1,
+                    n = 3,
+                    m = 0,
+                    ts = 1,
+                    useCurve = c("retract", "approach", "both")) {
+  if (!is.data.frame(raw_curve)) {
+    stop("raw_curve must be a data.frame")
+  }
+  if (!requireNamespace("signal", quietly = TRUE)) {
+    stop("Package 'signal' is required. Please install it with install.packages('signal').")
+  }
+
+  useCurve <- match.arg(useCurve)
+
+  target_cols <- switch(
+    useCurve,
+    approach = "Defl_V_Ex",
+    retract = "Defl_V_Rt",
+    both = c("Defl_V_Ex", "Defl_V_Rt")
+  )
+
+  missing_cols <- setdiff(target_cols, names(raw_curve))
+  if (length(missing_cols) > 0) {
+    stop(sprintf(
+      "Missing required column(s) for useCurve = '%s': %s",
+      useCurve,
+      paste(missing_cols, collapse = ", ")
+    ))
+  }
+
+  for (col_name in target_cols) {
+    if (!is.numeric(raw_curve[[col_name]])) {
+      stop(sprintf("Column '%s' must be numeric.", col_name))
+    }
+  }
+
+  backup_cols <- paste0(target_cols, "_original")
+
+  raw_curve <- raw_curve %>%
+    dplyr::mutate(dplyr::across(dplyr::all_of(target_cols), ~ .x, .names = "{.col}_original")) %>%
+    dplyr::mutate(dplyr::across(
+      dplyr::all_of(target_cols),
+      ~ signal::sgolayfilt(.x, p = p, n = n, m = m, ts = ts)
+    ))
+
+  core_cols <- c("Calc_Ramp_Ex_nm", "Calc_Ramp_Rt_nm", "Defl_V_Ex", "Defl_V_Rt")
+  raw_curve <- raw_curve %>%
+    dplyr::relocate(dplyr::any_of(core_cols), .before = 1) %>%
+    dplyr::relocate(dplyr::any_of(backup_cols), .after = dplyr::last_col())
+
+  return(raw_curve)
+}
+
+#' Denoise All Raw Curves in an fdObj
+#'
+#' Applies \code{denoise_a_curve()} to every data frame in \code{fdObj@rawCurves}
+#' and writes the denoised results back to the \code{rawCurves} slot.
+#'
+#' @param fdObj An object of class \code{fdObj}.
+#' @param p Filter polynomial order.
+#' @param n Filter length (must be odd).
+#' @param m Order of the derivative to compute.
+#' @param ts Sampling interval.
+#' @param useCurve Character; one of \code{c("retract", "approach", "both")}.
+#' @param threads Integer. Number of parallel workers (default \code{1}).
+#'
+#' @return Updated \code{fdObj} with denoised curves in \code{rawCurves}.
+#' @export
+denoise_curves <- function(fdObj,
+                           p = 1,
+                           n = 3,
+                           m = 0,
+                           ts = 1,
+                           useCurve = c("retract", "approach", "both"),
+                           threads = 1) {
+  if (!inherits(fdObj, "fdObj")) {
+    stop("fdObj must be of class 'fdObj'")
+  }
+
+  useCurve <- match.arg(useCurve)
+  raw_list <- fdObj@rawCurves
+  curve_names <- names(raw_list)
+
+  run_one <- function(name) {
+    denoise_a_curve(
+      raw_curve = raw_list[[name]],
+      p = p,
+      n = n,
+      m = m,
+      ts = ts,
+      useCurve = useCurve
+    )
+  }
+
+  results <- if (threads > 1) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::multisession, workers = threads)
+    future.apply::future_lapply(curve_names, run_one)
+  } else {
+    lapply(curve_names, run_one)
+  }
+
+  names(results) <- curve_names
+  fdObj@rawCurves <- results
+
+  message(sprintf("Denoised %d raw curves (useCurve = '%s').", length(curve_names), useCurve))
   return(fdObj)
 }
 
@@ -401,17 +567,41 @@ transform_a_curve <- function(x, y,
 #'   in \code{fdObj@metadata} that contains per-curve spring constants.
 #' @param useCurve Character; one of \code{c("approach", "retract")}.
 #' @param threads Integer. Number of parallel threads to use (default = 1).
+#' @param denoise_first Logical. If \code{TRUE}, denoise raw curves for the
+#'   selected \code{useCurve} before transformation.
 #' @param ... Additional arguments passed to `analyze_sensitivity()` or
-#'   `analyze_baseline()` if they are invoked automatically.
+#'   `analyze_baseline()` if they are invoked automatically. When
+#'   \code{denoise_first = TRUE}, optional denoising arguments can also be
+#'   supplied via \code{...} using \code{denoise_curves()} argument names
+#'   (e.g., \code{p}, \code{n}, \code{m}, \code{ts}).
 #'
 #' @return An updated \code{fdObj} with transformed curves stored in the corresponding slot.
 #' @export
-transform_curves <- function(fdObj, spring_constant, useCurve = c("approach", "retract"), threads = 1, ...) {
+transform_curves <- function(fdObj,
+                             spring_constant,
+                             useCurve = c("approach", "retract"),
+                             threads = 1,
+                             denoise_first = FALSE,
+                             ...) {
   # ---- Validation ----
   if (!inherits(fdObj, "fdObj"))
     stop("fdObj must be of class 'fdObj'")
 
   useCurve <- match.arg(useCurve)
+
+  if (!is.logical(denoise_first) || length(denoise_first) != 1 || is.na(denoise_first)) {
+    stop("denoise_first must be a single TRUE/FALSE value.")
+  }
+
+  # ---- Optional denoising ----
+  if (denoise_first) {
+    denoise_args <- list(...)
+    denoise_args <- denoise_args[names(denoise_args) %in% names(formals(denoise_curves))]
+    denoise_args$fdObj <- fdObj
+    if (is.null(denoise_args$useCurve)) denoise_args$useCurve <- useCurve
+    if (is.null(denoise_args$threads)) denoise_args$threads <- threads
+    fdObj <- do.call(denoise_curves, denoise_args)
+  }
 
   # ---- Determine column names ----
   if (useCurve == "approach") {
@@ -688,7 +878,7 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 #'   \\code{c("sd", "mad", "quantile", "fixed")} (default \\code{"sd"}):
 #'   \\itemize{
 #'     \\item \\code{"sd"}: symmetric bands from baseline SD, i.e. \\eqn{\\pm\\,sd(y_{base})\\times multiplier}.
-#'     \\item \\code{"mad"}: symmetric robust bands from MAD, i.e. \\eqn{\\pm\\,mad(y_{base})\\times mad\\_constant\\times multiplier}.
+#'     \\item \\code{"mad"}: symmetric bands from MAD, i.e. \\eqn{\\pm\\,mad(y_{base})\\times mad\\_constant\\times multiplier}.
 #'     \\item \\code{"quantile"}: asymmetric empirical bands using \\code{quantile\\_low} and \\code{quantile\\_high}, each scaled by \\code{multiplier}.
 #'     \\item \\code{"fixed"}: user-specified \\code{fixed\\_low} and \\code{fixed\\_high}, each scaled by \\code{multiplier}.
 #'   }
@@ -921,19 +1111,24 @@ analyze_curves_noise <- function(
 #' marking rupture length (negative excursion) or repulsive distance (positive excursion).
 #' This function uses user-provided noise-band thresholds directly.
 #' Scanning can proceed from right-to-left (default) or left-to-right.
-#' When y-direction is negative, the function looks for the first point where force < -noise_cutoff (i.e., the curve enters the adhesive region).
-#' When y-direction is positive, it looks for the last point where force > noise_cutoff (i.e., the curve exits the repulsive region).
+#' A detection is accepted only when at least \\code{min_consecutive}
+#' consecutive points satisfy the excursion criterion.
+#' When y-direction is negative, the function scans the curve to look for the first point where force <  lower bound of noise band (i.e., the curve enters the adhesive region).
+#' When y-direction is positive, the function scans the curve to look for the last point where force >  upper bound of noise band (i.e., the curve exits the repulsive region).
 #'
 #' @param curve_df data.frame with columns:
 #'   - separation_distance_nm (numeric): x values (distance, nm)
 #'   - force_nN (numeric): y values (force, nN)
-#' @param baseline_span Integer >= 1. Number of last points used as the baseline window.
+#' @param baseline_span Integer >= 1. Number of last points used as the baseline window. The baseline region will not be scanned.
 #' @param y_direction "negative" or "positive".
 #'   - "negative": find first y < threshold (rupture-like; threshold is typically negative)
-#'   - "positive": find first y > threshold (repulsion-like; threshold is typically positive)
+#'   - "positive": find the last point of the first run of y > threshold
+#'     (repulsion-like; threshold is typically positive)
 #' @param x_direction "left" or "right".
 #'   - "left": scan from right to left (from just before baseline toward the origin)
 #'   - "right": scan from left to right (from origin up to just before baseline)
+#' @param min_consecutive Integer >= 1. Minimum number of consecutive points that
+#'   must satisfy the threshold criterion for an interaction event to be called.
 #' @param noiseBand_low Numeric scalar threshold for negative-direction detection.
 #'   Required when \code{y_direction = "negative"}.
 #' @param noiseBand_high Numeric scalar threshold for positive-direction detection.
@@ -946,6 +1141,7 @@ analyze_a_curve_interaction_distance <- function(
     baseline_span,
     y_direction = c("negative", "positive"),
     x_direction = c("left", "right"),
+  min_consecutive = 1,
     noiseBand_low = NULL,
     noiseBand_high = NULL
 ) {
@@ -965,13 +1161,18 @@ analyze_a_curve_interaction_distance <- function(
     warning("baseline_span must be a single integer >= 1. Returning NA as results.")
     return(c(distance = NA_real_, threshold = NA_real_))
   }
+  if (!is.numeric(min_consecutive) || length(min_consecutive) != 1 || !is.finite(min_consecutive) || min_consecutive < 1) {
+    warning("min_consecutive must be a single integer >= 1. Returning NA as results.")
+    return(c(distance = NA_real_, threshold = NA_real_))
+  }
 
   n <- nrow(curve_df)
   baseline_span <- min(as.integer(baseline_span), n)
+  min_consecutive <- as.integer(min_consecutive)
 
   x <- curve_df$separation_distance_nm
   y <- curve_df$force_nN
-  b_start <- n - baseline_span + 1L
+  b_start <- n - baseline_span
 
   threshold <- if (y_direction == "negative") {
     if (is.null(noiseBand_low) || !is.numeric(noiseBand_low) || length(noiseBand_low) != 1 || is.na(noiseBand_low)) {
@@ -988,10 +1189,10 @@ analyze_a_curve_interaction_distance <- function(
   # ---- choose scan indices based on x_direction ----
   if (x_direction == "left") {
     # right -> left (from just before baseline toward origin)
-    scan_idx <- seq.int(from = b_start - 1L, to = 1L, by = -1L)
+    scan_idx <- seq.int(from = b_start, to = 1L, by = -1L)
   } else {
     # left -> right (from origin up to just before baseline)
-    scan_idx <- seq.int(from = 1L, to = max(b_start - 1L, 1L), by = 1L)
+    scan_idx <- seq.int(from = 1L, to = max(b_start, 1L), by = 1L)
     if (b_start <= 1L) scan_idx <- integer(0)  # no room before baseline
   }
 
@@ -1007,9 +1208,17 @@ analyze_a_curve_interaction_distance <- function(
     y_scan > threshold
   }
 
-  hit <- if (y_direction == "negative") which(hit_mask)[1L] - 1L else which(!hit_mask)[1L]
+  runs <- rle(hit_mask)
+  run_ends <- cumsum(runs$lengths)
+  run_starts <- run_ends - runs$lengths + 1L
+  qualifying_runs <- which(runs$values & runs$lengths >= min_consecutive)
 
-  if (is.na(hit)) return(c(distance = NA_real_, threshold = threshold))
+  if (length(qualifying_runs) == 0L) {
+    return(c(distance = NA_real_, threshold = threshold))
+  }
+
+  run_id <- qualifying_runs[1L]
+  hit <- if (y_direction == "negative") run_starts[run_id] else run_ends[run_id]
 
   c(distance = x[scan_idx[hit]], threshold = threshold)
 }
@@ -1039,6 +1248,8 @@ analyze_a_curve_interaction_distance <- function(
 #'     \item \code{"left"}: right-to-left, from just before baseline toward origin.
 #'     \item \code{"right"}: left-to-right, from origin toward just before baseline.
 #'   }
+#' @param min_consecutive Integer >= 1. Minimum number of consecutive points that
+#'   must satisfy the excursion criterion to call an interaction event.
 #'
 #' @details
 #' This function assumes precomputed noise-band columns already exist in
@@ -1062,7 +1273,8 @@ analyze_curves_interaction_distance <- function(
     threads = 1,
     baseline_span,
     y_direction = c("negative", "positive"),
-    x_direction = c("left", "right")
+  x_direction = c("left", "right"),
+  min_consecutive = 1
 ) {
   # ---- Validation ----
   if (!inherits(fdObj, "fdObj"))
@@ -1071,6 +1283,10 @@ analyze_curves_interaction_distance <- function(
   useCurve <- match.arg(useCurve)
   y_direction <- match.arg(y_direction)
   x_direction <- match.arg(x_direction)
+  if (!is.numeric(min_consecutive) || length(min_consecutive) != 1 || !is.finite(min_consecutive) || min_consecutive < 1) {
+    stop("min_consecutive must be a single integer >= 1.")
+  }
+  min_consecutive <- as.integer(min_consecutive)
 
   curve_list <- if (useCurve == "approach") fdObj@approachCurves else fdObj@retractCurves
   dir_tag <- useCurve
@@ -1146,6 +1362,7 @@ analyze_curves_interaction_distance <- function(
         baseline_span = bs_value,
         y_direction = y_direction,
         x_direction = x_direction,
+        min_consecutive = min_consecutive,
         noiseBand_low = as.numeric(curve_threshold),
         noiseBand_high = NULL
       )
@@ -1155,6 +1372,7 @@ analyze_curves_interaction_distance <- function(
         baseline_span = bs_value,
         y_direction = y_direction,
         x_direction = x_direction,
+        min_consecutive = min_consecutive,
         noiseBand_low = NULL,
         noiseBand_high = as.numeric(curve_threshold)
       )
@@ -1548,6 +1766,8 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
 #' @param analyze_rupture_distance_x_direction Character; one of \code{c("left", "right")}.
 #'   Default \code{"left"}. Passed to negative-direction
 #'   \code{analyze_curves_interaction_distance()}.
+#' @param analyze_rupture_distance_min_consecutive Integer >= 1. Minimum
+#'   consecutive points below threshold required to call a rupture event.
 #'
 #' @param analyze_repulsive_distance Logical. If \code{TRUE}, runs interaction-distance analysis with
 #'   \code{y_direction = "positive"}. Default \code{TRUE}.
@@ -1556,6 +1776,8 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
 #' @param analyze_repulsive_distance_x_direction Character; one of \code{c("right", "left")}.
 #'   Default \code{"right"}. Passed to positive-direction
 #'   \code{analyze_curves_interaction_distance()}.
+#' @param analyze_repulsive_distance_min_consecutive Integer >= 1. Minimum
+#'   consecutive points above threshold required to call a repulsive event.
 #'
 #' @return Updated \code{fdObj} with analytical metrics written to metadata.
 #' @export
@@ -1576,9 +1798,11 @@ analyze_curves_all_analytical_metrics <- function(
     analyze_rupture_distance = TRUE,
     analyze_rupture_distance_baseline_span = "automatic",
     analyze_rupture_distance_x_direction = c("left", "right"),
+    analyze_rupture_distance_min_consecutive = 1,
     analyze_repulsive_distance = TRUE,
     analyze_repulsive_distance_baseline_span = "automatic",
-    analyze_repulsive_distance_x_direction = c("right", "left")
+    analyze_repulsive_distance_x_direction = c("right", "left"),
+    analyze_repulsive_distance_min_consecutive = 1
 ) {
   if (!inherits(fdObj, "fdObj")) {
     stop("fdObj must be of class 'fdObj'")
@@ -1601,6 +1825,21 @@ analyze_curves_all_analytical_metrics <- function(
   if (!is.logical(analyze_energy) || length(analyze_energy) != 1 || is.na(analyze_energy)) {
     stop("analyze_energy must be a single TRUE/FALSE value.")
   }
+  if (!is.numeric(analyze_rupture_distance_min_consecutive) ||
+      length(analyze_rupture_distance_min_consecutive) != 1 ||
+      !is.finite(analyze_rupture_distance_min_consecutive) ||
+      analyze_rupture_distance_min_consecutive < 1) {
+    stop("analyze_rupture_distance_min_consecutive must be a single integer >= 1.")
+  }
+  if (!is.numeric(analyze_repulsive_distance_min_consecutive) ||
+      length(analyze_repulsive_distance_min_consecutive) != 1 ||
+      !is.finite(analyze_repulsive_distance_min_consecutive) ||
+      analyze_repulsive_distance_min_consecutive < 1) {
+    stop("analyze_repulsive_distance_min_consecutive must be a single integer >= 1.")
+  }
+
+  analyze_rupture_distance_min_consecutive <- as.integer(analyze_rupture_distance_min_consecutive)
+  analyze_repulsive_distance_min_consecutive <- as.integer(analyze_repulsive_distance_min_consecutive)
 
   directions <- if (useCurve == "both") c("approach", "retract") else useCurve
 
@@ -1643,7 +1882,8 @@ analyze_curves_all_analytical_metrics <- function(
         threads = threads,
         baseline_span = analyze_rupture_distance_baseline_span,
         y_direction = "negative",
-        x_direction = analyze_rupture_distance_x_direction
+        x_direction = analyze_rupture_distance_x_direction,
+        min_consecutive = analyze_rupture_distance_min_consecutive
       )
     }
 
@@ -1654,7 +1894,8 @@ analyze_curves_all_analytical_metrics <- function(
         threads = threads,
         baseline_span = analyze_repulsive_distance_baseline_span,
         y_direction = "positive",
-        x_direction = analyze_repulsive_distance_x_direction
+        x_direction = analyze_repulsive_distance_x_direction,
+        min_consecutive = analyze_repulsive_distance_min_consecutive
       )
     }
   }

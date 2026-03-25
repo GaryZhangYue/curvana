@@ -1,8 +1,22 @@
+biofilm data
+C:/Users/muson/coding/curvana/inst/extdata2
+
 
 Task
-do the final per curve plotting function.
-write the analytic wrapper.
+
 check the grammar and writing in tutorial
 check the manual...
-analytical plots -- pca, boxplot, heatmap
 check all units (for force, spring constant sensitivity)
+check if all functions works if i just have approach/retract raw curves (not all 4 columns)
+should we not hard code the curve reverse step in loading curves?
+
+Questions
+
+Shiny App tests to do
+done 1. check if import metadata works 
+done 2. in curve transform settings, everthing except spring constant should be approach/retract specific; maybe make approach on one side and retract on one side, and it spands the whole width.
+     make heatmap above it, and make it shorter.
+done 3. in analytical metrics, include all settings analyze metrics function take.
+done 4. keep working on the name of the analyze metric arguments and their explanations (repulsive distance not done)
+     5. check the page 4 analytic metric argument setting name and explanations
+     6. include function to download transformed curves one by one or by all. (download data/ download figure)
