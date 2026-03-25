@@ -16,6 +16,7 @@ Imports:
     bs4Dash,
     circlize,
     ComplexHeatmap,
+    cowplot,
     future,
     future.apply,
     dplyr,
@@ -23,13 +24,15 @@ Imports:
     ggrepel,
     ggpubr,
     methods,
+    readxl,
     rhandsontable,
+    signal,
     shiny,
-    tibble
+    tibble,
+    writexl,
+    zip
 RoxygenNote: 7.3.2
 Suggests: 
     knitr,
-    rmarkdown,
-    cowplot,
-    readxl
+    rmarkdown
 VignetteBuilder: knitr

@@ -1,21 +1,4 @@
 
-# ---- dependency checks --------------------------------------------------------
-if (!requireNamespace("shiny", quietly = TRUE)) {
-  stop("Package 'shiny' is required. Please install it with install.packages('shiny').")
-}
-if (!requireNamespace("bs4Dash", quietly = TRUE)) {
-  stop("Package 'bs4Dash' is required. Please install it with install.packages('bs4Dash').")
-}
-if (!requireNamespace("rhandsontable", quietly = TRUE)) {
-  stop("Package 'rhandsontable' is required. Please install it with install.packages('rhandsontable').")
-}
-
-required_pkgs <- c("ggplot2", "dplyr")
-missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
-if (length(missing_pkgs) > 0) {
-  stop("Please install required packages first: ", paste(missing_pkgs, collapse = ", "))
-}
-
 tooltip_label <- function(label, tip) {
   shiny::tagList(
     label,
@@ -920,14 +903,6 @@ server <- function(input, output, session) {
 
     tryCatch({
       if (ext == "xlsx") {
-        if (!requireNamespace("readxl", quietly = TRUE)) {
-          shiny::showNotification(
-            "Package 'readxl' is required for Excel files. Install with install.packages('readxl').",
-            type = "error",
-            duration = NULL
-          )
-          return(NULL)
-        }
         as.data.frame(readxl::read_excel(file_path), stringsAsFactors = FALSE, check.names = FALSE)
       } else if (ext == "csv") {
         read.csv(file_path, stringsAsFactors = FALSE, check.names = FALSE)
@@ -1569,16 +1544,7 @@ server <- function(input, output, session) {
   }
 
   write_metadata_xlsx <- function(out, file) {
-    if (requireNamespace("writexl", quietly = TRUE)) {
-      writexl::write_xlsx(out, path = file)
-    } else if (requireNamespace("openxlsx", quietly = TRUE)) {
-      wb <- openxlsx::createWorkbook()
-      openxlsx::addWorksheet(wb, "metadata")
-      openxlsx::writeData(wb, "metadata", out)
-      openxlsx::saveWorkbook(wb, file = file, overwrite = TRUE)
-    } else {
-      stop("To export .xlsx, install package 'writexl' or 'openxlsx'.")
-    }
+    writexl::write_xlsx(out, path = file)
   }
 
   sanitize_file_name <- function(x) {
@@ -1620,27 +1586,13 @@ server <- function(input, output, session) {
     out_files
   }
 
-  zip_files_for_download <- function(zipfile, files, base_dir) {
+  zip_files_for_download <- function(zipfile, files) {
     files <- files[file.exists(files)]
     if (length(files) == 0) {
       stop("No files available for download.")
     }
-
-    if (requireNamespace("zip", quietly = TRUE)) {
-      zip::zipr(zipfile = zipfile, files = files, include_directories = FALSE)
-      return(invisible(TRUE))
-    }
-
-    zip_cmd <- Sys.which("zip")
-    if (nzchar(zip_cmd)) {
-      old_wd <- getwd()
-      on.exit(setwd(old_wd), add = TRUE)
-      setwd(base_dir)
-      utils::zip(zipfile = zipfile, files = basename(files))
-      return(invisible(TRUE))
-    }
-
-    stop("No ZIP utility available. Install package 'zip' to enable this download.")
+    zip::zipr(zipfile = zipfile, files = files, include_directories = FALSE)
+    invisible(TRUE)
   }
 
   draw_raw_heatmap <- function() {
@@ -1911,7 +1863,7 @@ server <- function(input, output, session) {
       if (length(files) == 0) {
         stop("No raw curves could be exported.")
       }
-      zip_files_for_download(file, files, tmp_dir)
+      zip_files_for_download(file, files)
     }
   )
 
@@ -1935,7 +1887,7 @@ server <- function(input, output, session) {
       if (length(files) == 0) {
         stop("No transformed curves found in approachCurves or retractCurves slots.")
       }
-      zip_files_for_download(file, files, tmp_dir)
+      zip_files_for_download(file, files)
     }
   )
 
@@ -2083,17 +2035,7 @@ server <- function(input, output, session) {
       utils::write.csv(raw_df, file = raw_csv, row.names = FALSE, na = "")
       utils::write.csv(transformed_df, file = transformed_csv, row.names = FALSE, na = "")
 
-      zip_cmd <- Sys.which("zip")
-      if (nzchar(zip_cmd)) {
-        old_wd <- getwd()
-        on.exit(setwd(old_wd), add = TRUE)
-        setwd(tmp_dir)
-        utils::zip(zipfile = file, files = c(basename(raw_csv), basename(transformed_csv)))
-      } else if (requireNamespace("zip", quietly = TRUE)) {
-        zip::zipr(zipfile = file, files = c(raw_csv, transformed_csv), include_directories = FALSE)
-      } else {
-        stop("No ZIP utility available. Install package 'zip' to enable this download.")
-      }
+      zip::zipr(zipfile = file, files = c(raw_csv, transformed_csv), include_directories = FALSE)
     }
   )
 
