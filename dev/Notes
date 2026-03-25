@@ -18,5 +18,9 @@ done 2. in curve transform settings, everthing except spring constant should be 
      make heatmap above it, and make it shorter.
 done 3. in analytical metrics, include all settings analyze metrics function take.
 done 4. keep working on the name of the analyze metric arguments and their explanations (repulsive distance not done)
-     5. check the page 4 analytic metric argument setting name and explanations
+done 5. check the page 4 analytic metric argument setting name and explanations
      6. include function to download transformed curves one by one or by all. (download data/ download figure)
+done 7. make rupture distance detection consider at least 3 consecutive points below lower noise bound
+     8. check allowOnlyExOrRtOnly branch and if it works, merge
+     9. make a new branch to add functions to transform curves on a soft surface
+     
