@@ -1,8 +1,10 @@
 #' An S4 class to hold AFM force-distance raw and processed curves with metadata
 #'
 #' @slot rawCurves A named list of data.frames containing raw AFM data. Each
-#'   data.frame must include columns \code{Calc_Ramp_Ex_nm}, \code{Calc_Ramp_Rt_nm},
-#'   \code{Defl_V_Ex}, and \code{Defl_V_Rt}; additional columns are allowed.
+#'   data.frame must include at least one complete curve set:
+#'   either approach columns \code{Calc_Ramp_Ex_nm} + \code{Defl_V_Ex},
+#'   retract columns \code{Calc_Ramp_Rt_nm} + \code{Defl_V_Rt}, or both;
+#'   additional columns are allowed.
 #' @slot approachCurves A named list of 2-column data.frames (distance vs force from approach segment)
 #' @slot retractCurves A named list of 2-column data.frames (distance vs force from retract segment)
 #' @slot metadata A data.frame with row names matching names(rawCurves). Stores metadata and calculated features.

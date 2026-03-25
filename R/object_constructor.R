@@ -56,21 +56,35 @@ createFdObjFromFolder <- function(folder,
     read_func <- lapply
   }
 
-  required_cols <- c(Calc_Ramp_Ex_nm, Calc_Ramp_Rt_nm, Defl_V_Ex, Defl_V_Rt)
   rawCurves <- setNames(
     read_func(files_to_read, function(f) {
       df <- read.table(f, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
-      if (!all(required_cols %in% colnames(df))) {
-        warning(sprintf("File %s is missing required columns", f))
-        return(NULL)
+
+      has_approach <- all(c(Calc_Ramp_Ex_nm, Defl_V_Ex) %in% colnames(df))
+      has_retract <- all(c(Calc_Ramp_Rt_nm, Defl_V_Rt) %in% colnames(df))
+
+      if (!has_approach && !has_retract) {
+        stop(sprintf(
+          "File %s is missing both approach columns (%s, %s) and retract columns (%s, %s).",
+          f,
+          Calc_Ramp_Ex_nm,
+          Defl_V_Ex,
+          Calc_Ramp_Rt_nm,
+          Defl_V_Rt
+        ))
       }
-      df %>%
-        transmute(
-          Calc_Ramp_Ex_nm = .data[[Calc_Ramp_Ex_nm]],
-          Calc_Ramp_Rt_nm = rev(.data[[Calc_Ramp_Rt_nm]]),
-          Defl_V_Ex       = rev(.data[[Defl_V_Ex]]),
-          Defl_V_Rt       = .data[[Defl_V_Rt]]
-        )
+
+      out <- data.frame(stringsAsFactors = FALSE)
+      if (has_approach) {
+        out$Calc_Ramp_Ex_nm <- df[[Calc_Ramp_Ex_nm]]
+        out$Defl_V_Ex <- rev(df[[Defl_V_Ex]])
+      }
+      if (has_retract) {
+        out$Calc_Ramp_Rt_nm <- rev(df[[Calc_Ramp_Rt_nm]])
+        out$Defl_V_Rt <- df[[Defl_V_Rt]]
+      }
+
+      out
     }),
     curve_names
   )
