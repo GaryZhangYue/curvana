@@ -10,7 +10,9 @@ An S4 class to hold AFM force-distance raw and processed curves with metadata
 \section{Slots}{
 
 \describe{
-\item{\code{rawCurves}}{A named list of data.frames, each with 4 columns (raw AFM data)}
+\item{\code{rawCurves}}{A named list of data.frames containing raw AFM data. Each
+data.frame must include columns \code{Calc_Ramp_Ex_nm}, \code{Calc_Ramp_Rt_nm},
+\code{Defl_V_Ex}, and \code{Defl_V_Rt}; additional columns are allowed.}
 
 \item{\code{approachCurves}}{A named list of 2-column data.frames (distance vs force from approach segment)}
 

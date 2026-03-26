@@ -9,6 +9,7 @@ transform_curves(
   spring_constant,
   useCurve = c("approach", "retract"),
   threads = 1,
+  denoise_first = FALSE,
   ...
 )
 }
@@ -24,8 +25,14 @@ in \code{fdObj@metadata} that contains per-curve spring constants.}
 
 \item{threads}{Integer. Number of parallel threads to use (default = 1).}
 
+\item{denoise_first}{Logical. If \code{TRUE}, denoise raw curves for the
+selected \code{useCurve} before transformation.}
+
 \item{...}{Additional arguments passed to `analyze_sensitivity()` or
-`analyze_baseline()` if they are invoked automatically.}
+`analyze_baseline()` if they are invoked automatically. When
+\code{denoise_first = TRUE}, optional denoising arguments can also be
+supplied via \code{...} using \code{denoise_curves()} argument names
+(e.g., \code{p}, \code{n}, \code{m}, \code{ts}).}
 }
 \value{
 An updated \code{fdObj} with transformed curves stored in the corresponding slot.

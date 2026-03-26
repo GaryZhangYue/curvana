@@ -16,7 +16,11 @@ analyze_baseline(
 \arguments{
 \item{fdObj}{An object of class \code{fdObj}.}
 
-\item{least_length}{Integer. Minimum number of points in the baseline segment.}
+\item{least_length}{Either a single integer (minimum number of points in
+the baseline segment) or \code{"automatic"}. When \code{"automatic"},
+per-curve span values are read from
+\code{fdObj@metadata$baseline_span_approach} or
+\code{fdObj@metadata$baseline_span_retract} depending on \code{useCurve}.}
 
 \item{useCurve}{Character. Either "approach" or "retract" to specify which raw curve to use.}
 
@@ -27,7 +31,10 @@ analyze_baseline(
 \item{threads}{Integer. Number of parallel threads to use (default = 1).}
 }
 \value{
-An updated \code{fdObj} with baseline values in the metadata column \code{baseline_V}, the minimum number of points in the baseline segment \code{baseline_span}, and baseline segments in \code{baseline_segment}.
+An updated \code{fdObj} with baseline values in metadata and baseline
+  segments in \code{baseline_segment}. If \code{least_length} is numeric,
+  the corresponding \code{baseline_span_<dir>} column is updated; if
+  \code{least_length = "automatic"}, existing span columns are preserved.
 }
 \description{
 Identifies baseline segments in AFM raw force-distance curves using pre-calculated sensitivity values,

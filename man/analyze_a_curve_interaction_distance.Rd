@@ -9,6 +9,7 @@ analyze_a_curve_interaction_distance(
   baseline_span,
   y_direction = c("negative", "positive"),
   x_direction = c("left", "right"),
+  min_consecutive = 1,
   noiseBand_low = NULL,
   noiseBand_high = NULL
 )
@@ -18,15 +19,19 @@ analyze_a_curve_interaction_distance(
 - separation_distance_nm (numeric): x values (distance, nm)
 - force_nN (numeric): y values (force, nN)}
 
-\item{baseline_span}{Integer >= 1. Number of last points used as the baseline window.}
+\item{baseline_span}{Integer >= 1. Number of last points used as the baseline window. The baseline region will not be scanned.}
 
 \item{y_direction}{"negative" or "positive".
 - "negative": find first y < threshold (rupture-like; threshold is typically negative)
-- "positive": find first y > threshold (repulsion-like; threshold is typically positive)}
+- "positive": find the last point of the first run of y > threshold
+  (repulsion-like; threshold is typically positive)}
 
 \item{x_direction}{"left" or "right".
 - "left": scan from right to left (from just before baseline toward the origin)
 - "right": scan from left to right (from origin up to just before baseline)}
+
+\item{min_consecutive}{Integer >= 1. Minimum number of consecutive points that
+must satisfy the threshold criterion for an interaction event to be called.}
 
 \item{noiseBand_low}{Numeric scalar threshold for negative-direction detection.
 Required when \code{y_direction = "negative"}.}
@@ -42,6 +47,8 @@ Detects the first significant deviation in force relative to a baseline window,
 marking rupture length (negative excursion) or repulsive distance (positive excursion).
 This function uses user-provided noise-band thresholds directly.
 Scanning can proceed from right-to-left (default) or left-to-right.
-When y-direction is negative, the function looks for the first point where force < -noise_cutoff (i.e., the curve enters the adhesive region).
-When y-direction is positive, it looks for the last point where force > noise_cutoff (i.e., the curve exits the repulsive region).
+A detection is accepted only when at least \\code{min_consecutive}
+consecutive points satisfy the excursion criterion.
+When y-direction is negative, the function scans the curve to look for the first point where force <  lower bound of noise band (i.e., the curve enters the adhesive region).
+When y-direction is positive, the function scans the curve to look for the last point where force >  upper bound of noise band (i.e., the curve exits the repulsive region).
 }

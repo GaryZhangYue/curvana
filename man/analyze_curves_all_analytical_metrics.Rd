@@ -21,9 +21,11 @@ analyze_curves_all_analytical_metrics(
   analyze_rupture_distance = TRUE,
   analyze_rupture_distance_baseline_span = "automatic",
   analyze_rupture_distance_x_direction = c("left", "right"),
+  analyze_rupture_distance_min_consecutive = 1,
   analyze_repulsive_distance = TRUE,
   analyze_repulsive_distance_baseline_span = "automatic",
-  analyze_repulsive_distance_x_direction = c("right", "left")
+  analyze_repulsive_distance_x_direction = c("right", "left"),
+  analyze_repulsive_distance_min_consecutive = 1
 )
 }
 \arguments{
@@ -67,6 +69,9 @@ Passed to negative-direction \code{analyze_curves_interaction_distance()}.}
 Default \code{"left"}. Passed to negative-direction
 \code{analyze_curves_interaction_distance()}.}
 
+\item{analyze_rupture_distance_min_consecutive}{Integer >= 1. Minimum
+consecutive points below threshold required to call a rupture event.}
+
 \item{analyze_repulsive_distance}{Logical. If \code{TRUE}, runs interaction-distance analysis with
 \code{y_direction = "positive"}. Default \code{TRUE}.}
 
@@ -76,6 +81,9 @@ Passed to positive-direction \code{analyze_curves_interaction_distance()}.}
 \item{analyze_repulsive_distance_x_direction}{Character; one of \code{c("right", "left")}.
 Default \code{"right"}. Passed to positive-direction
 \code{analyze_curves_interaction_distance()}.}
+
+\item{analyze_repulsive_distance_min_consecutive}{Integer >= 1. Minimum
+consecutive points above threshold required to call a repulsive event.}
 }
 \value{
 Updated \code{fdObj} with analytical metrics written to metadata.

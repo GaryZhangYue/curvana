@@ -10,7 +10,8 @@ analyze_curves_interaction_distance(
   threads = 1,
   baseline_span,
   y_direction = c("negative", "positive"),
-  x_direction = c("left", "right")
+  x_direction = c("left", "right"),
+  min_consecutive = 1
 )
 }
 \arguments{
@@ -37,6 +38,9 @@ When "automatic", per-curve baseline spans are read from
   \item \code{"left"}: right-to-left, from just before baseline toward origin.
   \item \code{"right"}: left-to-right, from origin toward just before baseline.
 }}
+
+\item{min_consecutive}{Integer >= 1. Minimum number of consecutive points that
+must satisfy the excursion criterion to call an interaction event.}
 }
 \value{
 The updated \code{fdObj} with two new metadata columns:
