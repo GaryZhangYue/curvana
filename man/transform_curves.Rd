@@ -10,7 +10,16 @@ transform_curves(
   useCurve = c("approach", "retract"),
   threads = 1,
   denoise_first = FALSE,
-  ...
+  p = 1,
+  n = 3,
+  m = 0,
+  ts = 1,
+  end = 200,
+  intv = 4,
+  minimum_length = 4,
+  least_length = 150,
+  slp_threshold = 0.001,
+  std_threshold = 0.005
 )
 }
 \arguments{
@@ -28,11 +37,36 @@ in \code{fdObj@metadata} that contains per-curve spring constants.}
 \item{denoise_first}{Logical. If \code{TRUE}, denoise raw curves for the
 selected \code{useCurve} before transformation.}
 
-\item{...}{Additional arguments passed to `analyze_sensitivity()` or
-`analyze_baseline()` if they are invoked automatically. When
-\code{denoise_first = TRUE}, optional denoising arguments can also be
-supplied via \code{...} using \code{denoise_curves()} argument names
-(e.g., \code{p}, \code{n}, \code{m}, \code{ts}).}
+\item{p}{Integer. Savitzky-Golay polynomial order used by
+\code{denoise_curves()} when \code{denoise_first = TRUE}.}
+
+\item{n}{Integer. Savitzky-Golay window size (odd integer) used by
+\code{denoise_curves()} when \code{denoise_first = TRUE}.}
+
+\item{m}{Integer. Savitzky-Golay derivative order used by
+\code{denoise_curves()} when \code{denoise_first = TRUE}.}
+
+\item{ts}{Numeric. Sampling interval used by \code{denoise_curves()} when
+\code{denoise_first = TRUE}.}
+
+\item{end}{Integer. Maximum index considered during sensitivity estimation
+in \code{analyze_sensitivity()}.}
+
+\item{intv}{Integer. Chunk size used in \code{calc_sensitivity()} via
+\code{analyze_sensitivity()}.}
+
+\item{minimum_length}{Integer. Minimum accumulated points required for a
+valid sensitivity segment in \code{analyze_sensitivity()}.}
+
+\item{least_length}{Either a single integer (minimum baseline span) or
+\code{"automatic"}. Passed to \code{analyze_baseline()} when baseline
+metadata is missing.}
+
+\item{slp_threshold}{Numeric. Maximum absolute baseline slope allowed in
+\code{analyze_baseline()}.}
+
+\item{std_threshold}{Numeric. Maximum baseline slope standard error allowed
+in \code{analyze_baseline()}.}
 }
 \value{
 An updated \code{fdObj} with transformed curves stored in the corresponding slot.
@@ -40,6 +74,5 @@ An updated \code{fdObj} with transformed curves stored in the corresponding slot
 \description{
 Applies `transform_a_curve()` to all raw curves in an fdObj object.
 Automatically computes sensitivity and baseline values if they are missing
-by calling `analyze_sensitivity()` and `analyze_baseline()`, passing through
-any user-supplied arguments that match those functions' parameters.
+by calling `analyze_sensitivity()` and `analyze_baseline()`.
 }

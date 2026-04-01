@@ -574,11 +574,27 @@ transform_a_curve <- function(x, y,
 #' @param threads Integer. Number of parallel threads to use (default = 1).
 #' @param denoise_first Logical. If \code{TRUE}, denoise raw curves for the
 #'   selected \code{useCurve} before transformation.
-#' @param ... Additional arguments passed to `analyze_sensitivity()` or
-#'   `analyze_baseline()` if they are invoked automatically. When
-#'   \code{denoise_first = TRUE}, optional denoising arguments can also be
-#'   supplied via \code{...} using \code{denoise_curves()} argument names
-#'   (e.g., \code{p}, \code{n}, \code{m}, \code{ts}).
+#' @param p Integer. Savitzky-Golay polynomial order used by
+#'   \code{denoise_curves()} when \code{denoise_first = TRUE}.
+#' @param n Integer. Savitzky-Golay window size (odd integer) used by
+#'   \code{denoise_curves()} when \code{denoise_first = TRUE}.
+#' @param m Integer. Savitzky-Golay derivative order used by
+#'   \code{denoise_curves()} when \code{denoise_first = TRUE}.
+#' @param ts Numeric. Sampling interval used by \code{denoise_curves()} when
+#'   \code{denoise_first = TRUE}.
+#' @param end Integer. Maximum index considered during sensitivity estimation
+#'   in \code{analyze_sensitivity()}.
+#' @param intv Integer. Chunk size used in \code{calc_sensitivity()} via
+#'   \code{analyze_sensitivity()}.
+#' @param minimum_length Integer. Minimum accumulated points required for a
+#'   valid sensitivity segment in \code{analyze_sensitivity()}.
+#' @param least_length Either a single integer (minimum baseline span) or
+#'   \code{"automatic"}. Passed to \code{analyze_baseline()} when baseline
+#'   metadata is missing.
+#' @param slp_threshold Numeric. Maximum absolute baseline slope allowed in
+#'   \code{analyze_baseline()}.
+#' @param std_threshold Numeric. Maximum baseline slope standard error allowed
+#'   in \code{analyze_baseline()}.
 #'
 #' @return An updated \code{fdObj} with transformed curves stored in the corresponding slot.
 #' @export
@@ -587,7 +603,16 @@ transform_curves <- function(fdObj,
                              useCurve = c("approach", "retract"),
                              threads = 1,
                              denoise_first = FALSE,
-                             ...) {
+                             p = 1,
+                             n = 3,
+                             m = 0,
+                             ts = 1,
+                             end = 200,
+                             intv = 4,
+                             minimum_length = 4,
+                             least_length = 150,
+                             slp_threshold = 0.001,
+                             std_threshold = 0.005) {
   # ---- Validation ----
   if (!inherits(fdObj, "fdObj"))
     stop("fdObj must be of class 'fdObj'")
@@ -600,12 +625,15 @@ transform_curves <- function(fdObj,
 
   # ---- Optional denoising ----
   if (denoise_first) {
-    denoise_args <- list(...)
-    denoise_args <- denoise_args[names(denoise_args) %in% names(formals(denoise_curves))]
-    denoise_args$fdObj <- fdObj
-    if (is.null(denoise_args$useCurve)) denoise_args$useCurve <- useCurve
-    if (is.null(denoise_args$threads)) denoise_args$threads <- threads
-    fdObj <- do.call(denoise_curves, denoise_args)
+    fdObj <- denoise_curves(
+      fdObj = fdObj,
+      p = p,
+      n = n,
+      m = m,
+      ts = ts,
+      useCurve = useCurve,
+      threads = threads
+    )
   }
 
   # ---- Determine column names ----
@@ -641,11 +669,14 @@ transform_curves <- function(fdObj,
   sens_col <- paste0("sensitivity_V_nm_", useCurve)
   if (!sens_col %in% names(fdObj@metadata)) {
     message(sprintf("Column '%s' not found in metadata. Running analyze_sensitivity()...", sens_col))
-    call_args <- c(as.list(environment()), list(...))
-    sens_args <- call_args[names(call_args) %in% names(formals(analyze_sensitivity))]
-    sens_args$fdObj <- fdObj
-    if (is.null(sens_args$useCurve)) sens_args$useCurve <- useCurve
-    fdObj <- do.call(analyze_sensitivity, sens_args)
+    fdObj <- analyze_sensitivity(
+      fdObj = fdObj,
+      end = end,
+      intv = intv,
+      minimum_length = minimum_length,
+      useCurve = useCurve,
+      threads = threads
+    )
   }
 
   sensitivity_vec <- fdObj@metadata[[sens_col]]
@@ -656,11 +687,14 @@ transform_curves <- function(fdObj,
   base_col <- paste0("baseline_V_", useCurve)
   if (!base_col %in% names(fdObj@metadata)) {
     message(sprintf("Column '%s' not found in metadata. Running analyze_baseline()...", base_col))
-    call_args <- c(as.list(environment()), list(...))
-    base_args <- call_args[names(call_args) %in% names(formals(analyze_baseline))]
-    base_args$fdObj <- fdObj
-    if (is.null(base_args$useCurve)) base_args$useCurve <- useCurve
-    fdObj <- do.call(analyze_baseline, base_args)
+    fdObj <- analyze_baseline(
+      fdObj = fdObj,
+      least_length = least_length,
+      useCurve = useCurve,
+      slp_threshold = slp_threshold,
+      std_threshold = std_threshold,
+      threads = threads
+    )
   }
 
   baseline_vec <- fdObj@metadata[[base_col]]
