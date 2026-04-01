@@ -264,7 +264,7 @@ plot_fd_curves <- function(fdobj,
   # Base plot
   if (!is.null(group_curves_by)) {
     p <- ggplot(plot_df, aes(x = separation_distance_nm, y = force_nN)) +
-      geom_line(
+      geom_path(
         aes(color = .data[[group_curves_by]], group = interaction(sample, segment)),
         alpha = line_alpha,
         linewidth = 0.35,
@@ -274,7 +274,7 @@ plot_fd_curves <- function(fdobj,
       labs(x = "Separation Distance (nm)", y = "Force (nN)", color = group_curves_by)
   } else {
     p <- ggplot(plot_df, aes(x = separation_distance_nm, y = force_nN)) +
-      geom_line(
+      geom_path(
         aes(group = interaction(sample, segment)),
         alpha = line_alpha,
         linewidth = 0.35,
@@ -1365,31 +1365,70 @@ plot_metric_violin <- function(
   }
 
   plot_df$Group <- as.factor(plot_df$Group)
+  plot_df$ColorGroup <- as.factor(plot_df$ColorGroup)
 
   if (nrow(plot_df) == 0) {
     stop("No finite values available for plotting after filtering.")
   }
 
-  p <- ggplot(plot_df, aes(x = Group, y = Value, fill = ColorGroup, color = ColorGroup)) +
-    geom_violin(alpha = violin_alpha, trim = FALSE)
+  use_color_dodge <- !identical(color_by, group_by)
+  dodge_width <- 0.8
+
+  p <- ggplot(plot_df, aes(x = Group, y = Value, fill = ColorGroup, color = ColorGroup))
+
+  if (isTRUE(use_color_dodge)) {
+    p <- p + geom_violin(
+      aes(group = interaction(Group, ColorGroup)),
+      alpha = violin_alpha,
+      trim = FALSE,
+      position = ggplot2::position_dodge(width = dodge_width)
+    )
+  } else {
+    p <- p + geom_violin(alpha = violin_alpha, trim = FALSE)
+  }
 
   if (isTRUE(show_whisker_box)) {
-    p <- p + geom_boxplot(
-      aes(color = ColorGroup, group = Group),
-      width = 0.16,
-      outlier.shape = NA,
-      fill = NA,
-      alpha = 1,
-      linewidth = 0.35
-    )
+    if (isTRUE(use_color_dodge)) {
+      p <- p + geom_boxplot(
+        aes(color = ColorGroup, group = interaction(Group, ColorGroup)),
+        width = 0.16,
+        outlier.shape = NA,
+        fill = NA,
+        alpha = 1,
+        linewidth = 0.35,
+        position = ggplot2::position_dodge(width = dodge_width)
+      )
+    } else {
+      p <- p + geom_boxplot(
+        aes(color = ColorGroup, group = Group),
+        width = 0.16,
+        outlier.shape = NA,
+        fill = NA,
+        alpha = 1,
+        linewidth = 0.35
+      )
+    }
   }
 
   if (isTRUE(add_points)) {
-    p <- p + geom_point(
-      alpha = point_alpha,
-      size = point_size,
-      position = position_jitter(width = jitter_width, height = 0)
-    )
+    if (isTRUE(use_color_dodge)) {
+      p <- p + geom_point(
+        aes(group = interaction(Group, ColorGroup)),
+        alpha = point_alpha,
+        size = point_size,
+        position = ggplot2::position_jitterdodge(
+          jitter.width = jitter_width,
+          jitter.height = 0,
+          dodge.width = dodge_width
+        )
+      )
+    } else {
+      p <- p + geom_point(
+        alpha = point_alpha,
+        size = point_size,
+        position = position_jitter(width = jitter_width, height = 0)
+      )
+    }
   }
 
   if (isTRUE(add_smooth)) {
