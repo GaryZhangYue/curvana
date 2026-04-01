@@ -361,7 +361,8 @@ ui <- bs4Dash::dashboardPage(
                   shiny::hr(),
                   shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
                   shiny::numericInput("sens_end_approach", tooltip_label("End of Contact region", "Maximum number of data points to use for approach sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
-                  shiny::hr(),
+                    shiny::numericInput("minimum_length_approach", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
+                    shiny::hr(),
                   shiny::numericInput("threads_transform_approach", tooltip_label("Threads", "Number of workers used for transforming approach curves."), value = 1, min = 1, step = 1)
                 )
               ),
@@ -396,7 +397,8 @@ ui <- bs4Dash::dashboardPage(
                   shiny::hr(),
                   shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
                   shiny::numericInput("sens_end_retract", tooltip_label("End of Contact region", "Maximum number of data points to use for retract sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
-                  shiny::hr(),
+                    shiny::numericInput("minimum_length_retract", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
+                    shiny::hr(),
                   shiny::numericInput("threads_transform_retract", tooltip_label("Threads", "Number of workers used for transforming retract curves."), value = 1, min = 1, step = 1)
                 )
               )
@@ -1266,6 +1268,8 @@ server <- function(input, output, session) {
           slp_threshold = as.numeric(input$slp_threshold_approach),
           std_threshold = as.numeric(input$std_threshold_approach),
           end           = as.integer(input$sens_end_approach)
+           ,
+           minimum_length = as.integer(input$minimum_length_approach)
         )
         shiny::incProgress(0.45, detail = "Retract")
         curvana::transform_curves(
@@ -1278,6 +1282,8 @@ server <- function(input, output, session) {
           slp_threshold = as.numeric(input$slp_threshold_retract),
           std_threshold = as.numeric(input$std_threshold_retract),
           end           = as.integer(input$sens_end_retract)
+           ,
+           minimum_length = as.integer(input$minimum_length_retract)
         )
       }, error = function(e) {
         shiny::showNotification(paste("Transform failed:", e$message), type = "error", duration = NULL)

@@ -8,6 +8,9 @@
 #' @param intv Integer. The chunk size to use when iteratively selecting data segments.
 #' @param x Numeric vector. The piezo extension values (e.g., distance in nm).
 #' @param y Numeric vector. The deflection values (e.g., voltage).
+#' @param minimum_length Integer. Minimum number of points that must be accumulated in the
+#'   sensitivity-calibration segment for a result to be returned. If fewer points are
+#'   accumulated the function returns \code{list(NULL, NULL)}. Default is 4.
 #'
 #' @return A list of three elements:
 #' \describe{
@@ -21,7 +24,7 @@
 #' calc_sensitivity(end = 80, intv = 10, x = x, y = y)
 #'
 #' @export
-calc_sensitivity <- function(end, intv=4, x, y) {
+calc_sensitivity <- function(end, intv=4, x, y, minimum_length = 4) {
   sens_x <- numeric()
   sens_y <- numeric()
 
@@ -40,27 +43,27 @@ calc_sensitivity <- function(end, intv=4, x, y) {
       sens_x <- combined_x
       sens_y <- combined_y
     } else {
+      rescued <- FALSE
       for (j in intv:1) {
-        temp_x <- x_seg
-        temp_y <- y_seg
-
-        temp_x <- temp_x[-j]
-        temp_y <- temp_y[-j]
+        temp_x <- x_seg[-j]
+        temp_y <- y_seg[-j]
 
         r_try <- suppressWarnings(cor(c(sens_x, temp_x), c(sens_y, temp_y), use = "complete.obs"))
 
         if (!is.na(r_try) && r_try^2 > 0.999) {
           sens_x <- c(sens_x, temp_x)
           sens_y <- c(sens_y, temp_y)
+          rescued <- TRUE
           break
         }
       }
+      if (!rescued) break
     }
 
     i <- i + intv
   }
 
-  if (length(sens_x) == 0 || length(sens_y) == 0) {
+  if (length(sens_x) < minimum_length || length(sens_y) < minimum_length) {
     return(list(NULL, NULL))
   } else {
     fit <- lm(sens_y ~ sens_x)
@@ -78,12 +81,14 @@ calc_sensitivity <- function(end, intv=4, x, y) {
 #' @param fdObj An object of class \code{fdObj}.
 #' @param end Integer. The maximum index in raw curves to consider (e.g., 200).
 #' @param intv Integer. Chunk size for sensitivity calculation (e.g., 4).
+#' @param minimum_length Integer. Minimum accumulated points required for a valid sensitivity
+#'   result. Passed to \code{calc_sensitivity()}. Default is 4.
 #' @param useCurve Character. Either "approach" or "retract" to determine which curve to use.
 #' @param threads Number of parallel threads to use (default = 1).
 #'
 #' @return An updated \code{fdObj} with sensitivity values in metadata and segments in senscal_segment.
 #' @export
-analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach", threads = 1) {
+analyze_sensitivity <- function(fdObj, end = 200, intv = 4, minimum_length = 4, useCurve = "approach", threads = 1) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
   if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
 
@@ -111,7 +116,7 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach
       }
       x <- df[[x_col]]
       y <- df[[y_col]]
-      calc_sensitivity(end = end, intv = intv, x = x, y = y)
+      calc_sensitivity(end = end, intv = intv, minimum_length = minimum_length, x = x, y = y)
     },future.packages = "curvana")
   } else {
     results <- lapply(curve_names, function(name) {
@@ -121,7 +126,7 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach
       }
       x <- df[[x_col]]
       y <- df[[y_col]]
-      calc_sensitivity(end = end, intv = intv, x = x, y = y)
+      calc_sensitivity(end = end, intv = intv, minimum_length = minimum_length, x = x, y = y)
     })
   }
 
