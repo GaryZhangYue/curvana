@@ -19,7 +19,9 @@ transform_curves(
   minimum_length = 4,
   least_length = 150,
   slp_threshold = 0.001,
-  std_threshold = 0.005
+  std_threshold = 0.005,
+  soft = FALSE,
+  probe_sensitivity_external = NULL
 )
 }
 \arguments{
@@ -67,6 +69,17 @@ metadata is missing.}
 
 \item{std_threshold}{Numeric. Maximum baseline slope standard error allowed
 in \code{analyze_baseline()}.}
+
+\item{soft}{Logical. If \code{TRUE}, use \code{probe_sensitivity_external}
+for force conversion in \code{transform_a_curve()} and pass the
+resulting sensitivity column to \code{analyze_baseline()}.
+Default \code{FALSE}.}
+
+\item{probe_sensitivity_external}{Numeric or character. Required when
+\code{soft = TRUE}. If numeric, a single probe sensitivity value applied
+to all curves. If character, the name of an existing column in
+\code{fdObj@metadata} containing per-curve probe sensitivity values.
+The values are stored in \code{probe_true_sensitivity_V_nm_<useCurve>}.}
 }
 \value{
 An updated \code{fdObj} with transformed curves stored in the corresponding slot.

@@ -336,7 +336,16 @@ ui <- bs4Dash::dashboardPage(
                   title = "Approach Curve Settings",
                   width = NULL,
                   collapsible = TRUE,
-                  shiny::numericInput("spring_constant_approach", tooltip_label("Spring constant (N/m)", "Cantilever spring constant used to convert deflection to force during approach transform."), value = 0.08, min = 0),
+                  shiny::radioButtons("spring_constant_mode_approach", tooltip_label("Spring constant source", "Choose whether to use a fixed value for all curves or a per-curve column from metadata."),
+                    choices = c("Fixed value" = "fixed", "Metadata column" = "column"), selected = "fixed", inline = TRUE),
+                  shiny::conditionalPanel(
+                    condition = "input.spring_constant_mode_approach == 'fixed'",
+                    shiny::numericInput("spring_constant_value_approach", tooltip_label("Spring constant (nN/nm)", "Cantilever spring constant applied to all approach curves."), value = 0.08, min = 0, step = 0.001)
+                  ),
+                  shiny::conditionalPanel(
+                    condition = "input.spring_constant_mode_approach == 'column'",
+                    shiny::selectInput("spring_constant_col_approach", tooltip_label("Spring constant column", "Metadata column containing per-curve spring constants (nN/nm)."), choices = character(0))
+                  ),
                   shiny::checkboxInput("denoise_first_approach", tooltip_label("Denoise with Savitzky-Golay filter", "Apply Savitzky-Golay smoothing before baseline and sensitivity calculations for approach curves."), value = TRUE),
                   shiny::fluidRow(
                     shiny::column(6, shiny::numericInput("denoise_p_approach", tooltip_label("Polynomial Degree", "Savitzky-Golay polynomial order p."), value = 1, min = 0, step = 1)),
@@ -362,6 +371,20 @@ ui <- bs4Dash::dashboardPage(
                   shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
                   shiny::numericInput("sens_end_approach", tooltip_label("End of Contact region", "Maximum number of data points to use for approach sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
                     shiny::numericInput("minimum_length_approach", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
+                  shiny::checkboxInput("soft_approach", tooltip_label("Soft substrate", "Enable if the curves were measured on a soft substrate. Provide the true probe sensitivity obtained from a hard reference surface."), value = FALSE),
+                  shiny::conditionalPanel(
+                    condition = "input.soft_approach == true",
+                    shiny::radioButtons("soft_sens_mode_approach", tooltip_label("Probe sensitivity source", "Choose whether to use a fixed value for all curves or a per-curve column from metadata."),
+                      choices = c("Fixed value" = "fixed", "Metadata column" = "column"), selected = "fixed", inline = TRUE),
+                    shiny::conditionalPanel(
+                      condition = "input.soft_sens_mode_approach == 'fixed'",
+                      shiny::numericInput("soft_sens_value_approach", tooltip_label("Probe sensitivity (V/nm)", "Probe sensitivity measured on a hard reference surface, applied to all curves."), value = NA, step = 0.0001)
+                    ),
+                    shiny::conditionalPanel(
+                      condition = "input.soft_sens_mode_approach == 'column'",
+                      shiny::selectInput("soft_sens_col_approach", tooltip_label("Sensitivity column", "Metadata column containing per-curve probe sensitivity values from a hard reference."), choices = character(0))
+                    )
+                  ),
                     shiny::hr(),
                   shiny::numericInput("threads_transform_approach", tooltip_label("Threads", "Number of workers used for transforming approach curves."), value = 1, min = 1, step = 1)
                 )
@@ -372,7 +395,16 @@ ui <- bs4Dash::dashboardPage(
                   title = "Retract Curve Settings",
                   width = NULL,
                   collapsible = TRUE,
-                  shiny::numericInput("spring_constant_retract", tooltip_label("Spring constant (N/m)", "Cantilever spring constant used to convert deflection to force during retract transform."), value = 0.08, min = 0),
+                  shiny::radioButtons("spring_constant_mode_retract", tooltip_label("Spring constant source", "Choose whether to use a fixed value for all curves or a per-curve column from metadata."),
+                    choices = c("Fixed value" = "fixed", "Metadata column" = "column"), selected = "fixed", inline = TRUE),
+                  shiny::conditionalPanel(
+                    condition = "input.spring_constant_mode_retract == 'fixed'",
+                    shiny::numericInput("spring_constant_value_retract", tooltip_label("Spring constant (nN/nm)", "Cantilever spring constant applied to all retract curves."), value = 0.08, min = 0, step = 0.001)
+                  ),
+                  shiny::conditionalPanel(
+                    condition = "input.spring_constant_mode_retract == 'column'",
+                    shiny::selectInput("spring_constant_col_retract", tooltip_label("Spring constant column", "Metadata column containing per-curve spring constants (nN/nm)."), choices = character(0))
+                  ),
                   shiny::checkboxInput("denoise_first_retract", tooltip_label("Denoise with Savitzky-Golay filter", "Apply Savitzky-Golay smoothing before baseline and sensitivity calculations for retract curves."), value = TRUE),
                   shiny::fluidRow(
                     shiny::column(6, shiny::numericInput("denoise_p_retract", tooltip_label("Polynomial Degree", "Savitzky-Golay polynomial order p."), value = 1, min = 0, step = 1)),
@@ -398,6 +430,20 @@ ui <- bs4Dash::dashboardPage(
                   shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
                   shiny::numericInput("sens_end_retract", tooltip_label("End of Contact region", "Maximum number of data points to use for retract sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
                     shiny::numericInput("minimum_length_retract", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
+                  shiny::checkboxInput("soft_retract", tooltip_label("Soft substrate", "Enable if the curves were measured on a soft substrate. Provide the true probe sensitivity obtained from a hard reference surface."), value = FALSE),
+                  shiny::conditionalPanel(
+                    condition = "input.soft_retract == true",
+                    shiny::radioButtons("soft_sens_mode_retract", tooltip_label("Probe sensitivity source", "Choose whether to use a fixed value for all curves or a per-curve column from metadata."),
+                      choices = c("Fixed value" = "fixed", "Metadata column" = "column"), selected = "fixed", inline = TRUE),
+                    shiny::conditionalPanel(
+                      condition = "input.soft_sens_mode_retract == 'fixed'",
+                      shiny::numericInput("soft_sens_value_retract", tooltip_label("Probe sensitivity (V/nm)", "Probe sensitivity measured on a hard reference surface, applied to all curves."), value = NA, step = 0.0001)
+                    ),
+                    shiny::conditionalPanel(
+                      condition = "input.soft_sens_mode_retract == 'column'",
+                      shiny::selectInput("soft_sens_col_retract", tooltip_label("Sensitivity column", "Metadata column containing per-curve probe sensitivity values from a hard reference."), choices = character(0))
+                    )
+                  ),
                     shiny::hr(),
                   shiny::numericInput("threads_transform_retract", tooltip_label("Threads", "Number of workers used for transforming retract curves."), value = 1, min = 1, step = 1)
                 )
@@ -1031,6 +1077,16 @@ server <- function(input, output, session) {
       ""
     }
 
+    sens_col_chooser <- stats::setNames(md_cols, md_cols)
+    shiny::updateSelectInput(session, "soft_sens_col_approach",
+      choices = sens_col_chooser, selected = keep_or_none(input$soft_sens_col_approach))
+    shiny::updateSelectInput(session, "soft_sens_col_retract",
+      choices = sens_col_chooser, selected = keep_or_none(input$soft_sens_col_retract))
+    shiny::updateSelectInput(session, "spring_constant_col_approach",
+      choices = sens_col_chooser, selected = keep_or_none(input$spring_constant_col_approach))
+    shiny::updateSelectInput(session, "spring_constant_col_retract",
+      choices = sens_col_chooser, selected = keep_or_none(input$spring_constant_col_retract))
+
     shiny::updateSelectInput(session, "raw_anno_col1",
       choices = chooser, selected = keep_or_none(input$raw_anno_col1))
     shiny::updateSelectInput(session, "raw_anno_col2",
@@ -1258,8 +1314,13 @@ server <- function(input, output, session) {
       least_ret <- if (identical(input$least_mode_retract,  "automatic")) "automatic" else as.integer(input$least_length_retract)
       fdobj <- tryCatch({
         shiny::incProgress(0.35, detail = "Approach")
+        soft_app <- isTRUE(input$soft_approach)
+        probe_sens_app <- if (soft_app) {
+          if (identical(input$soft_sens_mode_approach, "column")) input$soft_sens_col_approach else as.numeric(input$soft_sens_value_approach)
+        } else { NULL }
+        sc_app <- if (identical(input$spring_constant_mode_approach, "column")) input$spring_constant_col_approach else as.numeric(input$spring_constant_value_approach)
         fdobj <- curvana::transform_curves(
-          fdObj = fdobj, spring_constant = as.numeric(input$spring_constant_approach), useCurve = "approach",
+          fdObj = fdobj, spring_constant = sc_app, useCurve = "approach",
           threads = max(1L, as.integer(input$threads_transform_approach)),
           denoise_first = isTRUE(input$denoise_first_approach),
           p = as.integer(input$denoise_p_approach), n = as.integer(input$denoise_n_approach),
@@ -1267,13 +1328,19 @@ server <- function(input, output, session) {
           least_length  = least_app,
           slp_threshold = as.numeric(input$slp_threshold_approach),
           std_threshold = as.numeric(input$std_threshold_approach),
-          end           = as.integer(input$sens_end_approach)
-           ,
-           minimum_length = as.integer(input$minimum_length_approach)
+          end           = as.integer(input$sens_end_approach),
+          minimum_length = as.integer(input$minimum_length_approach),
+          soft = soft_app,
+          probe_sensitivity_external = probe_sens_app
         )
         shiny::incProgress(0.45, detail = "Retract")
+        soft_ret <- isTRUE(input$soft_retract)
+        probe_sens_ret <- if (soft_ret) {
+          if (identical(input$soft_sens_mode_retract, "column")) input$soft_sens_col_retract else as.numeric(input$soft_sens_value_retract)
+        } else { NULL }
+        sc_ret <- if (identical(input$spring_constant_mode_retract, "column")) input$spring_constant_col_retract else as.numeric(input$spring_constant_value_retract)
         curvana::transform_curves(
-          fdObj = fdobj, spring_constant = as.numeric(input$spring_constant_retract), useCurve = "retract",
+          fdObj = fdobj, spring_constant = sc_ret, useCurve = "retract",
           threads = max(1L, as.integer(input$threads_transform_retract)),
           denoise_first = isTRUE(input$denoise_first_retract),
           p = as.integer(input$denoise_p_retract), n = as.integer(input$denoise_n_retract),
@@ -1281,9 +1348,10 @@ server <- function(input, output, session) {
           least_length  = least_ret,
           slp_threshold = as.numeric(input$slp_threshold_retract),
           std_threshold = as.numeric(input$std_threshold_retract),
-          end           = as.integer(input$sens_end_retract)
-           ,
-           minimum_length = as.integer(input$minimum_length_retract)
+          end           = as.integer(input$sens_end_retract),
+          minimum_length = as.integer(input$minimum_length_retract),
+          soft = soft_ret,
+          probe_sensitivity_external = probe_sens_ret
         )
       }, error = function(e) {
         shiny::showNotification(paste("Transform failed:", e$message), type = "error", duration = NULL)
