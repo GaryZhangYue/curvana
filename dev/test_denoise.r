@@ -1,3 +1,5 @@
+library(dplyr)
+library(purrr)
 # Create sample 4-column raw curve
 set.seed(42)
 n_points <- 10
@@ -8,20 +10,63 @@ raw_curve <- data.frame(
   Defl_V_Rt = seq(0, 20, 2)   # noisy data
 )
 
-# Test denoising retract curve
-denoised_retract <- denoise_a_curve(raw_curve, useCurve = "retract", p = 1, n = 3)
-head(denoised_retract)
-# Should show: Calc_Ramp_Rt_nm, Defl_V_Rt, (other cols), Defl_V_Rt_original
 
-# Test denoising approach curve
-denoised_approach <- denoise_a_curve(raw_curve, useCurve = "approach", p = 3, n = 5)
-head(denoised_approach)
-# Should show: Calc_Ramp_Ex_nm, Defl_V_Ex, (other cols), Defl_V_Ex_original
+folder = system.file("extdata", package = "curvana")
+test = createFdObjFromFolder(folder = folder)
+library(dplyr)
+library(purrr)
+library(ggplot2)
 
-# Test denoising both
-denoised_both <- denoise_a_curve(raw_curve, useCurve = "both", p = 3, n = 5)
-head(denoised_both)
-# Should show: Calc_Ramp_Ex_nm, Calc_Ramp_Rt_nm, Defl_V_Ex, Defl_V_Rt, Defl_V_Ex_original, Defl_V_Rt_original
+raw_curve <- test@rawCurves$`Z_3.spm-310E_ForceCurveIndex_9.spm`
 
-# Verify column order (4 core cols first, then originals)
-colnames(denoised_both)
+params <- expand.grid(
+  p = c(1, 2, 3),
+  n = c(3, 5)
+) %>%
+  filter(n > p)
+
+plot_df_denoised <- params %>%
+  mutate(
+    denoised_df = pmap(list(p, n), ~ denoise_a_curve(
+      raw_curve = raw_curve,
+      useCurve = "retract",
+      p = ..1,
+      n = ..2
+    )),
+    label = paste0("p=", p, ", n=", n)
+  ) %>%
+  mutate(
+    df = pmap(list(denoised_df, label, p, n), function(res, lbl, pp, nn) {
+      data.frame(
+        distance = res$Calc_Ramp_Rt_nm,
+        force = res$Defl_V_Rt,
+        label = lbl,
+        p = pp,
+        n = nn
+      )
+    })
+  ) %>%
+  pull(df) %>%
+  bind_rows()
+
+plot_df_raw <- data.frame(
+  distance = raw_curve$Calc_Ramp_Rt_nm,
+  force = raw_curve$Defl_V_Rt,
+  label = "raw",
+  p = NA,
+  n = NA
+)
+
+plot_df_all <- bind_rows(plot_df_raw, plot_df_denoised)
+
+fig = ggplot(plot_df_all, aes(x = distance, y = force, color = label)) +
+  geom_line(linewidth = 0.3) +
+  theme_classic() +
+  labs(
+    title = "Retract curve denoising comparison",
+    x = "Distance (nm)",
+    y = "Deflection (V)",
+    color = "Curve"
+  )+
+  coord_cartesian(ylim = c(-0.205, -0.21))
+plotly

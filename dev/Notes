@@ -13,7 +13,7 @@ should we not hard code the curve reverse step in loading curves?
 Questions
 
 Shiny App tests to do
-done 1. check if import metadata works 
+done 1. check if import metadata works
 done 2. in curve transform settings, everthing except spring constant should be approach/retract specific; maybe make approach on one side and retract on one side, and it spands the whole width.
      make heatmap above it, and make it shorter.
 done 3. in analytical metrics, include all settings analyze metrics function take.
@@ -23,4 +23,8 @@ done 5. check the page 4 analytic metric argument setting name and explanations
 done 7. make rupture distance detection consider at least 3 consecutive points below lower noise bound
      8. check allowOnlyExOrRtOnly branch and if it works, merge
      9. make a new branch to add functions to transform curves on a soft surface
-     
+     10. Edit analyze_baseline so that sensitivity_vec can be flexible assigned (depending on soft or hard surface).
+          it can be hard coded to two column names, one for hard surface one for soft surface. but doing it htat way
+          you will want to include a step assign a column to fixed sensitivity name column in shiny app.
+          The same to the baseline span column assignment in shiny app.
+        one
