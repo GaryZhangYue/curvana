@@ -16,6 +16,7 @@ transform_curves(
   ts = 1,
   end = 200,
   intv = 4,
+  R_squared_min = 0.99,
   minimum_length = 4,
   least_length = 150,
   slp_threshold = 0.001,
@@ -56,6 +57,9 @@ in \code{analyze_sensitivity()}.}
 
 \item{intv}{Integer. Chunk size used in \code{calc_sensitivity()} via
 \code{analyze_sensitivity()}.}
+
+\item{R_squared_min}{Numeric. Minimum \eqn{R^2} threshold for the
+sensitivity segment in \code{calc_sensitivity()}. Default is 0.99.}
 
 \item{minimum_length}{Integer. Minimum accumulated points required for a
 valid sensitivity segment in \code{analyze_sensitivity()}.}

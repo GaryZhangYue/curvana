@@ -8,6 +8,8 @@ analyze_sensitivity(
   fdObj,
   end = 200,
   intv = 4,
+  R_squared_min = 0.99,
+  minimum_length = 4,
   useCurve = "approach",
   threads = 1
 )
@@ -18,6 +20,12 @@ analyze_sensitivity(
 \item{end}{Integer. The maximum index in raw curves to consider (e.g., 200).}
 
 \item{intv}{Integer. Chunk size for sensitivity calculation (e.g., 4).}
+
+\item{R_squared_min}{Numeric. Minimum \eqn{R^2} threshold passed to
+\code{calc_sensitivity()}. Default is 0.99.}
+
+\item{minimum_length}{Integer. Minimum accumulated points required for a valid sensitivity
+result. Passed to \code{calc_sensitivity()}. Default is 4.}
 
 \item{useCurve}{Character. Either "approach" or "retract" to determine which curve to use.}
 

@@ -2,12 +2,14 @@
 #'
 #' This function identifies a linear segment from AFM deflection vs. piezo extension data and calculates
 #' the sensitivity (slope) using linear regression. It iteratively adds chunks of data to build a segment
-#' with high linearity (\eqn{R^2 > 0.999}) and optionally removes outliers to maintain this criterion.
+#' with high linearity (\eqn{R^2 >} \code{R_squared_min}) and optionally removes outliers to maintain this criterion.
 #'
-#' @param end Integer. The maximum index to consider in the `x` and `y` vectors (i.e., up to which point to search).
-#' @param intv Integer. The chunk size to use when iteratively selecting data segments.
 #' @param x Numeric vector. The piezo extension values (e.g., distance in nm).
 #' @param y Numeric vector. The deflection values (e.g., voltage).
+#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for accepting a
+#'   segment as sufficiently linear. Default is 0.99.
+#' @param end Integer. The maximum index to consider in the `x` and `y` vectors (i.e., up to which point to search).
+#' @param intv Integer. The chunk size to use when iteratively selecting data segments.
 #' @param minimum_length Integer. Minimum number of points that must be accumulated in the
 #'   sensitivity-calibration segment for a result to be returned. If fewer points are
 #'   accumulated the function returns \code{list(NULL, NULL)}. Default is 4.
@@ -21,10 +23,10 @@
 #' @examples
 #' x <- seq(0, 100, by = 1)
 #' y <- 0.02 * x + rnorm(length(x), sd = 0.01)
-#' calc_sensitivity(end = 80, intv = 10, x = x, y = y)
+#' calc_sensitivity(x = x, y = y, end = 80, intv = 10)
 #'
 #' @export
-calc_sensitivity <- function(end, intv=4, x, y, minimum_length = 4) {
+calc_sensitivity <- function(x, y, R_squared_min = 0.99, end, intv = 4, minimum_length = 4) {
   sens_x <- numeric()
   sens_y <- numeric()
 
@@ -39,7 +41,7 @@ calc_sensitivity <- function(end, intv=4, x, y, minimum_length = 4) {
 
     r <- suppressWarnings(cor(combined_x, combined_y, use = "complete.obs"))
 
-    if (!is.na(r) && r^2 > 0.999) {
+    if (!is.na(r) && r^2 > R_squared_min) {
       sens_x <- combined_x
       sens_y <- combined_y
     } else {
@@ -50,7 +52,7 @@ calc_sensitivity <- function(end, intv=4, x, y, minimum_length = 4) {
 
         r_try <- suppressWarnings(cor(c(sens_x, temp_x), c(sens_y, temp_y), use = "complete.obs"))
 
-        if (!is.na(r_try) && r_try^2 > 0.999) {
+        if (!is.na(r_try) && r_try^2 > R_squared_min) {
           sens_x <- c(sens_x, temp_x)
           sens_y <- c(sens_y, temp_y)
           rescued <- TRUE
@@ -81,6 +83,8 @@ calc_sensitivity <- function(end, intv=4, x, y, minimum_length = 4) {
 #' @param fdObj An object of class \code{fdObj}.
 #' @param end Integer. The maximum index in raw curves to consider (e.g., 200).
 #' @param intv Integer. Chunk size for sensitivity calculation (e.g., 4).
+#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold passed to
+#'   \code{calc_sensitivity()}. Default is 0.99.
 #' @param minimum_length Integer. Minimum accumulated points required for a valid sensitivity
 #'   result. Passed to \code{calc_sensitivity()}. Default is 4.
 #' @param useCurve Character. Either "approach" or "retract" to determine which curve to use.
@@ -88,7 +92,7 @@ calc_sensitivity <- function(end, intv=4, x, y, minimum_length = 4) {
 #'
 #' @return An updated \code{fdObj} with sensitivity values in metadata and segments in senscal_segment.
 #' @export
-analyze_sensitivity <- function(fdObj, end = 200, intv = 4, minimum_length = 4, useCurve = "approach", threads = 1) {
+analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99, minimum_length = 4, useCurve = "approach", threads = 1) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
   if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
 
@@ -116,7 +120,7 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, minimum_length = 4, 
       }
       x <- df[[x_col]]
       y <- df[[y_col]]
-      calc_sensitivity(end = end, intv = intv, minimum_length = minimum_length, x = x, y = y)
+      calc_sensitivity(x = x, y = y, R_squared_min = R_squared_min, end = end, intv = intv, minimum_length = minimum_length)
     },future.packages = "curvana")
   } else {
     results <- lapply(curve_names, function(name) {
@@ -126,7 +130,7 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, minimum_length = 4, 
       }
       x <- df[[x_col]]
       y <- df[[y_col]]
-      calc_sensitivity(end = end, intv = intv, minimum_length = minimum_length, x = x, y = y)
+      calc_sensitivity(x = x, y = y, R_squared_min = R_squared_min, end = end, intv = intv, minimum_length = minimum_length)
     })
   }
 
@@ -626,6 +630,8 @@ transform_a_curve <- function(x, y,
 #'   in \code{analyze_sensitivity()}.
 #' @param intv Integer. Chunk size used in \code{calc_sensitivity()} via
 #'   \code{analyze_sensitivity()}.
+#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for the
+#'   sensitivity segment in \code{calc_sensitivity()}. Default is 0.99.
 #' @param minimum_length Integer. Minimum accumulated points required for a
 #'   valid sensitivity segment in \code{analyze_sensitivity()}.
 #' @param least_length Either a single integer (minimum baseline span) or
@@ -658,6 +664,7 @@ transform_curves <- function(fdObj,
                              ts = 1,
                              end = 200,
                              intv = 4,
+                             R_squared_min = 0.99,
                              minimum_length = 4,
                              least_length = 150,
                              slp_threshold = 0.001,
@@ -747,6 +754,7 @@ transform_curves <- function(fdObj,
       fdObj = fdObj,
       end = end,
       intv = intv,
+      R_squared_min = R_squared_min,
       minimum_length = minimum_length,
       useCurve = useCurve,
       threads = threads

@@ -155,7 +155,10 @@ test = transform_curves(test,
                         slp_threshold = 0.01, # any curves with the baseline region having slope > 0.01 will be discarded
                         std_threshold = 0.01, # any curves with the baseline region having standard deviation of y values > 0.01 will be discarded
                         # sensitivity calibration
-                        end = 100, # use the first 100 data points at most on the left side to calibrate sensitivity
+                        intv = 4, # use a window of 4 consecutive data points to automatically extend the linear contact region for sensitivity calibration
+                        end = 60, # use the first 60 data points at most on the left side to calibrate sensitivity.
+                        R_squared_min = 0.99, # the linear contact region should have R^2 > 0.99
+                        minimum_length = 4, # the minimum length of the linear contact region is 4 data points; otherwise sensitivity calibration will fail, and the curve will fail transformation
                         threads = t)
 
 test = transform_curves(test,
@@ -168,7 +171,10 @@ test = transform_curves(test,
                         slp_threshold = 0.01, # any curves with the baseline region having slope > 0.01 will be discarded
                         std_threshold = 0.01, # any curves with the baseline region having standard deviation of y values > 0.01 will be discarded
                         # sensitivity calibration
-                        end = 100, # use the first 100 data points at most on the left side to calibrate sensitivity
+                        intv = 4, # use a window of 4 consecutive data points to automatically extend the linear contact region for sensitivity calibration
+                        end = 60, # use the first 60 data points at most on the left side to calibrate sensitivity.
+                        R_squared_min = 0.99, # the linear contact region should have R^2 > 0.99
+                        minimum_length = 4, # the minimum length of the linear contact region is 4 data points; otherwise sensitivity calibration will fail, and the curve will fail transformation
                         threads = t)
 ```
 
@@ -269,7 +275,7 @@ To visualize the distribution of each metric across different sample groups, we 
 
 ```{r summary statistics of metrics, fig.height=5, fig.width=18}
 f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
+f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=F,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
 f3 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
 f4 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
 f5 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
