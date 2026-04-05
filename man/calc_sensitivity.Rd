@@ -12,15 +12,17 @@ calc_sensitivity(x, y, R_squared_min = 0.99, end, intv = 4, minimum_length = 4)
 \item{y}{Numeric vector. The deflection values (e.g., voltage).}
 
 \item{R_squared_min}{Numeric. Minimum \eqn{R^2} threshold for accepting a
-segment as sufficiently linear. Default is 0.99.}
+segment as sufficiently linear during sensitivity calculation. Default is
+0.99.}
 
 \item{end}{Integer. The maximum index to consider in the `x` and `y` vectors (i.e., up to which point to search).}
 
-\item{intv}{Integer. The chunk size to use when iteratively selecting data segments.}
+\item{intv}{Integer. Number of data points added per iteration when
+building the linear sensitivity segment.}
 
-\item{minimum_length}{Integer. Minimum number of points that must be accumulated in the
-sensitivity-calibration segment for a result to be returned. If fewer points are
-accumulated the function returns \code{list(NULL, NULL)}. Default is 4.}
+\item{minimum_length}{Integer. Minimum number of accumulated points required
+for a valid sensitivity result. If the segment is shorter, sensitivity is
+reported as \code{NA}. Default is 4.}
 }
 \value{
 A list of three elements:

@@ -55,14 +55,17 @@ selected \code{useCurve} before transformation.}
 \item{end}{Integer. Maximum index considered during sensitivity estimation
 in \code{analyze_sensitivity()}.}
 
-\item{intv}{Integer. Chunk size used in \code{calc_sensitivity()} via
+\item{intv}{Integer. Number of data points added per iteration when
+building the linear sensitivity segment in \code{calc_sensitivity()} via
 \code{analyze_sensitivity()}.}
 
-\item{R_squared_min}{Numeric. Minimum \eqn{R^2} threshold for the
-sensitivity segment in \code{calc_sensitivity()}. Default is 0.99.}
+\item{R_squared_min}{Numeric. Minimum \eqn{R^2} threshold for accepting a
+segment as sufficiently linear during sensitivity calculation in
+\code{calc_sensitivity()}. Default is 0.99.}
 
-\item{minimum_length}{Integer. Minimum accumulated points required for a
-valid sensitivity segment in \code{analyze_sensitivity()}.}
+\item{minimum_length}{Integer. Minimum number of accumulated points required
+for a valid sensitivity result. If the segment is shorter, sensitivity is
+reported as \code{NA} in \code{analyze_sensitivity()}.}
 
 \item{least_length}{Either a single integer (minimum baseline span) or
 \code{"automatic"}. Passed to \code{analyze_baseline()} when baseline

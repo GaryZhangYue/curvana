@@ -7,12 +7,14 @@
 #' @param x Numeric vector. The piezo extension values (e.g., distance in nm).
 #' @param y Numeric vector. The deflection values (e.g., voltage).
 #' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for accepting a
-#'   segment as sufficiently linear. Default is 0.99.
+#'   segment as sufficiently linear during sensitivity calculation. Default is
+#'   0.99.
 #' @param end Integer. The maximum index to consider in the `x` and `y` vectors (i.e., up to which point to search).
-#' @param intv Integer. The chunk size to use when iteratively selecting data segments.
-#' @param minimum_length Integer. Minimum number of points that must be accumulated in the
-#'   sensitivity-calibration segment for a result to be returned. If fewer points are
-#'   accumulated the function returns \code{list(NULL, NULL)}. Default is 4.
+#' @param intv Integer. Number of data points added per iteration when
+#'   building the linear sensitivity segment.
+#' @param minimum_length Integer. Minimum number of accumulated points required
+#'   for a valid sensitivity result. If the segment is shorter, sensitivity is
+#'   reported as \code{NA}. Default is 4.
 #'
 #' @return A list of three elements:
 #' \describe{
@@ -82,11 +84,14 @@ calc_sensitivity <- function(x, y, R_squared_min = 0.99, end, intv = 4, minimum_
 #'
 #' @param fdObj An object of class \code{fdObj}.
 #' @param end Integer. The maximum index in raw curves to consider (e.g., 200).
-#' @param intv Integer. Chunk size for sensitivity calculation (e.g., 4).
-#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold passed to
+#' @param intv Integer. Number of data points added per iteration when
+#'   building the linear sensitivity segment in \code{calc_sensitivity()}.
+#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for accepting a
+#'   segment as sufficiently linear during sensitivity calculation in
 #'   \code{calc_sensitivity()}. Default is 0.99.
-#' @param minimum_length Integer. Minimum accumulated points required for a valid sensitivity
-#'   result. Passed to \code{calc_sensitivity()}. Default is 4.
+#' @param minimum_length Integer. Minimum number of accumulated points required
+#'   for a valid sensitivity result. If the segment is shorter, sensitivity is
+#'   reported as \code{NA}. Passed to \code{calc_sensitivity()}. Default is 4.
 #' @param useCurve Character. Either "approach" or "retract" to determine which curve to use.
 #' @param threads Number of parallel threads to use (default = 1).
 #'
@@ -628,12 +633,15 @@ transform_a_curve <- function(x, y,
 #'   \code{denoise_first = TRUE}.
 #' @param end Integer. Maximum index considered during sensitivity estimation
 #'   in \code{analyze_sensitivity()}.
-#' @param intv Integer. Chunk size used in \code{calc_sensitivity()} via
+#' @param intv Integer. Number of data points added per iteration when
+#'   building the linear sensitivity segment in \code{calc_sensitivity()} via
 #'   \code{analyze_sensitivity()}.
-#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for the
-#'   sensitivity segment in \code{calc_sensitivity()}. Default is 0.99.
-#' @param minimum_length Integer. Minimum accumulated points required for a
-#'   valid sensitivity segment in \code{analyze_sensitivity()}.
+#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for accepting a
+#'   segment as sufficiently linear during sensitivity calculation in
+#'   \code{calc_sensitivity()}. Default is 0.99.
+#' @param minimum_length Integer. Minimum number of accumulated points required
+#'   for a valid sensitivity result. If the segment is shorter, sensitivity is
+#'   reported as \code{NA} in \code{analyze_sensitivity()}.
 #' @param least_length Either a single integer (minimum baseline span) or
 #'   \code{"automatic"}. Passed to \code{analyze_baseline()} when baseline
 #'   metadata is missing.
