@@ -370,7 +370,9 @@ ui <- bs4Dash::dashboardPage(
                   shiny::hr(),
                   shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
                   shiny::numericInput("sens_end_approach", tooltip_label("End of Contact region", "Maximum number of data points to use for approach sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
-                    shiny::numericInput("minimum_length_approach", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
+                  shiny::numericInput("intv_approach", tooltip_label("Chunk size (intv)", "Number of data points added per iteration when building the linear sensitivity segment."), value = 4, min = 1, step = 1),
+                  shiny::numericInput("R_squared_min_approach", tooltip_label("R² minimum", "Minimum R² threshold for accepting a segment as sufficiently linear during sensitivity calculation."), value = 0.99, min = 0, max = 1, step = 0.001),
+                  shiny::numericInput("minimum_length_approach", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
                   shiny::checkboxInput("soft_approach", tooltip_label("Soft substrate", "Enable if the curves were measured on a soft substrate. Provide the true probe sensitivity obtained from a hard reference surface."), value = FALSE),
                   shiny::conditionalPanel(
                     condition = "input.soft_approach == true",
@@ -429,7 +431,9 @@ ui <- bs4Dash::dashboardPage(
                   shiny::hr(),
                   shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
                   shiny::numericInput("sens_end_retract", tooltip_label("End of Contact region", "Maximum number of data points to use for retract sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
-                    shiny::numericInput("minimum_length_retract", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
+                  shiny::numericInput("intv_retract", tooltip_label("Chunk size (intv)", "Number of data points added per iteration when building the linear sensitivity segment."), value = 4, min = 1, step = 1),
+                  shiny::numericInput("R_squared_min_retract", tooltip_label("R² minimum", "Minimum R² threshold for accepting a segment as sufficiently linear during sensitivity calculation."), value = 0.99, min = 0, max = 1, step = 0.001),
+                  shiny::numericInput("minimum_length_retract", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
                   shiny::checkboxInput("soft_retract", tooltip_label("Soft substrate", "Enable if the curves were measured on a soft substrate. Provide the true probe sensitivity obtained from a hard reference surface."), value = FALSE),
                   shiny::conditionalPanel(
                     condition = "input.soft_retract == true",
@@ -943,6 +947,8 @@ server <- function(input, output, session) {
     fdobj             = NULL,
     fdobj_clean       = NULL,
     fdobj_transformed = NULL,
+    fdobj_final       = NULL,
+    clean_metadata_cols = NULL,
     status = "No data loaded yet."
   )
 
@@ -1044,6 +1050,18 @@ server <- function(input, output, session) {
     }
     cols <- grDevices::hcl.colors(length(vals), palette = "Dark 3")
     stats::setNames(cols, vals)
+  }
+
+  metadata_keep_clean_only <- function(md) {
+    keep_cols <- rv$clean_metadata_cols
+    if (is.null(keep_cols) || !is.data.frame(md)) {
+      return(md)
+    }
+    keep_cols <- keep_cols[keep_cols %in% colnames(md)]
+    if (length(keep_cols) == 0) {
+      return(md[, 0, drop = FALSE])
+    }
+    md[, keep_cols, drop = FALSE]
   }
 
   update_choices <- function(fdobj) {
@@ -1249,6 +1267,8 @@ server <- function(input, output, session) {
       rv$fdobj             <- fdobj
       rv$fdobj_clean       <- fdobj
       rv$fdobj_transformed <- NULL
+      rv$fdobj_final       <- NULL
+      rv$clean_metadata_cols <- colnames(fdobj@metadata)
       rv$status <- sprintf(
         "Loaded %d raw curves from:\n%s\nGenerated metadata: %d rows x %d columns.\ncreateFdObjFromFolder args: suffix='%s', pattern='%s'.%s",
         length(fdobj@rawCurves),
@@ -1292,6 +1312,7 @@ server <- function(input, output, session) {
     imported_df            <- imported_df[matched_idx, , drop = FALSE]
     imported_df[[key_col]] <- NULL
     rownames(imported_df)  <- rownames(md)
+    rv$clean_metadata_cols <- colnames(imported_df)
     rv$fdobj@metadata <- imported_df
     if (!is.null(rv$fdobj_clean)) {
       rv$fdobj_clean@metadata <- imported_df
@@ -1310,6 +1331,7 @@ server <- function(input, output, session) {
     shiny::req(rv$fdobj_clean)
     shiny::withProgress(message = "Running transform_curves...", value = 0.1, {
       fdobj     <- rv$fdobj_clean
+      fdobj@metadata <- metadata_keep_clean_only(fdobj@metadata)
       least_app <- if (identical(input$least_mode_approach, "automatic")) "automatic" else as.integer(input$least_length_approach)
       least_ret <- if (identical(input$least_mode_retract,  "automatic")) "automatic" else as.integer(input$least_length_retract)
       fdobj <- tryCatch({
@@ -1329,6 +1351,8 @@ server <- function(input, output, session) {
           slp_threshold = as.numeric(input$slp_threshold_approach),
           std_threshold = as.numeric(input$std_threshold_approach),
           end           = as.integer(input$sens_end_approach),
+          intv          = as.integer(input$intv_approach),
+          R_squared_min = as.numeric(input$R_squared_min_approach),
           minimum_length = as.integer(input$minimum_length_approach),
           soft = soft_app,
           probe_sensitivity_external = probe_sens_app
@@ -1349,6 +1373,8 @@ server <- function(input, output, session) {
           slp_threshold = as.numeric(input$slp_threshold_retract),
           std_threshold = as.numeric(input$std_threshold_retract),
           end           = as.integer(input$sens_end_retract),
+          intv          = as.integer(input$intv_retract),
+          R_squared_min = as.numeric(input$R_squared_min_retract),
           minimum_length = as.integer(input$minimum_length_retract),
           soft = soft_ret,
           probe_sensitivity_external = probe_sens_ret
@@ -1360,6 +1386,7 @@ server <- function(input, output, session) {
       if (is.null(fdobj)) return(NULL)
       rv$fdobj             <- fdobj
       rv$fdobj_transformed <- fdobj
+      rv$fdobj_final       <- NULL
       rv$status <- "Transformation completed for approach and retract curves."
       update_choices(fdobj)
       shiny::incProgress(0.1)
@@ -1471,6 +1498,7 @@ server <- function(input, output, session) {
       } # end if analyze_retract
 
       rv$fdobj  <- fdobj_current
+      rv$fdobj_final <- fdobj_current
       rv$status <- "Analytical metrics completed."
       update_choices(fdobj_current)
       shiny::incProgress(0.9)
@@ -1479,14 +1507,12 @@ server <- function(input, output, session) {
   })
 
   # Add metadata column
-  add_metadata_column <- function(new_col, col_type, default_text) {
-    shiny::req(rv$fdobj)
+  build_metadata_with_new_column <- function(md, new_col, col_type, default_text) {
     new_col <- trimws(as.character(new_col))
     if (!nzchar(new_col)) {
       shiny::showNotification("Please provide a non-empty column name.", type = "error")
       return(NULL)
     }
-    md <- rv$fdobj@metadata
     if (new_col %in% colnames(md)) {
       shiny::showNotification("Column already exists in metadata.", type = "error")
       return(NULL)
@@ -1510,9 +1536,22 @@ server <- function(input, output, session) {
       "logical"  = rep(as.logical(default_val),  n),
                    rep(as.character(default_val), n)
     )
+    md
+  }
+
+  add_metadata_column <- function(new_col, col_type, default_text) {
+    md_source <- if (!is.null(rv$fdobj_clean)) rv$fdobj_clean else rv$fdobj
+    shiny::req(md_source)
+    md <- build_metadata_with_new_column(md_source@metadata, new_col, col_type, default_text)
+    if (is.null(md)) {
+      return(NULL)
+    }
     rv$fdobj@metadata <- md
+    rv$clean_metadata_cols <- unique(c(rv$clean_metadata_cols, new_col))
     if (!is.null(rv$fdobj_clean)) {
-      rv$fdobj_clean@metadata <- md
+      md_clean <- rv$fdobj_clean@metadata
+      md_clean[[new_col]] <- md[[new_col]]
+      rv$fdobj_clean@metadata <- md_clean
     }
     if (!is.null(rv$fdobj_transformed)) {
       rv$fdobj_transformed@metadata <- md
@@ -1530,19 +1569,28 @@ server <- function(input, output, session) {
   })
 
   shiny::observeEvent(input$add_meta_col_results_btn, {
-    add_metadata_column(
-      new_col = input$results_new_meta_col_name,
-      col_type = input$results_new_meta_col_type,
-      default_text = input$results_new_meta_col_default
+    shiny::req(rv$fdobj_final)
+    md_final <- build_metadata_with_new_column(
+      rv$fdobj_final@metadata,
+      input$results_new_meta_col_name,
+      input$results_new_meta_col_type,
+      input$results_new_meta_col_default
     )
+    if (is.null(md_final)) {
+      return(NULL)
+    }
+
+    rv$fdobj_final@metadata <- md_final
+    rv$fdobj@metadata <- md_final
+    rv$status <- sprintf("Added final metadata column '%s'.", trimws(as.character(input$results_new_meta_col_name)))
+    update_choices(rv$fdobj)
   })
 
   # Handsontable edits
-  apply_metadata_hot_edit <- function(hot_df) {
+  apply_metadata_hot_edit <- function(hot_df, md_old) {
     tryCatch({
-      shiny::req(rv$fdobj)
+      if (is.null(md_old)) return(NULL)
       if (is.null(hot_df) || nrow(hot_df) == 0 || !("sample" %in% colnames(hot_df))) return(NULL)
-      md_old     <- rv$fdobj@metadata
       sample_ids <- as.character(hot_df$sample)
       hot_df$sample <- NULL
       if (length(sample_ids) != nrow(hot_df)) return(NULL)
@@ -1574,15 +1622,7 @@ server <- function(input, output, session) {
           as.character(new_col)
         }
       }
-      rv$fdobj@metadata <- hot_df
-      if (!is.null(rv$fdobj_clean)) {
-        rv$fdobj_clean@metadata <- hot_df
-      }
-      if (!is.null(rv$fdobj_transformed)) {
-        rv$fdobj_transformed@metadata <- hot_df
-      }
-      rv$status <- "Metadata updated from spreadsheet editor."
-      update_choices(rv$fdobj)
+      hot_df
     }, error = function(e) {
       shiny::showNotification(
         paste("Metadata edit was ignored:", e$message),
@@ -1593,11 +1633,36 @@ server <- function(input, output, session) {
   }
 
   shiny::observeEvent(input$metadata_hot, {
-    apply_metadata_hot_edit(rhandsontable::hot_to_r(input$metadata_hot))
+    md_source <- if (!is.null(rv$fdobj_clean)) rv$fdobj_clean else rv$fdobj
+    shiny::req(md_source)
+    edited_md <- apply_metadata_hot_edit(
+      rhandsontable::hot_to_r(input$metadata_hot),
+      md_source@metadata
+    )
+    if (is.null(edited_md)) return(NULL)
+
+    rv$fdobj@metadata <- edited_md
+
+    if (!is.null(rv$fdobj_clean)) {
+      rv$fdobj_clean@metadata <- metadata_keep_clean_only(edited_md)
+    }
+
+    rv$status <- "Metadata updated from Load Data table."
+    update_choices(rv$fdobj)
   }, ignoreInit = TRUE)
 
   shiny::observeEvent(input$results_metadata_hot, {
-    apply_metadata_hot_edit(rhandsontable::hot_to_r(input$results_metadata_hot))
+    shiny::req(rv$fdobj_final)
+    edited_md <- apply_metadata_hot_edit(
+      rhandsontable::hot_to_r(input$results_metadata_hot),
+      rv$fdobj_final@metadata
+    )
+    if (is.null(edited_md)) return(NULL)
+
+    rv$fdobj_final@metadata <- edited_md
+    rv$fdobj@metadata <- edited_md
+    rv$status <- "Metadata updated from Results table."
+    update_choices(rv$fdobj)
   }, ignoreInit = TRUE)
 
   save_plot_png <- function(file, plot_fun, width = 10, height = 7, res = 300) {
@@ -1617,9 +1682,9 @@ server <- function(input, output, session) {
     dim_val
   }
 
-  metadata_export_df <- function() {
-    shiny::req(rv$fdobj)
-    md <- rv$fdobj@metadata
+  metadata_export_df <- function(fdobj) {
+    shiny::req(fdobj)
+    md <- fdobj@metadata
     data.frame(sample = rownames(md), md, check.names = FALSE, stringsAsFactors = FALSE)
   }
 
@@ -1860,32 +1925,50 @@ server <- function(input, output, session) {
   })
 
   # Metadata handsontable
-  render_metadata_hot <- function(validation_message) {
-    shiny::validate(shiny::need(!is.null(rv$fdobj), validation_message))
-    md   <- rv$fdobj@metadata
+  render_metadata_hot <- function(fdobj, validation_message, editable = TRUE) {
+    shiny::validate(shiny::need(!is.null(fdobj), validation_message))
+    md   <- fdobj@metadata
     disp <- data.frame(
       sample = rownames(md),
       md,
       check.names = FALSE,
       stringsAsFactors = FALSE
     )
-    rhandsontable::rhandsontable(disp, rowHeaders = NULL, stretchH = "all", height = 520) |>
-      rhandsontable::hot_col("sample", readOnly = TRUE) |>
-      rhandsontable::hot_table(
-        contextMenu = TRUE,
-        allowInsertRow = FALSE,
-        manualColumnResize = TRUE,
-        fillHandle = TRUE,
-        columnSorting = TRUE
-      )
+    hot <- rhandsontable::rhandsontable(disp, rowHeaders = NULL, stretchH = "all", height = 520)
+    if (isTRUE(editable)) {
+      hot |>
+        rhandsontable::hot_col("sample", readOnly = TRUE) |>
+        rhandsontable::hot_table(
+          contextMenu = TRUE,
+          allowInsertRow = FALSE,
+          manualColumnResize = TRUE,
+          fillHandle = TRUE,
+          columnSorting = TRUE
+        )
+    } else {
+      for (cn in colnames(disp)) {
+        hot <- rhandsontable::hot_col(hot, cn, readOnly = TRUE)
+      }
+      hot |>
+        rhandsontable::hot_table(
+          contextMenu = FALSE,
+          allowInsertRow = FALSE,
+          manualColumnResize = TRUE,
+          fillHandle = FALSE,
+          columnSorting = TRUE
+        )
+    }
   }
 
   output$metadata_hot <- rhandsontable::renderRHandsontable({
-    render_metadata_hot("Load curve data to preview the metadata generated by createFdObjFromFolder.")
+    render_metadata_hot(
+      if (!is.null(rv$fdobj_clean)) rv$fdobj_clean else rv$fdobj,
+      "Load curve data to preview the metadata generated by createFdObjFromFolder."
+    )
   })
 
   output$results_metadata_hot <- rhandsontable::renderRHandsontable({
-    render_metadata_hot("Load curve data to view metadata results.")
+    render_metadata_hot(rv$fdobj_final, "Run analytical metrics to view final metadata results.")
   })
 
   output$download_metadata_csv <- shiny::downloadHandler(
@@ -1893,7 +1976,7 @@ server <- function(input, output, session) {
       paste0("curvana_metadata_", Sys.Date(), ".csv")
     },
     content = function(file) {
-      out <- metadata_export_df()
+      out <- metadata_export_df(rv$fdobj_clean)
       utils::write.csv(out, file = file, row.names = FALSE, na = "")
     }
   )
@@ -1903,7 +1986,7 @@ server <- function(input, output, session) {
       paste0("curvana_metadata_", Sys.Date(), ".xlsx")
     },
     content = function(file) {
-      out <- metadata_export_df()
+      out <- metadata_export_df(rv$fdobj_clean)
       write_metadata_xlsx(out, file)
     }
   )
@@ -1913,7 +1996,7 @@ server <- function(input, output, session) {
       paste0("curvana_results_metadata_", Sys.Date(), ".csv")
     },
     content = function(file) {
-      out <- metadata_export_df()
+      out <- metadata_export_df(rv$fdobj_final)
       utils::write.csv(out, file = file, row.names = FALSE, na = "")
     }
   )
@@ -1923,7 +2006,7 @@ server <- function(input, output, session) {
       paste0("curvana_results_metadata_", Sys.Date(), ".xlsx")
     },
     content = function(file) {
-      out <- metadata_export_df()
+      out <- metadata_export_df(rv$fdobj_final)
       write_metadata_xlsx(out, file)
     }
   )
@@ -1933,8 +2016,8 @@ server <- function(input, output, session) {
       paste0("curvana_raw_curves_", Sys.Date(), ".zip")
     },
     content = function(file) {
-      shiny::req(rv$fdobj)
-      raw_curves <- rv$fdobj@rawCurves
+      shiny::req(rv$fdobj_final)
+      raw_curves <- rv$fdobj_final@rawCurves
       if (is.null(raw_curves) || length(raw_curves) == 0) {
         stop("No raw curves available in rawCurves slot.")
       }
@@ -1956,9 +2039,9 @@ server <- function(input, output, session) {
       paste0("curvana_transformed_curves_", Sys.Date(), ".zip")
     },
     content = function(file) {
-      shiny::req(rv$fdobj)
-      approach_curves <- rv$fdobj@approachCurves
-      retract_curves <- rv$fdobj@retractCurves
+      shiny::req(rv$fdobj_final)
+      approach_curves <- rv$fdobj_final@approachCurves
+      retract_curves <- rv$fdobj_final@retractCurves
 
       tmp_dir <- tempfile("transformed_curves_zip_")
       dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
@@ -1980,8 +2063,8 @@ server <- function(input, output, session) {
       paste0("curvana_fdobj_", Sys.Date(), ".rds")
     },
     content = function(file) {
-      shiny::req(rv$fdobj)
-      saveRDS(rv$fdobj, file = file)
+      shiny::req(rv$fdobj_final)
+      saveRDS(rv$fdobj_final, file = file)
     }
   )
 
