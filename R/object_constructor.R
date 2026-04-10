@@ -74,17 +74,17 @@ createFdObjFromFolder <- function(folder,
         ))
       }
 
-      out <- data.frame(stringsAsFactors = FALSE)
+      cols <- list()
       if (has_approach) {
-        out$Calc_Ramp_Ex_nm <- df[[Calc_Ramp_Ex_nm]]
-        out$Defl_V_Ex <- rev(df[[Defl_V_Ex]])
+        cols[["Calc_Ramp_Ex_nm"]] <- df[[Calc_Ramp_Ex_nm]]
+        cols[["Defl_V_Ex"]] <- rev(df[[Defl_V_Ex]])
       }
       if (has_retract) {
-        out$Calc_Ramp_Rt_nm <- rev(df[[Calc_Ramp_Rt_nm]])
-        out$Defl_V_Rt <- df[[Defl_V_Rt]]
+        cols[["Calc_Ramp_Rt_nm"]] <- rev(df[[Calc_Ramp_Rt_nm]])
+        cols[["Defl_V_Rt"]] <- df[[Defl_V_Rt]]
       }
 
-      out
+      as.data.frame(cols, stringsAsFactors = FALSE)
     }),
     curve_names
   )
