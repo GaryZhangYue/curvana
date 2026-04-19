@@ -7,6 +7,10 @@
 #' @param Calc_Ramp_Rt_nm Column name for retract distance (default: "Calc_Ramp_Rt_nm")
 #' @param Defl_V_Ex Column name for approach deflection (default: "Defl_V_Ex")
 #' @param Defl_V_Rt Column name for retract deflection (default: "Defl_V_Rt")
+#' @param reverse_Calc_Ramp_Ex_nm Logical; reverse approach distance column if TRUE. Default = FALSE.
+#' @param reverse_Calc_Ramp_Rt_nm Logical; reverse retract distance column if TRUE. Default = TRUE.
+#' @param reverse_Defl_V_Ex Logical; reverse approach deflection column if TRUE. Default = TRUE.
+#' @param reverse_Defl_V_Rt Logical; reverse retract deflection column if TRUE. Default = FALSE.
 #' @param metadata Optional data.frame. If provided, file names (excluding the suffix) matched to rownames(metadata) will be read in. Returns error if any files not found.
 #' @param threads Number of parallel threads to use for file reading. Default = 1 (sequential).
 #'
@@ -20,7 +24,11 @@ createFdObjFromFolder <- function(folder,
                                   Defl_V_Ex       = "Defl_V_Ex",
                                   Defl_V_Rt       = "Defl_V_Rt",
                                   metadata = NULL,
-                                  threads = 1) {
+                                  threads = 1,
+                                  reverse_Calc_Ramp_Ex_nm = FALSE,
+                                  reverse_Calc_Ramp_Rt_nm = TRUE,
+                                  reverse_Defl_V_Ex = TRUE,
+                                  reverse_Defl_V_Rt = FALSE) {
   if (!dir.exists(folder)) {
     stop("Folder does not exist: ", folder)
   }
@@ -56,21 +64,35 @@ createFdObjFromFolder <- function(folder,
     read_func <- lapply
   }
 
-  required_cols <- c(Calc_Ramp_Ex_nm, Calc_Ramp_Rt_nm, Defl_V_Ex, Defl_V_Rt)
   rawCurves <- setNames(
     read_func(files_to_read, function(f) {
       df <- read.table(f, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
-      if (!all(required_cols %in% colnames(df))) {
-        warning(sprintf("File %s is missing required columns", f))
-        return(NULL)
+
+      has_approach <- all(c(Calc_Ramp_Ex_nm, Defl_V_Ex) %in% colnames(df))
+      has_retract <- all(c(Calc_Ramp_Rt_nm, Defl_V_Rt) %in% colnames(df))
+
+      if (!has_approach && !has_retract) {
+        stop(sprintf(
+          "File %s is missing both approach columns (%s, %s) and retract columns (%s, %s).",
+          f,
+          Calc_Ramp_Ex_nm,
+          Defl_V_Ex,
+          Calc_Ramp_Rt_nm,
+          Defl_V_Rt
+        ))
       }
-      df %>%
-        transmute(
-          Calc_Ramp_Ex_nm = .data[[Calc_Ramp_Ex_nm]],
-          Calc_Ramp_Rt_nm = rev(.data[[Calc_Ramp_Rt_nm]]),
-          Defl_V_Ex       = rev(.data[[Defl_V_Ex]]),
-          Defl_V_Rt       = .data[[Defl_V_Rt]]
-        )
+
+      cols <- list()
+      if (has_approach) {
+        cols[["Calc_Ramp_Ex_nm"]] <- if (reverse_Calc_Ramp_Ex_nm) rev(df[[Calc_Ramp_Ex_nm]]) else df[[Calc_Ramp_Ex_nm]]
+        cols[["Defl_V_Ex"]] <- if (reverse_Defl_V_Ex) rev(df[[Defl_V_Ex]]) else df[[Defl_V_Ex]]
+      }
+      if (has_retract) {
+        cols[["Calc_Ramp_Rt_nm"]] <- if (reverse_Calc_Ramp_Rt_nm) rev(df[[Calc_Ramp_Rt_nm]]) else df[[Calc_Ramp_Rt_nm]]
+        cols[["Defl_V_Rt"]] <- if (reverse_Defl_V_Rt) rev(df[[Defl_V_Rt]]) else df[[Defl_V_Rt]]
+      }
+
+      as.data.frame(cols, stringsAsFactors = FALSE)
     }),
     curve_names
   )
