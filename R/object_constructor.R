@@ -7,6 +7,10 @@
 #' @param Calc_Ramp_Rt_nm Column name for retract distance (default: "Calc_Ramp_Rt_nm")
 #' @param Defl_V_Ex Column name for approach deflection (default: "Defl_V_Ex")
 #' @param Defl_V_Rt Column name for retract deflection (default: "Defl_V_Rt")
+#' @param reverse_Calc_Ramp_Ex_nm Logical; reverse approach distance column if TRUE. Default = FALSE.
+#' @param reverse_Calc_Ramp_Rt_nm Logical; reverse retract distance column if TRUE. Default = TRUE.
+#' @param reverse_Defl_V_Ex Logical; reverse approach deflection column if TRUE. Default = TRUE.
+#' @param reverse_Defl_V_Rt Logical; reverse retract deflection column if TRUE. Default = FALSE.
 #' @param metadata Optional data.frame. If provided, file names (excluding the suffix) matched to rownames(metadata) will be read in. Returns error if any files not found.
 #' @param threads Number of parallel threads to use for file reading. Default = 1 (sequential).
 #'
@@ -20,7 +24,11 @@ createFdObjFromFolder <- function(folder,
                                   Defl_V_Ex       = "Defl_V_Ex",
                                   Defl_V_Rt       = "Defl_V_Rt",
                                   metadata = NULL,
-                                  threads = 1) {
+                                  threads = 1,
+                                  reverse_Calc_Ramp_Ex_nm = FALSE,
+                                  reverse_Calc_Ramp_Rt_nm = TRUE,
+                                  reverse_Defl_V_Ex = TRUE,
+                                  reverse_Defl_V_Rt = FALSE) {
   if (!dir.exists(folder)) {
     stop("Folder does not exist: ", folder)
   }
@@ -76,12 +84,12 @@ createFdObjFromFolder <- function(folder,
 
       cols <- list()
       if (has_approach) {
-        cols[["Calc_Ramp_Ex_nm"]] <- df[[Calc_Ramp_Ex_nm]]
-        cols[["Defl_V_Ex"]] <- rev(df[[Defl_V_Ex]])
+        cols[["Calc_Ramp_Ex_nm"]] <- if (reverse_Calc_Ramp_Ex_nm) rev(df[[Calc_Ramp_Ex_nm]]) else df[[Calc_Ramp_Ex_nm]]
+        cols[["Defl_V_Ex"]] <- if (reverse_Defl_V_Ex) rev(df[[Defl_V_Ex]]) else df[[Defl_V_Ex]]
       }
       if (has_retract) {
-        cols[["Calc_Ramp_Rt_nm"]] <- rev(df[[Calc_Ramp_Rt_nm]])
-        cols[["Defl_V_Rt"]] <- df[[Defl_V_Rt]]
+        cols[["Calc_Ramp_Rt_nm"]] <- if (reverse_Calc_Ramp_Rt_nm) rev(df[[Calc_Ramp_Rt_nm]]) else df[[Calc_Ramp_Rt_nm]]
+        cols[["Defl_V_Rt"]] <- if (reverse_Defl_V_Rt) rev(df[[Defl_V_Rt]]) else df[[Defl_V_Rt]]
       }
 
       as.data.frame(cols, stringsAsFactors = FALSE)
