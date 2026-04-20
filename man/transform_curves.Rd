@@ -94,5 +94,6 @@ An updated \code{fdObj} with transformed curves stored in the corresponding slot
 \description{
 Applies `transform_a_curve()` to all raw curves in an fdObj object.
 Automatically computes sensitivity and baseline values if they are missing
-by calling `analyze_sensitivity()` and `analyze_baseline()`.
+by calling `analyze_sensitivity()` and `analyze_baseline()`, passing through
+any user-supplied arguments that match those functions' parameters.
 }

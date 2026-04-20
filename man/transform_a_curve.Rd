@@ -47,5 +47,8 @@ If required inputs are missing, an empty data frame is returned.
 }
 \description{
 Converts raw AFM deflection and piezo data into calibrated separation distance and force.
-The zero-separation position is estimated from the sensitivity calibration segment.
+If the measurement is performed on a soft sample rather than a hard reference,
+the \code{soft} argument can be set to \code{TRUE} and a \code{probe_sensitivity}
+value, which should be acquired by measurements on a hard surface,
+ needs to be provided to convert deflection to force.
 }

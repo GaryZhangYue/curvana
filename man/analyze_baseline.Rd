@@ -49,5 +49,6 @@ An updated \code{fdObj} with baseline values in metadata and baseline
 }
 \description{
 Identifies baseline segments in AFM raw force-distance curves using pre-calculated sensitivity values,
-and stores baseline values and segments in the fdObj.
+and stores baseline values and segments in the fdObj. As the undulating baseline is defined by forces, 
+the sensitivity is used to convert the deflection signal into force units for accurate baseline filtering.
 }
