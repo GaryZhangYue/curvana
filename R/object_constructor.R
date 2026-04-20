@@ -1,5 +1,10 @@
 #' Constructor for fdObj from a folder of AFM force–distance curve files
-#'
+#' Each curve should have the contact region at the beginning of the curve and the non-interaction region 
+#' at the end of the curve, so that the approach and retract segments can be correctly identified and processed.
+#' However, different instruments generate curves with different column names, orientations, and conventions,
+#' so the user must specify which columns correspond to approach and retract distances and deflections,
+#' and whether any of these columns need to be reversed to ensure the contact and non-interaction regions
+#' are correctly positioned at the beginning and end of the curve, respectively.
 #' @param folder Path to a folder containing the raw AFM curve files
 #' @param suffix File extension to look for (e.g., ".txt")
 #' @param pattern Optional string pattern to filter files (e.g., "experiment"); default is "" (no filtering)
