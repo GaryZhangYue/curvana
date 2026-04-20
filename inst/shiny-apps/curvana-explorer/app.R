@@ -201,22 +201,67 @@ ui <- bs4Dash::dashboardPage(
                 "custom_folder", tooltip_label("Folder path", "Folder contains the raw AFM curves."), value = "",
                 placeholder = "e.g. C:/data/my_experiment"
               ),
-              shiny::textInput("load_suffix", tooltip_label("suffix", "File suffix of the raw AFM curves, e.g. .txt."), value = ".txt"),
-              shiny::textInput("load_pattern", tooltip_label("pattern", "Optional filename pattern used to filter files before loading."), value = ""),
-              shiny::fluidRow(
-                shiny::column(6,
-                  shiny::textInput("load_calc_ramp_ex_nm", tooltip_label("Calc_Ramp_Ex_nm", "Column name for approach distance in raw files."), value = "Calc_Ramp_Ex_nm")
-                ),
-                shiny::column(6,
-                  shiny::textInput("load_calc_ramp_rt_nm", tooltip_label("Calc_Ramp_Rt_nm", "Column name for retract distance in raw files."), value = "Calc_Ramp_Rt_nm")
+              shiny::textInput("load_suffix", tooltip_label("File suffix", "File suffix of the raw AFM curves, e.g. .txt."), value = ".txt"),
+              shiny::textInput("load_pattern", tooltip_label("File name pattern", "Optional filename pattern used to filter files before loading."), value = ""),
+              shiny::tags$br(),
+              shiny::h4(
+                tooltip_label(
+                  "Data Column Mapping",
+                  paste(
+                    "Each curve should have the contact region at the beginning and the non-interaction region at the end,",
+                    "so approach and retract segments can be correctly identified and processed.",
+                    "Because instruments use different column names, orientations, and conventions,",
+                    "you must specify which columns correspond to approach/retract distance and deflection,",
+                    "and whether any columns should be reversed so contact and non-interaction regions are positioned correctly."
+                  )
                 )
               ),
               shiny::fluidRow(
                 shiny::column(6,
-                  shiny::textInput("load_defl_v_ex", tooltip_label("Defl_V_Ex", "Column name for approach deflection in raw files."), value = "Defl_V_Ex")
+                  shiny::fluidRow(
+                    shiny::column(8,
+                      shiny::textInput("load_calc_ramp_ex_nm", tooltip_label("Calc_Ramp_Ex_nm", "Column name for approach distance in raw files."), value = "Calc_Ramp_Ex_nm")
+                    ),
+                    shiny::column(4,
+                      shiny::tags$br(),
+                      shiny::checkboxInput("reverse_calc_ramp_ex_nm", tooltip_label("Reverse", "If checked, reverse the order of values in Calc_Ramp_Ex_nm before constructing raw curves."), value = FALSE)
+                    )
+                  )
                 ),
                 shiny::column(6,
-                  shiny::textInput("load_defl_v_rt", tooltip_label("Defl_V_Rt", "Column name for retract deflection in raw files."), value = "Defl_V_Rt")
+                  shiny::fluidRow(
+                    shiny::column(8,
+                      shiny::textInput("load_calc_ramp_rt_nm", tooltip_label("Calc_Ramp_Rt_nm", "Column name for retract distance in raw files."), value = "Calc_Ramp_Rt_nm")
+                    ),
+                    shiny::column(4,
+                      shiny::tags$br(),
+                      shiny::checkboxInput("reverse_calc_ramp_rt_nm", tooltip_label("Reverse", "If checked, reverse the order of values in Calc_Ramp_Rt_nm before constructing raw curves."), value = TRUE)
+                    )
+                  )
+                )
+              ),
+              shiny::fluidRow(
+                shiny::column(6,
+                  shiny::fluidRow(
+                    shiny::column(8,
+                      shiny::textInput("load_defl_v_ex", tooltip_label("Defl_V_Ex", "Column name for approach deflection in raw files."), value = "Defl_V_Ex")
+                    ),
+                    shiny::column(4,
+                      shiny::tags$br(),
+                      shiny::checkboxInput("reverse_defl_v_ex", tooltip_label("Reverse", "If checked, reverse the order of values in Defl_V_Ex before constructing raw curves."), value = TRUE)
+                    )
+                  )
+                ),
+                shiny::column(6,
+                  shiny::fluidRow(
+                    shiny::column(8,
+                      shiny::textInput("load_defl_v_rt", tooltip_label("Defl_V_Rt", "Column name for retract deflection in raw files."), value = "Defl_V_Rt")
+                    ),
+                    shiny::column(4,
+                      shiny::tags$br(),
+                      shiny::checkboxInput("reverse_defl_v_rt", tooltip_label("Reverse", "If checked, reverse the order of values in Defl_V_Rt before constructing raw curves."), value = FALSE)
+                    )
+                  )
                 )
               ),
               shiny::checkboxInput(
@@ -329,6 +374,22 @@ ui <- bs4Dash::dashboardPage(
             width       = 12,
             status      = "warning",
             solidHeader = TRUE,
+            shiny::fluidRow(
+              shiny::column(6,
+                shiny::checkboxInput(
+                  "transform_approach",
+                  tooltip_label("Transform approach curves", "Uncheck to skip transforming approach curves."),
+                  value = TRUE
+                )
+              ),
+              shiny::column(6,
+                shiny::checkboxInput(
+                  "transform_retract",
+                  tooltip_label("Transform retract curves", "Uncheck to skip transforming retract curves."),
+                  value = TRUE
+                )
+              )
+            ),
             shiny::fluidRow(
               shiny::column(
                 width = 6,
@@ -1254,6 +1315,10 @@ server <- function(input, output, session) {
           Calc_Ramp_Rt_nm = col_calc_ramp_rt,
           Defl_V_Ex = col_defl_v_ex,
           Defl_V_Rt = col_defl_v_rt,
+          reverse_Calc_Ramp_Ex_nm = isTRUE(input$reverse_calc_ramp_ex_nm),
+          reverse_Calc_Ramp_Rt_nm = isTRUE(input$reverse_calc_ramp_rt_nm),
+          reverse_Defl_V_Ex = isTRUE(input$reverse_defl_v_ex),
+          reverse_Defl_V_Rt = isTRUE(input$reverse_defl_v_rt),
           metadata = metadata_for_load,
           threads = max(1L, as.integer(input$threads_load))
         ),
@@ -1330,65 +1395,86 @@ server <- function(input, output, session) {
   shiny::observeEvent(input$transform_btn, {
     shiny::req(rv$fdobj_clean)
     shiny::withProgress(message = "Running transform_curves...", value = 0.1, {
-      fdobj     <- rv$fdobj_clean
-      fdobj@metadata <- metadata_keep_clean_only(fdobj@metadata)
+      if (!isTRUE(input$transform_approach) && !isTRUE(input$transform_retract)) {
+        shiny::showNotification("Please enable transformation for at least one curve segment (approach or retract).", type = "warning")
+        return(NULL)
+      }
+
+      fdobj_current <- rv$fdobj_clean
+      fdobj_current@metadata <- metadata_keep_clean_only(fdobj_current@metadata)
       least_app <- if (identical(input$least_mode_approach, "automatic")) "automatic" else as.integer(input$least_length_approach)
       least_ret <- if (identical(input$least_mode_retract,  "automatic")) "automatic" else as.integer(input$least_length_retract)
-      fdobj <- tryCatch({
-        shiny::incProgress(0.35, detail = "Approach")
-        soft_app <- isTRUE(input$soft_approach)
-        probe_sens_app <- if (soft_app) {
-          if (identical(input$soft_sens_mode_approach, "column")) input$soft_sens_col_approach else as.numeric(input$soft_sens_value_approach)
-        } else { NULL }
-        sc_app <- if (identical(input$spring_constant_mode_approach, "column")) input$spring_constant_col_approach else as.numeric(input$spring_constant_value_approach)
-        fdobj <- curvana::transform_curves(
-          fdObj = fdobj, spring_constant = sc_app, useCurve = "approach",
-          threads = max(1L, as.integer(input$threads_transform_approach)),
-          denoise_first = isTRUE(input$denoise_first_approach),
-          p = as.integer(input$denoise_p_approach), n = as.integer(input$denoise_n_approach),
-          m = as.integer(input$denoise_m_approach), ts = as.numeric(input$denoise_ts_approach),
-          least_length  = least_app,
-          slp_threshold = as.numeric(input$slp_threshold_approach),
-          std_threshold = as.numeric(input$std_threshold_approach),
-          end           = as.integer(input$sens_end_approach),
-          intv          = as.integer(input$intv_approach),
-          R_squared_min = as.numeric(input$R_squared_min_approach),
-          minimum_length = as.integer(input$minimum_length_approach),
-          soft = soft_app,
-          probe_sensitivity_external = probe_sens_app
-        )
-        shiny::incProgress(0.45, detail = "Retract")
-        soft_ret <- isTRUE(input$soft_retract)
-        probe_sens_ret <- if (soft_ret) {
-          if (identical(input$soft_sens_mode_retract, "column")) input$soft_sens_col_retract else as.numeric(input$soft_sens_value_retract)
-        } else { NULL }
-        sc_ret <- if (identical(input$spring_constant_mode_retract, "column")) input$spring_constant_col_retract else as.numeric(input$spring_constant_value_retract)
-        curvana::transform_curves(
-          fdObj = fdobj, spring_constant = sc_ret, useCurve = "retract",
-          threads = max(1L, as.integer(input$threads_transform_retract)),
-          denoise_first = isTRUE(input$denoise_first_retract),
-          p = as.integer(input$denoise_p_retract), n = as.integer(input$denoise_n_retract),
-          m = as.integer(input$denoise_m_retract), ts = as.numeric(input$denoise_ts_retract),
-          least_length  = least_ret,
-          slp_threshold = as.numeric(input$slp_threshold_retract),
-          std_threshold = as.numeric(input$std_threshold_retract),
-          end           = as.integer(input$sens_end_retract),
-          intv          = as.integer(input$intv_retract),
-          R_squared_min = as.numeric(input$R_squared_min_retract),
-          minimum_length = as.integer(input$minimum_length_retract),
-          soft = soft_ret,
-          probe_sensitivity_external = probe_sens_ret
-        )
-      }, error = function(e) {
-        shiny::showNotification(paste("Transform failed:", e$message), type = "error", duration = NULL)
-        NULL
-      })
-      if (is.null(fdobj)) return(NULL)
-      rv$fdobj             <- fdobj
-      rv$fdobj_transformed <- fdobj
+      if (isTRUE(input$transform_approach)) {
+        fdobj_current <- tryCatch({
+          shiny::incProgress(0.35, detail = "Approach")
+          soft_app <- isTRUE(input$soft_approach)
+          probe_sens_app <- if (soft_app) {
+            if (identical(input$soft_sens_mode_approach, "column")) input$soft_sens_col_approach else as.numeric(input$soft_sens_value_approach)
+          } else { NULL }
+          sc_app <- if (identical(input$spring_constant_mode_approach, "column")) input$spring_constant_col_approach else as.numeric(input$spring_constant_value_approach)
+          curvana::transform_curves(
+            fdObj = fdobj_current, spring_constant = sc_app, useCurve = "approach",
+            threads = max(1L, as.integer(input$threads_transform_approach)),
+            denoise_first = isTRUE(input$denoise_first_approach),
+            p = as.integer(input$denoise_p_approach), n = as.integer(input$denoise_n_approach),
+            m = as.integer(input$denoise_m_approach), ts = as.numeric(input$denoise_ts_approach),
+            least_length  = least_app,
+            slp_threshold = as.numeric(input$slp_threshold_approach),
+            std_threshold = as.numeric(input$std_threshold_approach),
+            end           = as.integer(input$sens_end_approach),
+            intv          = as.integer(input$intv_approach),
+            R_squared_min = as.numeric(input$R_squared_min_approach),
+            minimum_length = as.integer(input$minimum_length_approach),
+            soft = soft_app,
+            probe_sensitivity_external = probe_sens_app
+          )
+        }, error = function(e) {
+          shiny::showNotification(paste("Approach transform failed:", e$message), type = "error", duration = NULL)
+          NULL
+        })
+        if (is.null(fdobj_current)) return(NULL)
+      }
+
+      if (isTRUE(input$transform_retract)) {
+        fdobj_current <- tryCatch({
+          shiny::incProgress(0.45, detail = "Retract")
+          soft_ret <- isTRUE(input$soft_retract)
+          probe_sens_ret <- if (soft_ret) {
+            if (identical(input$soft_sens_mode_retract, "column")) input$soft_sens_col_retract else as.numeric(input$soft_sens_value_retract)
+          } else { NULL }
+          sc_ret <- if (identical(input$spring_constant_mode_retract, "column")) input$spring_constant_col_retract else as.numeric(input$spring_constant_value_retract)
+          curvana::transform_curves(
+            fdObj = fdobj_current, spring_constant = sc_ret, useCurve = "retract",
+            threads = max(1L, as.integer(input$threads_transform_retract)),
+            denoise_first = isTRUE(input$denoise_first_retract),
+            p = as.integer(input$denoise_p_retract), n = as.integer(input$denoise_n_retract),
+            m = as.integer(input$denoise_m_retract), ts = as.numeric(input$denoise_ts_retract),
+            least_length  = least_ret,
+            slp_threshold = as.numeric(input$slp_threshold_retract),
+            std_threshold = as.numeric(input$std_threshold_retract),
+            end           = as.integer(input$sens_end_retract),
+            intv          = as.integer(input$intv_retract),
+            R_squared_min = as.numeric(input$R_squared_min_retract),
+            minimum_length = as.integer(input$minimum_length_retract),
+            soft = soft_ret,
+            probe_sensitivity_external = probe_sens_ret
+          )
+        }, error = function(e) {
+          shiny::showNotification(paste("Retract transform failed:", e$message), type = "error", duration = NULL)
+          NULL
+        })
+        if (is.null(fdobj_current)) return(NULL)
+      }
+
+      rv$fdobj             <- fdobj_current
+      rv$fdobj_transformed <- fdobj_current
       rv$fdobj_final       <- NULL
-      rv$status <- "Transformation completed for approach and retract curves."
-      update_choices(fdobj)
+      transformed_segments <- c(
+        if (isTRUE(input$transform_approach)) "approach" else NULL,
+        if (isTRUE(input$transform_retract)) "retract" else NULL
+      )
+      rv$status <- sprintf("Transformation completed for selected curve segments: %s.", paste(transformed_segments, collapse = ", "))
+      update_choices(fdobj_current)
       shiny::incProgress(0.1)
       shiny::showNotification("Transform complete.", type = "message")
     })
