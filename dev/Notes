@@ -27,4 +27,9 @@ done 10. include the soft surface algorithm. Briefly, in transform_curves, if so
 done 12. Shiny app, plot fd curves, give options to adjust x and y lim
      11. check shiny app, all buttons, downloads
      12. check shiny app, check how return to previoius step works, and if it loads correct fdobj.
-     13. 
+     13. select 20 lines for each group region combination for tutorial
+     14. update tutorial
+     15. check the explanations in app
+     16. check the explanations and tests in package functions
+     17. write the github page
+     18. write a tutorial for shiny app.
