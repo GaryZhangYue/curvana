@@ -211,7 +211,7 @@ ui <- bs4Dash::dashboardPage(
                     "Each curve should have the contact region at the beginning and the non-interaction region at the end,",
                     "so approach and retract segments can be correctly identified and processed.",
                     "Because instruments use different column names, orientations, and conventions,",
-                    "you must specify which columns correspond to approach/retract distance and deflection,",
+                    "you must specify which columns correspond to piezo displacement distance and cantilever deflection during approach/retract,",
                     "and whether any columns should be reversed so contact and non-interaction regions are positioned correctly."
                   )
                 )
@@ -220,22 +220,22 @@ ui <- bs4Dash::dashboardPage(
                 shiny::column(6,
                   shiny::fluidRow(
                     shiny::column(8,
-                      shiny::textInput("load_calc_ramp_ex_nm", tooltip_label("Calc_Ramp_Ex_nm", "Column name for approach distance in raw files."), value = "Calc_Ramp_Ex_nm")
+                      shiny::textInput("load_calc_ramp_ex_nm", tooltip_label("Displacement (approach, nm)", "Column name for piezo displacment distance of approach segment in raw files."), value = "Calc_Ramp_Ex_nm")
                     ),
                     shiny::column(4,
                       shiny::tags$br(),
-                      shiny::checkboxInput("reverse_calc_ramp_ex_nm", tooltip_label("Reverse", "If checked, reverse the order of values in Calc_Ramp_Ex_nm before constructing raw curves."), value = FALSE)
+                      shiny::checkboxInput("reverse_calc_ramp_ex_nm", tooltip_label("Reverse", "If checked, reverse the order of values before constructing raw curves."), value = FALSE)
                     )
                   )
                 ),
                 shiny::column(6,
                   shiny::fluidRow(
                     shiny::column(8,
-                      shiny::textInput("load_calc_ramp_rt_nm", tooltip_label("Calc_Ramp_Rt_nm", "Column name for retract distance in raw files."), value = "Calc_Ramp_Rt_nm")
+                      shiny::textInput("load_calc_ramp_rt_nm", tooltip_label("Displacement (retract, nm)", "Column name for piezo displacment distance of retract segment in raw files."), value = "Calc_Ramp_Rt_nm")
                     ),
                     shiny::column(4,
                       shiny::tags$br(),
-                      shiny::checkboxInput("reverse_calc_ramp_rt_nm", tooltip_label("Reverse", "If checked, reverse the order of values in Calc_Ramp_Rt_nm before constructing raw curves."), value = TRUE)
+                      shiny::checkboxInput("reverse_calc_ramp_rt_nm", tooltip_label("Reverse", "If checked, reverse the order of values before constructing raw curves."), value = TRUE)
                     )
                   )
                 )
@@ -244,22 +244,22 @@ ui <- bs4Dash::dashboardPage(
                 shiny::column(6,
                   shiny::fluidRow(
                     shiny::column(8,
-                      shiny::textInput("load_defl_v_ex", tooltip_label("Defl_V_Ex", "Column name for approach deflection in raw files."), value = "Defl_V_Ex")
+                      shiny::textInput("load_defl_v_ex", tooltip_label("Deflection (approach, V)", "Column name for cantilever deflection of approach segment in raw files."), value = "Defl_V_Ex")
                     ),
                     shiny::column(4,
                       shiny::tags$br(),
-                      shiny::checkboxInput("reverse_defl_v_ex", tooltip_label("Reverse", "If checked, reverse the order of values in Defl_V_Ex before constructing raw curves."), value = TRUE)
+                      shiny::checkboxInput("reverse_defl_v_ex", tooltip_label("Reverse", "If checked, reverse the order of values before constructing raw curves."), value = TRUE)
                     )
                   )
                 ),
                 shiny::column(6,
                   shiny::fluidRow(
                     shiny::column(8,
-                      shiny::textInput("load_defl_v_rt", tooltip_label("Defl_V_Rt", "Column name for retract deflection in raw files."), value = "Defl_V_Rt")
+                      shiny::textInput("load_defl_v_rt", tooltip_label("Deflection (retract, V)", "Column name for cantilever deflection of retract segment in raw files."), value = "Defl_V_Rt")
                     ),
                     shiny::column(4,
                       shiny::tags$br(),
-                      shiny::checkboxInput("reverse_defl_v_rt", tooltip_label("Reverse", "If checked, reverse the order of values in Defl_V_Rt before constructing raw curves."), value = FALSE)
+                      shiny::checkboxInput("reverse_defl_v_rt", tooltip_label("Reverse", "If checked, reverse the order of values before constructing raw curves."), value = FALSE)
                     )
                   )
                 )
@@ -1311,14 +1311,14 @@ server <- function(input, output, session) {
           folder  = folder,
           suffix = suffix,
           pattern = pattern,
-          Calc_Ramp_Ex_nm = col_calc_ramp_ex,
-          Calc_Ramp_Rt_nm = col_calc_ramp_rt,
-          Defl_V_Ex = col_defl_v_ex,
-          Defl_V_Rt = col_defl_v_rt,
-          reverse_Calc_Ramp_Ex_nm = isTRUE(input$reverse_calc_ramp_ex_nm),
-          reverse_Calc_Ramp_Rt_nm = isTRUE(input$reverse_calc_ramp_rt_nm),
-          reverse_Defl_V_Ex = isTRUE(input$reverse_defl_v_ex),
-          reverse_Defl_V_Rt = isTRUE(input$reverse_defl_v_rt),
+          Displacement_Approach = col_calc_ramp_ex,
+          Displacement_Retract = col_calc_ramp_rt,
+          Deflection_Approach = col_defl_v_ex,
+          Deflection_Retract = col_defl_v_rt,
+          reverse_Displacement_Approach = isTRUE(input$reverse_calc_ramp_ex_nm),
+          reverse_Displacement_Retract = isTRUE(input$reverse_calc_ramp_rt_nm),
+          reverse_Deflection_Approach = isTRUE(input$reverse_defl_v_ex),
+          reverse_Deflection_Retract = isTRUE(input$reverse_defl_v_rt),
           metadata = metadata_for_load,
           threads = max(1L, as.integer(input$threads_load))
         ),
