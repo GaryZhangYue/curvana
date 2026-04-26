@@ -966,10 +966,6 @@ plot_a_curve_metrics <- function(
       p_raw <- p_raw + ggplot2::coord_cartesian(xlim = xlim, ylim = ylim)
     }
 
-    if (!requireNamespace("cowplot", quietly = TRUE)) {
-      stop("plot_raw = TRUE requires package 'cowplot'. Please install it with install.packages('cowplot').")
-    }
-
     return(cowplot::plot_grid(p_raw, p, ncol = 2))
   }
 
@@ -1467,10 +1463,6 @@ plot_metric_violin <- function(
   }
 
   if (pairwise_test != "none") {
-    if (!requireNamespace("ggpubr", quietly = TRUE)) {
-      stop("pairwise_test requires package 'ggpubr'. Please install it with install.packages('ggpubr').")
-    }
-
     if (is.null(pairwise_comparisons)) {
       groups <- as.character(stats::na.omit(unique(plot_df$Group)))
       if (length(groups) >= 2) {
@@ -1493,11 +1485,7 @@ plot_metric_violin <- function(
     }
   }
 
-  if (requireNamespace("ggpubr", quietly = TRUE)) {
-    p <- p + ggpubr::theme_pubr(base_size = base_size)
-  } else {
-    p <- p + ggplot2::theme_classic(base_size = base_size)
-  }
+  p <- p + ggpubr::theme_pubr(base_size = base_size)
 
   return(p)
 }
@@ -1754,13 +1742,6 @@ plot_complex_heatmap <- function(
     stop("show_column_names must be TRUE or FALSE.")
   }
 
-  if (!requireNamespace("ComplexHeatmap", quietly = TRUE)) {
-    stop("This function requires package 'ComplexHeatmap'. Please install it first.")
-  }
-  if (!requireNamespace("circlize", quietly = TRUE)) {
-    stop("This function requires package 'circlize'. Please install it first.")
-  }
-
   work_cols <- unique(c(include_columns, annotate_columns))
   work_df <- data.frame(df[, work_cols, drop = FALSE], stringsAsFactors = FALSE)
 
@@ -1908,11 +1889,6 @@ plot_raw_deflection_heatmap <- function(
   ...
 ) {
   if (!inherits(fdobj, "fdObj")) stop("fdobj must be an object of class 'fdObj'.")
-  for (pkg in c("ComplexHeatmap", "circlize")) {
-    if (!requireNamespace(pkg, quietly = TRUE)) {
-      stop(sprintf("Package '%s' is required. Install it with install.packages('%s').", pkg, pkg))
-    }
-  }
 
   raw_list <- fdobj@rawCurves
   if (length(raw_list) == 0) stop("fdobj@rawCurves is empty.")
