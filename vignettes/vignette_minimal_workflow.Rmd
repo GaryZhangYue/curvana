@@ -113,20 +113,6 @@ plot_raw_deflection_heatmap(
 ```
 
 
-## Preset baseline length
-
-We can see that for all approach curves, deflection remains largely constant after approximately 100 data points. The total number data points per curve is 512, so we will set the last 400 points as baseline region for all curves. For retract curves, however, the fluorinated samples have a longer interaction region and shorter baseline, so we set their baseline region to the last 200 data points. For all other retract curves, we set the last 400 points to baseline regions.
-
-```{r set baseline length}
-test@metadata <- test@metadata %>%
-  mutate(baseline_span_retract = case_when(
-           surface == 'fluorinated' ~ 200,
-           TRUE ~ 400
-         ))
-  
-
-```
-
 ## Scatter plot of deflection curves
 
 ```{r plot deflection curves, fig.height=12,fig.width=10}
