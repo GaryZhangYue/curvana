@@ -24,16 +24,27 @@
 createFdObjFromFolder <- function(folder,
                                   suffix = ".txt",
                                   pattern = "",
-                                  Calc_Ramp_Ex_nm = "Calc_Ramp_Ex_nm",
-                                  Calc_Ramp_Rt_nm = "Calc_Ramp_Rt_nm",
-                                  Defl_V_Ex       = "Defl_V_Ex",
-                                  Defl_V_Rt       = "Defl_V_Rt",
+                                  Displacement_Approach = "Calc_Ramp_Ex_nm",
+                                  Displacement_Retract = "Calc_Ramp_Rt_nm",
+                                  Deflection_Approach = "Defl_V_Ex",
+                                  Deflection_Retract = "Defl_V_Rt",
                                   metadata = NULL,
                                   threads = 1,
-                                  reverse_Calc_Ramp_Ex_nm = FALSE,
-                                  reverse_Calc_Ramp_Rt_nm = TRUE,
-                                  reverse_Defl_V_Ex = TRUE,
-                                  reverse_Defl_V_Rt = FALSE) {
+                                  reverse_Displacement_Approach = FALSE,
+                                  reverse_Displacement_Retract = TRUE,
+                                  reverse_Deflection_Approach = TRUE,
+                                  reverse_Deflection_Retract = FALSE) {
+                                    
+  Calc_Ramp_Ex_nm <- Displacement_Approach
+  Calc_Ramp_Rt_nm <- Displacement_Retract
+  Defl_V_Ex <- Deflection_Approach
+  Defl_V_Rt <- Deflection_Retract
+
+  reverse_Calc_Ramp_Ex_nm <- reverse_Displacement_Approach
+  reverse_Calc_Ramp_Rt_nm <- reverse_Displacement_Retract
+  reverse_Defl_V_Ex <- reverse_Deflection_Approach
+  reverse_Defl_V_Rt <- reverse_Deflection_Retract
+
   if (!dir.exists(folder)) {
     stop("Folder does not exist: ", folder)
   }
