@@ -644,7 +644,9 @@ transform_a_curve <- function(x, y,
 #'   reported as \code{NA} in \code{analyze_sensitivity()}.
 #' @param least_length Either a single integer (minimum baseline span) or
 #'   \code{"automatic"}. Passed to \code{analyze_baseline()} when baseline
-#'   metadata is missing.
+#'   metadata is missing. when \code{"automatic"}, per-curve span values are read from
+#'   \code{fdObj@metadata$baseline_span_approach} or
+#'  \code{fdObj@metadata$baseline_span_retract} depending on \code{useCurve}.
 #' @param slp_threshold Numeric. Maximum absolute baseline slope allowed in
 #'   \code{analyze_baseline()}.
 #' @param std_threshold Numeric. Maximum baseline slope standard error allowed
