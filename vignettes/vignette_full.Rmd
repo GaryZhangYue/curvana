@@ -421,6 +421,42 @@ test = transform_curves(test,
                         threads = t)
 ```
 
+# Soft surface correction
+
+__When measuring on a compliant (soft) surface — such as a hydrogel, cell membrane, or polymer brush — the contact region of the curve reflects a compound response of both cantilever deflection and surface indentation. Using this region to estimate probe sensitivity will therefore underestimate the true probe sensitivity. To correct for this, the probe sensitivity should be calibrated separately on a rigid reference surface (e.g., bare glass or silicon) and then supplied to transform_curves() when processing the soft-surface curves.
+
+To do this, set soft = TRUE and provide the externally calibrated sensitivity via probe_sensitivity_external. This can be either a single numeric value (applied to all curves) or the name of a metadata column containing per-curve sensitivity values. When soft = TRUE, transform_curves() uses this external sensitivity to convert deflection (V) to force (nN). Note that the x-axis transformation (piezo displacement to separation distance) is unaffected and always uses the sensitivity estimated from each individual curve, preserving the deformation component in the separation distance.
+
+
+
+```{r use external sensitivity value}
+
+test3 = transform_curves(test,
+                        denoise_first = TRUE, # whether to apply denoising to raw curves before transformation. Denoising can help improve the reliability of sensitivity and baseline calculations, especially for noisy curves. The smoothed curve will be used for all downstream analysis, while the original raw curve will be preserved in the rawCurves slot of the object for reference.
+                        p = 1, n = 3, # parameters for the Savitzky-Golay filter used in curve denoising. p is the polynomial order (default 1, which means linear), and n is the window size (default 3, which means each point will be smoothed by fitting a polynomial to itself and its 2 neighbors). Users can adjust these parameters based on the noise level and characteristics of their curves.
+                        
+                        spring_constant = 0.08, # spring constant
+                        useCurve = 'retract', # analyze the retract curve
+
+                        # baseline determination and filtering
+                        least_length = 300, # use the last 300 points as baseline
+                        slp_threshold = 0.01, # any curves with the baseline region having slope > 0.01 will be discarded
+                        std_threshold = 0.01, # any curves with the baseline region having standard deviation of y values > 0.01 will be discarded
+
+                        # sensitivity calibration
+                        intv = 4, # number of data points added per iteration when building the linear sensitivity segment
+                        end = 20, # use the first 20 data points at most on the left side of the curve to calibrate sensitivity.
+                        R_squared_min = 0.99, # minimum R^2 threshold for accepting a segment as sufficiently linear during sensitivity calculation
+                        minimum_length = 4, # minimum number of accumulated points required for a valid sensitivity result; if shorter, sensitivity is reported as NA
+                        threads = t,
+
+                        # soft surface correction
+                        soft = TRUE, # whether to apply soft surface correction
+                        probe_sensitivity_external = 0.05 # externally calibrated sensitivity value to use for soft surface correction (in V/nm). This can be a single numeric value applied to all curves, or the name of a metadata column containing per-curve sensitivity values.
+                        )
+```
+
+
 ## Examine the object after transformation
 
 We can see that now we have curves transformed.
