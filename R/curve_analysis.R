@@ -1143,7 +1143,7 @@ analyze_curves_noise <- function(
     fdObj,
     useCurve = c("retract", "approach"),
     threads = 1,
-    baseline_span,
+    baseline_span = "automatic",
     threshold_method = c("sd", "mad", "quantile", "fixed"),
     multiplier = 3,
     mad_constant = 1.4826,
@@ -1364,7 +1364,7 @@ analyze_a_curve_interaction_distance <- function(
   run_id <- qualifying_runs[1L]
   hit <- if (y_direction == "negative") run_starts[run_id] else run_ends[run_id]
 
-  c(distance = x[scan_idx[hit]], threshold = threshold)
+  c(distance = max(0, x[scan_idx[hit]]), threshold = threshold)
 }
 
 #' Interaction Distance (nm) for All Transformed Curves in an fdObj
@@ -1942,7 +1942,7 @@ analyze_curves_all_analytical_metrics <- function(
     analyze_rupture_distance = TRUE,
     analyze_rupture_distance_baseline_span = "automatic",
     analyze_rupture_distance_x_direction = c("left", "right"),
-    analyze_rupture_distance_min_consecutive = 1,
+    analyze_rupture_distance_min_consecutive = 3,
     analyze_repulsive_distance = TRUE,
     analyze_repulsive_distance_baseline_span = "automatic",
     analyze_repulsive_distance_x_direction = c("right", "left"),

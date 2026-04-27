@@ -53,6 +53,7 @@ if (length(available_optional) > 0) {
 }
 
 source(system.file("tutorial_helpers.R", package = "curvana"))
+devtools::load_all()
 ```
 
 ## Example of raw curve data file
@@ -153,7 +154,7 @@ Here we use the "plot_raw_deflection_heatmap" function to plot a heatmap of min-
 
 This helps us visualize the overall pattern of deflection values across curves, and identify the baseline and sensitivity calibration regions for each curve. 
 
-```{r plot deflection heatmap, fig.height=12,fig.width=10,eval=TRUE}
+```{r plot deflection heatmap, fig.height=6,fig.width=10,eval=TRUE}
 plot_raw_deflection_heatmap(
   fdobj             = test,
   annotate_columns  = c("surface", "region"),
@@ -172,7 +173,7 @@ plot_raw_deflection_heatmap(
 
 We can use the "plot_deflection_curves" function to plot curves in batch. Here, we split curves into sub-panels by column "surface", and color code them by column "region".
 
-```{r plot deflection curves, fig.height=12,fig.width=10}
+```{r plot deflection curves, fig.height=8,fig.width=10}
 plot_deflection_curves(test,split_curves_by = 'surface',group_curves_by = 'region',
                        alpha = 0.5,point_size = 0.5,
                        color_map = list(`1` = 'darkred',
@@ -193,7 +194,7 @@ To demonstrate how each single curve is transformed, we take a raw curve of the 
 
 Here we set polynomial order p to 1 and window size n to 3 for the Savitzky-Golay filter, which means the function will fit a linear polynomial to each window of 3 points to smooth the curve, which is equivalent to a simple moving average. Users can adjust these parameters based on the noise level and characteristics of their curves.
 
-```{r single curve denoise, fig.height=6, fig.width=8}
+```{r single curve denoise}
 example1.name = 'silicon_wafer_2.spm-2658_ForceCurveIndex_1.spm'
 example1.raw = test_beforeTransform@rawCurves[[example1.name]]
 example1.raw = denoise_a_curve(example1.raw, useCurve = "retract", p = 1, n = 3)
@@ -421,11 +422,11 @@ test = transform_curves(test,
                         threads = t)
 ```
 
-# Soft surface correction
+## Soft surface correction
 
-__When measuring on a compliant (soft) surface — such as a hydrogel, cell membrane, or polymer brush — the contact region of the curve reflects a compound response of both cantilever deflection and surface indentation. Using this region to estimate probe sensitivity will therefore underestimate the true probe sensitivity. To correct for this, the probe sensitivity should be calibrated separately on a rigid reference surface (e.g., bare glass or silicon) and then supplied to transform_curves() when processing the soft-surface curves.
+__When measuring on a compliant (soft) surface — such as a hydrogel, cell membrane, or polymer brush — the contact region of the curve reflects a compound response of both cantilever deflection and surface indentation. Using this region to estimate probe sensitivity will therefore underestimate the true probe sensitivity. To correct for this, the probe sensitivity should be calibrated separately on a rigid reference surface (e.g., bare glass or silicon) and then supplied to transform_curves() when processing the soft-surface curves.__
 
-To do this, set soft = TRUE and provide the externally calibrated sensitivity via probe_sensitivity_external. This can be either a single numeric value (applied to all curves) or the name of a metadata column containing per-curve sensitivity values. When soft = TRUE, transform_curves() uses this external sensitivity to convert deflection (V) to force (nN). Note that the x-axis transformation (piezo displacement to separation distance) is unaffected and always uses the sensitivity estimated from each individual curve, preserving the deformation component in the separation distance.
+__To do this, set soft = TRUE and provide the externally calibrated sensitivity via probe_sensitivity_external. This can be either a single numeric value (applied to all curves) or the name of a metadata column containing per-curve sensitivity values. When soft = TRUE, transform_curves() uses this external sensitivity to convert deflection (V) to force (nN). Note that the x-axis transformation (piezo displacement to separation distance) is unaffected and always uses the sensitivity estimated from each individual curve, preserving the deformation component in the separation distance.__
 
 
 
@@ -501,18 +502,26 @@ After curve transformation, we can calculate analytical metrics such as adhesive
 
 ### Wrapper function for batch analysis
 
-Before calculating analytical metrics, it is important to determine the baseline noise level so we can set a threshold to exclude insignificant fluctuations in metric calculations. The function "analyze_a_curve_noise" estimates a lower and upper noise band from baseline force values. For batch analysis, "analyze_curves_noise" applies this to all transformed curves in an fdObj and writes the results into metadata columns \code{noiseBand_low_nN} and \code{noiseBand_high_nN}.
+Before calculating analytical metrics, it is important to determine the baseline noise level so we can set a threshold to exclude insignificant fluctuations in metric calculations. The function "analyze_a_curve_noise" estimates a lower and upper noise band from baseline force values. For batch analysis, "analyze_curves_noise" applies this to all transformed curves in an fdObj and writes the results into metadata columns `noiseBand_low_nN` and `noiseBand_high_nN` (one set for approach and one set for retract).
 
-Supported noise-band determination methods are standard deviation (\code{sd}), median absolute deviation (\code{mad}), quantile (\code{quantile}), and fixed (\code{fixed}). The \code{multiplier} parameter is used to multiply the chosen noise metric to define the noise band. The noise-band are then reused by interaction-distance and interaction energy analysis, so thresholds are determined once and applied consistently across curves.
+Supported noise-band determination methods are standard deviation (`sd`), median absolute deviation (`mad`), quantile (`quantile`), and fixed (`fixed`). The `multiplier` parameter is used to multiply the chosen noise metric to define the noise band. The noise-band are then reused by interaction-distance and interaction energy analysis, so thresholds are determined once and applied consistently across curves.
 
 Here we set noise band as the region ranging from the minimum and maximum of the force in the baseline region.
 
+__Note: set noise band multiplier to 0 to not apply noise band thresholding.__
 ```{r calculate baseline noise level}
-test = analyze_curves_noise(test,useCurve = 'approach',baseline_span = 'automatic',
-                            threshold_method = 'quantile', multiplier = 1,quantile_low = 0,quantile_high = 1) 
-test = analyze_curves_noise(test,useCurve = 'retract',baseline_span = 'automatic',
-                            threshold_method = 'quantile', multiplier = 1,quantile_low = 0,quantile_high = 1)
-view_df(test@metadata,'metadata with baseline noise level values added as columns')
+test2 = analyze_curves_noise(test,
+                            useCurve = 'approach', # calculate noise band for approach curves,
+                            baseline_span = "automatic", # number of data points at the end of the curve to use as baseline region for noise level calculation. Here we set it to "automatic", which means the function will use the baseline_span column in the metadata.
+                            threshold_method = 'quantile', # method to determine noise band. Here we use quantile, which means the noise band will be defined by the quantiles of the baseline force values. The specific quantiles are determined by quantile_low and quantile_high parameters.
+                            quantile_low = 0, # lower quantile for noise band. Here we set it to 0, meaning the lower bound of the noise band will be the minimum force value in the baseline region.
+                            quantile_high = 1, # upper quantile for noise band. Here we set it to 1, meaning the upper bound of the noise band will be the maximum force value in the baseline region.
+                            multiplier = 1 # multiplier for the noise metric. We set multiplier to 1 to directly use the min-max range of the force in baseline region without further scaling.
+                            ) 
+test2 = analyze_curves_noise(test2, useCurve = 'retract',
+                            threshold_method = 'quantile',quantile_low = 0,quantile_high = 1,
+                            multiplier = 1)
+view_df(test2@metadata,'metadata with baseline noise level values added as columns')
 ```
 
 ### Single curve analysis
@@ -522,7 +531,7 @@ To demonstrate how the baseline noise level is calculated for a single curve, we
 Here we use the same parameters as in the batch analysis, which means the noise band will be the region ranging from the minimum and maximum of the force in the baseline region. The function returns a named vector containing the calculated lower and upper noise band values.
 
 ```{r single curve noise level calculation,fig.height=6,fig.width=8}
-res.noise = analyze_a_curve_noise(example1.transformed, baseline_span = 200, threshold_method = 'quantile', multiplier = 1,quantile_low = 0,quantile_high = 1)
+res.noise = analyze_a_curve_noise(example1.transformed, baseline_span = 300, threshold_method = 'quantile', multiplier = 1,quantile_low = 0,quantile_high = 1)
 print(res.noise)
 
 ```
@@ -534,10 +543,12 @@ print(res.noise)
 
 The adhesive force is calculated as the highest negative force value in a curve, which represents the maximum adhesive force between the AFM probe and the sample surface. The "analyze_curves_adhesive_force" function identifies this value and the separation distance at which it occurs, and records the force in the metadata column named "adhesive_force_nN" and the distance in column "adhesive_sep_nm". Curves that fail transformation will have NA in this column.
 
+__Note: If the minimum force of the curve is positive, the adhesive force will be reported as 0, and the associated separation distance will be NA. If the minimum force is negative, the adhesive force will be reported as the absolute value of the force.__
+
 ```{r calculate adhesive force}
-test = analyze_curves_adhesive_force(test,useCurve = 'approach',threads = 1)
-test = analyze_curves_adhesive_force(test,useCurve = 'retract',threads = 1)
-view_df(test@metadata,'metadata with adhesive force values added as columns')   
+test2 = analyze_curves_adhesive_force(test2,useCurve = 'approach',threads = 1)
+test2 = analyze_curves_adhesive_force(test2,useCurve = 'retract',threads = 1)
+view_df(test2@metadata,'metadata with adhesive force values added as columns')   
 ```
 
 ### Single curve analysis
@@ -555,13 +566,13 @@ In AFM force spectroscopy, interaction energy is quantified by calculating the a
 
 ### Wrapper function for batch analysis
 
-The wrapper function "analyze_curves_energy" applies this analysis to all curves in an fdObj, and records the calculated adhesive and repulsive energy in metadata (columns adhesive_energy_fJ and repulsive_energy_fJ). Curves that fail transformation will have NA in these columns. The function will automatically look up the metadata in the object to find the pre-determined noise band (columns noiseBand_low_nN and noiseBand_high_nN)
+The wrapper function "analyze_curves_energy" applies this analysis to all curves in an fdObj, and records the calculated adhesive and repulsive energy in metadata (columns adhesive_energy_fJ and repulsive_energy_fJ, one set for retract and one set for approach curves). Curves that fail transformation will have NA in these columns. The function will automatically look up the metadata in the object to find the pre-determined noise band.
 
 Note that for curves that are over-corrected, which have a portion of curve near the contact region extends to the negative side of y axis (i.e., having negative separation distance), the function will automatically correct all negative x to zero before energy calculation
 
 ```{r calculate interaction energy}
-test = analyze_curves_energy(test,useCurve = 'approach',threads = 1)
-test = analyze_curves_energy(test,useCurve = 'retract',threads = 1)
+test2 = analyze_curves_energy(test2,useCurve = 'approach',threads = 1)
+test2 = analyze_curves_energy(test2,useCurve = 'retract',threads = 1)
 
 view_df(test@metadata,'metadata with energy values added as columns') 
 ```
@@ -574,152 +585,165 @@ The function "analyze_a_curve_energy" computes the adhesive energy and repulsive
 analyze_a_curve_area(example1.transformed, noiseBand_low = res.noise[['noiseBand_low']], noiseBand_high = res.noise[['noiseBand_high']])
 ```
 
-
 ## Interaction distance
 
-The interaction distance is calculated as the separation distance at which the force curve first crosses a defined noise threshold, indicating the onset of significant interaction between the AFM probe and the sample surface. The "analyze_a_curve_interaction_distance" function identifies this point and returns the corresponding separation distance as the interaction distance.
-
-### Wrapper function for batch analysis
-
-The wrapper function "analyze_curves_interaction_distance" applies this analysis to all curves in an fdObj and looks up the noise cutoff values directly from metadata noise-band columns generated by "analyze_curves_noise".
-
-In this call, \code{baseline_span = "automatic"} uses each curve’s stored baseline window from \code{test@metadata$baseline_span_retract}, \code{y_direction = "negative"} detects rupture-like (negative-force) excursions, and \code{x_direction = "left"} scan from right to left to find the last data point before the curve enters the adhesive region. In other words, it tries to find the place after which no effective adhesive energy is detected.
+The interaction distance is calculated as the separation distance at which the force curve first crosses the noise threshold, indicating the start or end of significant interaction between the AFM probe and the sample surface. Specifically, by configuring the function to scan from different directions (left-to-right or right-to-left) and to look for either positive or negative excursions, users can identify different types of interaction distances. 
 
 
-```{r calculate interaction distance}
-test = analyze_curves_interaction_distance(test,useCurve = 'retract',baseline_span = 'automatic',
-                                           y_direction = "negative", x_direction = "left",
-                                           threads = 1)
+### Rupture/adhesion distance
 
-view_df(test@metadata,'metadata with rupture length')
-```
+For example, for rupture events (negative-force excursions), the function can be set to scan from right to left and identify the first point where the curve dips below the negative noise threshold, which indicates the start of significant adhesion.
 
-Similarly, in some cases, it might also be informative to know where the curve enters the repulsive region. To do this, we can set y_direction to positive, x_direction to right. In this setting, the function searches from left to right the last data point before the curve enters the noise band from the repulsive region.
+Specifically, the function will scan the curve from right to left (x_direction = "left"), with excluding the baseline_region (defined by baseline_span), to look for the first negative-force excursions (y_direction = "negative") with at least 3 consecutive points below the threshold (min_consecutive = 3).
 
-```{r calculate interaction distance for approach curves}
-test = analyze_curves_interaction_distance(test,useCurve = 'retract',baseline_span = 'automatic',
-                                           y_direction = "positive", x_direction = "right",
-                                           threads = 1)
-view_df(test@metadata,'metadata with repulsive distance')
-```
-
-
-### Single curve analysis
-
-The function "analyze_a_curve_interaction_distance" identifies the point where the force curve first crosses the defined noise threshold and returns the corresponding separation distance.
-
-Rupture length:
-
-```{r single curve interaction distance calculation for approach curve}
-res.rupturedis = analyze_a_curve_interaction_distance(example1.transformed,baseline_span = 200, y_direction = "negative", x_direction = "left",noiseBand_low = res.noise[['noiseBand_low']],noiseBand_high = res.noise[['noiseBand_high']])
+```{r single curve rupture distance}
+res.rupturedis = analyze_a_curve_interaction_distance(example1.transformed,
+                                                      y_direction = "negative", 
+                                                      x_direction = "left",
+                                                      baseline_span = 200,
+                                                      noiseBand_low = res.noise[['noiseBand_low']],
+                                                      noiseBand_high = res.noise[['noiseBand_high']],
+                                                      min_consecutive = 3
+                                                      )
 
 print(res.rupturedis)
 
 ```
 
-Repulsive distance:
+To analyze rupture distance for all curves in an fdObj, we can use the wrapper function "analyze_curves_interaction_distance" with the same parameters. The calculated rupture distance will be recorded in a metadata column named "rupture_distance_nm". Curves that fail transformation will have NA in this column.
+
+```{r rupture distance for fdobj}
+test2 = analyze_curves_interaction_distance(test2,
+                                           useCurve = 'retract', # analyze retract curve
+                                           y_direction = "negative", x_direction = "left",
+                                           baseline_span = 'automatic', # use the baseline span values in metadata column "baseline_span_retract" for each curve
+                                            min_consecutive = 3
+                                            )
+
+view_df(test2@metadata,'metadata with rupture length')
+```
+
+### Repulsive distance
+
+For repulsive interactions (positive-force excursions), the function can be set to scan from left to right and identify the last point before the curve cross the positive noise threshold to enter the noise band region from the repulsive force region, which indicates the end of significant repulsion.
+
+Specifically, the function scans the curve from left to right (x_direction = "right") up to the beginning of the baseline region (as defined by baseline_span). It identifies the last data point where the curve first crosses the positive noise threshold—entering the noise band from the repulsive force region (y_direction = "positive"). Because the curve is expected to begin in the repulsive region, min_consecutive is set to 1, meaning that a single point above the positive noise threshold is sufficient to mark the start of the repulsive region.
+
 
 ```{r single curve repulsive distance}
-res.repuldis = analyze_a_curve_interaction_distance(example1.transformed,baseline_span = 200, y_direction = "positive", x_direction = "right",noiseBand_low = res.noise[['noiseBand_low']],noiseBand_high = res.noise[['noiseBand_high']])
+res.repuldis = analyze_a_curve_interaction_distance(example1.transformed,
+                                                      y_direction = "positive", 
+                                                      x_direction = "right",
+                                                      baseline_span = 200,
+                                                      noiseBand_low = res.noise[['noiseBand_low']],
+                                                      noiseBand_high = res.noise[['noiseBand_high']],
+                                                      min_consecutive = 1
+                                                      )
 
 print(res.repuldis)
 
 ```
 
+To analyze repulsive distance for all curves in an fdObj, we can use the wrapper function "analyze_curves_interaction_distance" with the same parameters. The calculated repulsive distance will be recorded in a metadata column named "repulsive_distance_nm". Curves that fail transformation will have NA in this column.
+
+```{r repulsive distance for fdobj}
+test2 = analyze_curves_interaction_distance(test2,
+                                           useCurve = 'approach', # analyze approach curve
+                                           y_direction = "positive", x_direction = "right",
+                                           baseline_span = 'automatic', # use the baseline span values in metadata column "baseline_span_approach" for each curve
+                                           min_consecutive = 1
+                                          )
+
+view_df(test2@metadata,'metadata with repulsive distance')
+```
+
 ## All-in-one analytical wrapper
 
-You can run all analytical-metric steps in one call using 
-\code{analyze_curves_all_analytical_metrics()}, and toggle adhesive-force or energy analysis on/off.
+You can run all analytical-metric steps described above in one call using `analyze_curves_all_analytical_metrics()`. This function combines all the above analyses into a single streamlined workflow, allowing you to compute noise levels, adhesive forces, interaction energies, and interaction distances for all curves in an fdObj with one command. By setting the appropriate toggles, you can customize which metrics to calculate and how to apply noise thresholds, providing a comprehensive analysis of your AFM force spectroscopy data in a single step.
 
 ```{r run all analytical metrics with toggles}
 test = analyze_curves_all_analytical_metrics(
-  test,
-  useCurve = "both",
-  threads = 1,
-  noise_baseline_span = "automatic",
-  noise_threshold_method = "quantile",
-  noise_multiplier = 1,
-  noise_quantile_low = 0,
-  noise_quantile_high = 1,
-  analyze_adhesive_force = TRUE,
-  analyze_energy = FALSE,
-  analyze_rupture_distance = TRUE,
-  analyze_rupture_distance_baseline_span = "automatic",
-  analyze_rupture_distance_x_direction = "left",
-  analyze_repulsive_distance = TRUE,
-  analyze_repulsive_distance_baseline_span = "automatic",
-  analyze_repulsive_distance_x_direction = "right"
+  test, # the object
+  useCurve = "both", # run analysis for both approach and retract 
+  threads = 1, 
+
+  # noise band parameters
+  noise_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for noise band calculation
+  noise_threshold_method = "quantile", # use quantile method to define the noise band
+  noise_quantile_low = 0.00, # define the lower end of noise band as minimum y value of the baseline section
+  noise_quantile_high = 1, # define the upper end of noise band as maximum y value of the baseline section
+  noise_multiplier = 1, # multiply the noise band by 1 to directly use the min-max range of the force in baseline region without further scaling.
+
+  # adhesive force
+  analyze_adhesive_force = TRUE, # whether to analyze adhesive force
+
+  # adhesive energy and repulsive energy
+  analyze_energy = TRUE, # whether to analyze interaction energy (repulsive and adhesive)
+
+  # rupture (adhesive) distance
+  analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
+  analyze_rupture_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for rupture distance analysis
+  analyze_rupture_distance_x_direction = "left", # scan from right to left to find the first data point at which a curve enters the adhesive region from the noise band region
+  analyze_rupture_distance_min_consecutive = 3, # to reduce false positives from random fluctuations, require at least 3 consecutive points below the lower noise-band threshold for classifying the curve as entering the adhesive region.
+
+  # repulsive distance
+  analyze_repulsive_distance = TRUE, # whether to analyze repulsive distance
+  analyze_repulsive_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for repulsive distance analysis
+  analyze_repulsive_distance_x_direction = "right", # scan from left to right to find the last data point before a curve enters the noise band region from the repulsive region
+  analyze_repulsive_distance_min_consecutive = 1 # because the curve is expected to start from the repulsive region, we set min_consecutive to 1, meaning that a single point above the positive noise threshold is sufficient to mark the start of the repulsive region.
 )
 ```
+
 
 # Visualization of analytical metrics
 
-```{r single curve plot metrics,fig.height=8, fig.width=18}
+plot_a_curve_metrics() can be used to visualize the calculated analytical metrics for a single curve.
+
+```{r single curve plot metrics,fig.height=12, fig.width=22}
 plot_a_curve_metrics(
   fdobj = test,
   curve_name = example1.name,
-  useCurve = "retract",plot_raw = T,base_size = 15,annotation_text_size = 4
+  useCurve = "retract", # which curve to plot, can be "approach" or "retract".
+  plot_raw = T, # whether to plot the raw curve together with the transformed curve. 
+  base_size = 15,
+  annotation_text_size = 5
 )
-
-
 
 ```
 
-```{r plot all metrics for a curve,fig.height=8, fig.width=18,eval=FALSE}
+# Save all raw and transformed curves with analytical metrics annotated (optional)
+
+```{r plot all metrics for a curve,fig.height=8, fig.width=16,eval=F}
 plot_all_curve_metrics(
-  fdobj = test,
-  useCurve = "retract",plot_raw = T,
-  destination_folder = './test_plot_metrics',
-  format = 'png',width = 18,
-    height = 9,
+  fdobj = test, # the fdObj to plot
+  useCurve = "retract", # plot the retract curve
+  plot_raw = T, # whether to plot the raw curve
+  destination_folder = '../test_plot_metrics_denoised', # the path to save the plots
+  format = 'png', width = 18, height = 9, # plot format and dimensions,
+  threads = 8 # number of threads to use for parallel processing (set to 8 to use 8 cores, which will significantly speed up the plotting process for a large dataset
+)
+plot_all_curve_metrics(
+  fdobj = test, # the fdObj to plot
+  useCurve = "approach", # plot the approach curve
+  plot_raw = T, # whether to plot the raw curve
+  destination_folder = '../test_plot_metrics_denoised', # the path to save the plots
+  format = 'png', width = 18, height = 9, # plot format and dimensions
+  threads = 8 # number of threads to use for parallel processing (set to 8 to use 8 cores, which will significantly speed up the plotting process for a large dataset
 )
 ```
 
 # Summary statistics of analytical metrics
 
-## Violin plot of selected metrics by surface
-
-```{r summary statistics of metrics, fig.height=6, fig.width=12}
-f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_sep_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f3 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f4 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f5 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-f6 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"))
-
-plot_grid(f1,f2,f3,f4,f5,f6, nrow = 2)
-
-
-```
-
-## Violin plot with statistical annotations
-
-```{r summary statistics with tests, eval=requireNamespace("ggpubr", quietly = TRUE)}
-plot_metric_violin(
-  df = test@metadata,
-  metric_name = "adhesive_force_nN_retract",
-  group_by = "surface",
-  color_by = "surface",
-  color_map = c(
-    PEG = "#1b9e77",
-    silicon = "#d95f02",
-    fluorinated = "#7570b3",
-    zwitterionic = "#e7298a"
-  ),
-  global_test = "anova",
-  pairwise_test = "t.test",
-  p_adjust_method = "BH"
-)
-```
-
 ## PCA biplot of selected metrics
 
-```{r pca biplot of metrics, fig.height=8, fig.width=10}
+Dimensional reduction is first used to visualize the overall pattern of how curves cluster based on their analytical metrics. The function "plot_pca_biplot" performs principal component analysis (PCA) on the selected metrics and plots the scores of samples in the PCA space, colored by a specified metadata variable (e.g., surface type). The function also plots the loadings of the selected features as arrows, indicating how each metric contributes to the principal components and the clustering pattern of samples.
+
+```{r pca biplot of metrics, fig.height=6, fig.width=7}
 pca_features <- c(
   "adhesive_force_nN_retract",
   "adhesive_energy_aJ_retract",
-  "repulsive_energy_aJ_retract",
   "rupture_distance_nm_retract",
+  "repulsive_energy_aJ_approach",
   "repulsive_distance_nm_retract"
 )
 
@@ -738,24 +762,17 @@ plot_pca_biplot(
 )
 ```
 
+From the PCA biplot, we can see the fluorinated surface is well separated from the other three surfaces, which is consistent with our observation of the curves and the fact that fluorinated surface has the largest adhesion. The biplot also shows that adhesive force, adhesive energy and rupture distance are the main contributors to PC1, which separates fluorinated surface from the others, while repulsive energy and repulsive distance contribute more to PC2, which largely separates zwitterionic surface from PEG and silicon surfaces. Adhesive force, adhesive energy and rupture distance are positively correlated with each other, which is consistent with the fact that they all reflect the strength of adhesion. Repulsive energy and repulsive distance are also positively correlated, which makes sense because a stronger repulsion would typically extend over a longer distance.
+
+
 ## Scaled feature heatmap with sample annotations
 
-The function `plot_complex_heatmap()` scales each selected feature by row (z-score),
-plots features as rows and samples as columns, and can annotate columns by up to
-two metadata variables.
+The function `plot_complex_heatmap()` creates a heatmap of selected analytical metrics across samples, with options for clustering and annotation. In this example, we select the same metrics used for PCA plot to visualize their relative values across samples. The heatmap is scaled by z-score to show how each sample deviates from the mean for each metric, allowing for easy comparison across different metrics with different units and ranges. The samples are annotated by surface type and region, with a specified color map for the surface types. Clustering is applied to rows (samples) to reveal patterns of similarity based on the selected metrics.
 
-```{r complex heatmap of metrics, fig.height=7, fig.width=10}
-heatmap_features <- c(
-  "adhesive_force_nN_retract",
-  "adhesive_energy_aJ_retract",
-  "repulsive_energy_aJ_retract",
-  "rupture_distance_nm_retract",
-  "repulsive_distance_nm_retract"
-)
-
+```{r complex heatmap of metrics, fig.height=5, fig.width=8}
   plot_complex_heatmap(
     df = test@metadata,
-    include_columns = heatmap_features,
+    include_columns = pca_features,
     annotate_columns = c("surface", "region"),
     annotation_colors = list(
       surface = c(
@@ -772,4 +789,72 @@ heatmap_features <- c(
     heatmap_name = "z-score",
     show_column_names = FALSE
   )
+```
+
+## Violin plot of selected metrics by surface
+
+`plot_metric_violin()` can be used to visualize the distribution of selected metrics across different surfaces. Here we plot the violin plot of adhesive force, adhesive energy and rupture distance of the retract curves, as well as the repulsive energy and repulsive distance of approach curves. The option "show_whisker_box" is set to TRUE to show the median and interquartile range of the distribution.
+
+```{r summary statistics of metrics, fig.height=6, fig.width=12}
+f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+show_whisker_box = T)
+f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+show_whisker_box = T)
+f3 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_approach", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+show_whisker_box = T)
+f4 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+show_whisker_box = T)
+f5 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_approach", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+show_whisker_box = T)
+
+plot_grid(f1,f2,f3,f4,f5, nrow = 2)
+
+
+```
+
+## Violin plot with statistical annotations
+
+`plot_metric_violin()` also has options to perform statistical tests and annotate the significance on the plot. Here we perform Kruskal-Wallis test to compare the means of adhesive force across different surfaces, and perform pairwise Wilcoxon tests for post-hoc analysis. The p-values are adjusted using Benjamini-Hochberg method to control for false discovery rate.
+
+```{r summary statistics with tests, eval=requireNamespace("ggpubr", quietly = TRUE)}
+plot_metric_violin(
+  df = test@metadata,
+  metric_name = "adhesive_force_nN_retract",
+  group_by = "surface",
+  color_by = "surface",
+  color_map = c(
+    PEG = "#1b9e77",
+    silicon = "#d95f02",
+    fluorinated = "#7570b3",
+    zwitterionic = "#e7298a"
+  ),
+  global_test = "kruskal",
+  pairwise_test = "wilcox",
+  p_adjust_method = "BH"
+
+)
+```
+
+The function also allows users to specify which pairwise comparisons to perform, so that only relevant comparisons are made and the plot is not overcrowded with too many significance annotations. Here we specify to compare fluorinated surface with each of the other three surfaces.
+
+```{r summary statistics with tests2, eval=requireNamespace("ggpubr", quietly = TRUE)}
+plot_metric_violin(
+  df = test@metadata,
+  metric_name = "adhesive_force_nN_retract",
+  group_by = "surface",
+  color_by = "surface",
+  color_map = c(
+    PEG = "#1b9e77",
+    silicon = "#d95f02",
+    fluorinated = "#7570b3",
+    zwitterionic = "#e7298a"
+  ),
+  global_test = "none", # do not perform global test, only do pairwise comparisons
+  pairwise_test = "wilcox",
+  p_adjust_method = "BH", pairwise_comparisons = list(
+    c("fluorinated", "zwitterionic"),
+    c("fluorinated", "silicon"),
+    c("fluorinated", "PEG")
+  )
+)
 ```

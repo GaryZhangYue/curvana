@@ -33,3 +33,5 @@ done 12. Shiny app, plot fd curves, give options to adjust x and y lim
      16. check the explanations and tests in package functions
      17. write the github page
      18. write a tutorial for shiny app.
+     19. in app page2, edit column name header to make it easier to understand. also make sure users know what to do if one side of curve is missing (discuss with xitong about the column name)
+     20. in plot a curve metric, the labels sometimes overlap in shiny app, try to adjust ggrepel
