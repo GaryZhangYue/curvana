@@ -121,10 +121,10 @@ test <- test.input
 test@metadata <- test@metadata %>% 
   mutate(surface = sub("_.*","",filename),
          surface = case_when(
-            surface == 'F' ~ 'fluorinated',
-            surface == 'P' ~ 'PEG',
-            surface == 'silicon' ~ 'silicon',
-            surface == 'Z' ~ 'zwitterionic',
+        surface == 'F' ~ 'Group_A',
+        surface == 'P' ~ 'Group_B',
+        surface == 'silicon' ~ 'Group_C',
+        surface == 'Z' ~ 'Group_D',
             TRUE ~ surface),
          region = sub(".*?_([0-9]+)\\.spm.*", "\\1", filename)
   )
@@ -148,8 +148,8 @@ plot_raw_deflection_heatmap(
   fdobj             = test,
   annotate_columns  = c("surface", "region"),
   annotation_colors = list(
-    surface = c(PEG = "#1b9e77", silicon = "#d95f02",
-                fluorinated = "#7570b3", zwitterionic = "#e7298a")
+    surface = c(Group_B = "#1b9e77", Group_C = "#d95f02",
+                Group_A = "#7570b3", Group_D = "#e7298a")
   )
 )
 
@@ -261,7 +261,7 @@ plot_fd_curves(test,group_curves_by = 'region', split_curves_by = 'surface',
                                 `3` = 'steelblue'))
 ```
 
-We can see that the fluorinated surface has the largest adhesion, which occurs mostly immediately after the probe is pulled off the surface. The other surfaces also show adhesion, but at lower magnitudes. All curves that passed the transformation step have baselines that are well aligned with the zero-force line and show relatively small fluctuations, which is important for accurate calculation of analytical metrics in later steps.
+We can see that Group_A has the largest adhesion, which occurs mostly immediately after the probe is pulled off the surface. The other groups also show adhesion, but at lower magnitudes. All curves that passed the transformation step have baselines that are well aligned with the zero-force line and show relatively small fluctuations, which is important for accurate calculation of analytical metrics in later steps.
 
 # Analytical metrics calculation
 
@@ -346,7 +346,7 @@ pca_features <- c(
   "adhesive_energy_aJ_retract",
   "rupture_distance_nm_retract",
   "repulsive_energy_aJ_approach",
-  "repulsive_distance_nm_retract"
+  "repulsive_distance_nm_approach"
 )
 
 plot_pca_biplot(
@@ -354,17 +354,17 @@ plot_pca_biplot(
   include_columns = pca_features,
   color_by = "surface",
   color_map = c(
-    PEG = "#1b9e77",
-    silicon = "#d95f02",
-    fluorinated = "#7570b3",
-    zwitterionic = "#e7298a"
+    Group_B = "#1b9e77",
+    Group_C = "#d95f02",
+    Group_A = "#7570b3",
+    Group_D = "#e7298a"
   ),
   arrow_scale = 1.1,
   show_feature_labels = TRUE
 )
 ```
 
-From the PCA biplot, we can see that the fluorinated surface is well separated from the other three surfaces, which is consistent with our observations of the curves and with the fact that the fluorinated surface has the largest adhesion. The biplot also shows that adhesive force, adhesive energy, and rupture distance are the main contributors to PC1, which separates the fluorinated surface from the others, while repulsive energy and repulsive distance contribute more to PC2, which largely separates the zwitterionic surface from PEG and silicon surfaces. Adhesive force, adhesive energy, and rupture distance are positively correlated with one another, which is consistent with the fact that they all reflect adhesion strength. Repulsive energy and repulsive distance are also positively correlated, which makes sense because a stronger repulsion would typically extend over a longer distance.
+From the PCA biplot, we can see that Group_A is well separated from the other three groups, which is consistent with our observations of the curves and with the fact that Group_A has the largest adhesion. The biplot also shows that adhesive force, adhesive energy, and rupture distance are the main contributors to PC1, which separates Group_A from the others, while repulsive energy and repulsive distance contribute more to PC2, which largely separates Group_D from Group_B and Group_C. Adhesive force, adhesive energy, and rupture distance are positively correlated with one another, which is consistent with the fact that they all reflect adhesion strength. Repulsive energy and repulsive distance are also positively correlated, which makes sense because a stronger repulsion would typically extend over a longer distance.
 
 
 ## Scaled feature heatmap with sample annotations
@@ -378,10 +378,10 @@ The function `plot_complex_heatmap()` creates a heatmap of selected analytical m
     annotate_columns = c("surface", "region"),
     annotation_colors = list(
       surface = c(
-        PEG = "#1b9e77",
-        silicon = "#d95f02",
-        fluorinated = "#7570b3",
-        zwitterionic = "#e7298a"
+        Group_B = "#1b9e77",
+        Group_C = "#d95f02",
+        Group_A = "#7570b3",
+        Group_D = "#e7298a"
       )
     ),
     cluster_rows = TRUE,
@@ -395,18 +395,18 @@ The function `plot_complex_heatmap()` creates a heatmap of selected analytical m
 
 ## Violin plot of selected metrics by surface
 
-`plot_metric_violin()` can be used to visualize the distribution of selected metrics across different surfaces. Here, we plot violin plots for adhesive force, adhesive energy, and rupture distance from the retract curves, as well as repulsive energy and repulsive distance from the approach curves. The option `show_whisker_box = TRUE` displays the median and interquartile range of each distribution.
+`plot_metric_violin()` can be used to visualize the distribution of selected metrics across different groups. Here, we plot violin plots for adhesive force, adhesive energy, and rupture distance from the retract curves, as well as repulsive energy and repulsive distance from the approach curves. The option `show_whisker_box = TRUE` displays the median and interquartile range of each distribution.
 
 ```{r summary statistics of metrics, fig.height=6, fig.width=12}
-f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+f1 = plot_metric_violin(test@metadata, metric_name = "adhesive_force_nN_retract", group_by = "surface", color_map = c(Group_B = "#1b9e77", Group_C = "#d95f02", Group_A = "#7570b3", Group_D = "#e7298a"),
 show_whisker_box = T)
-f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+f2 = plot_metric_violin(test@metadata, metric_name = "adhesive_energy_aJ_retract",log10=T,  group_by = "surface", color_map = c(Group_B = "#1b9e77", Group_C = "#d95f02", Group_A = "#7570b3", Group_D = "#e7298a"),
 show_whisker_box = T)
-f3 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_approach", group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+f3 = plot_metric_violin(test@metadata, metric_name = "repulsive_energy_aJ_approach", group_by = "surface", color_map = c(Group_B = "#1b9e77", Group_C = "#d95f02", Group_A = "#7570b3", Group_D = "#e7298a"),
 show_whisker_box = T)
-f4 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+f4 = plot_metric_violin(test@metadata, metric_name = "rupture_distance_nm_retract", log10=T, group_by = "surface", color_map = c(Group_B = "#1b9e77", Group_C = "#d95f02", Group_A = "#7570b3", Group_D = "#e7298a"),
 show_whisker_box = T)
-f5 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_approach", log10=T, group_by = "surface", color_map = c(PEG = "#1b9e77", silicon = "#d95f02", fluorinated = "#7570b3", zwitterionic = "#e7298a"),
+f5 = plot_metric_violin(test@metadata, metric_name = "repulsive_distance_nm_approach", log10=T, group_by = "surface", color_map = c(Group_B = "#1b9e77", Group_C = "#d95f02", Group_A = "#7570b3", Group_D = "#e7298a"),
 show_whisker_box = T)
 
 plot_grid(f1,f2,f3,f4,f5, nrow = 2)
@@ -416,7 +416,7 @@ plot_grid(f1,f2,f3,f4,f5, nrow = 2)
 
 ## Violin plot with statistical annotations
 
-`plot_metric_violin()` also has options to perform statistical tests and annotate significance on the plot. Here, we perform a Kruskal-Wallis test to compare adhesive force across different surfaces, followed by pairwise Wilcoxon tests for post hoc analysis. The p-values are adjusted using the Benjamini-Hochberg method to control the false discovery rate.
+`plot_metric_violin()` also has options to perform statistical tests and annotate significance on the plot. Here, we perform a Kruskal-Wallis test to compare adhesive force across different groups, followed by pairwise Wilcoxon tests for post hoc analysis. The p-values are adjusted using the Benjamini-Hochberg method to control the false discovery rate.
 
 ```{r summary statistics with tests, eval=requireNamespace("ggpubr", quietly = TRUE)}
 plot_metric_violin(
@@ -425,10 +425,10 @@ plot_metric_violin(
   group_by = "surface",
   color_by = "surface",
   color_map = c(
-    PEG = "#1b9e77",
-    silicon = "#d95f02",
-    fluorinated = "#7570b3",
-    zwitterionic = "#e7298a"
+    Group_B = "#1b9e77",
+    Group_C = "#d95f02",
+    Group_A = "#7570b3",
+    Group_D = "#e7298a"
   ),
   global_test = "kruskal",
   pairwise_test = "wilcox",
@@ -437,7 +437,7 @@ plot_metric_violin(
 )
 ```
 
-The function also allows users to specify which pairwise comparisons to perform so that only relevant comparisons are made and the plot is not overcrowded with significance annotations. Here, we compare the fluorinated surface with each of the other three surfaces.
+The function also allows users to specify which pairwise comparisons to perform so that only relevant comparisons are made and the plot is not overcrowded with significance annotations. Here, we compare Group_A with each of the other three groups.
 
 ```{r summary statistics with tests2, eval=requireNamespace("ggpubr", quietly = TRUE)}
 plot_metric_violin(
@@ -446,17 +446,17 @@ plot_metric_violin(
   group_by = "surface",
   color_by = "surface",
   color_map = c(
-    PEG = "#1b9e77",
-    silicon = "#d95f02",
-    fluorinated = "#7570b3",
-    zwitterionic = "#e7298a"
+    Group_B = "#1b9e77",
+    Group_C = "#d95f02",
+    Group_A = "#7570b3",
+    Group_D = "#e7298a"
   ),
   global_test = "none", # do not perform global test, only do pairwise comparisons
   pairwise_test = "wilcox",
   p_adjust_method = "BH", pairwise_comparisons = list(
-    c("fluorinated", "zwitterionic"),
-    c("fluorinated", "silicon"),
-    c("fluorinated", "PEG")
+    c("Group_A", "Group_D"),
+    c("Group_A", "Group_C"),
+    c("Group_A", "Group_B")
   )
 )
 ```
