@@ -1892,8 +1892,8 @@ server <- function(input, output, session) {
   }
 
   draw_pca <- function() {
-    shiny::req(rv$fdobj)
-    md <- rv$fdobj@metadata
+    shiny::req(rv$fdobj_final)
+    md <- rv$fdobj_final@metadata
     pca_features <- intersect(input$pca_include_columns, colnames(md))
     if (length(pca_features) < 2) {
       stop("Select at least 2 PCA feature columns.")
@@ -1923,12 +1923,12 @@ server <- function(input, output, session) {
   }
 
   draw_violin <- function() {
-    shiny::req(rv$fdobj)
+    shiny::req(rv$fdobj_final)
     shiny::req(nzchar(input$violin_metric))
     if (!nzchar(input$violin_group_by)) {
       stop("Select a grouping column.")
     }
-    md <- rv$fdobj@metadata
+    md <- rv$fdobj_final@metadata
     if (!(input$violin_group_by %in% colnames(md))) {
       stop("Grouping column not found.")
     }
@@ -1959,8 +1959,8 @@ server <- function(input, output, session) {
   }
 
   draw_complex_heatmap <- function() {
-    shiny::req(rv$fdobj)
-    md <- rv$fdobj@metadata
+    shiny::req(rv$fdobj_final)
+    md <- rv$fdobj_final@metadata
 
     include_cols <- intersect(input$heatmap_include_columns, colnames(md))
     if (length(include_cols) < 1) {
