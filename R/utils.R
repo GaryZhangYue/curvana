@@ -2000,3 +2000,273 @@ plot_raw_deflection_heatmap <- function(
   if (isTRUE(draw)) return(ComplexHeatmap::draw(ht))
   return(ht)
 }
+
+
+#' Read JPK format AFM force curve file
+#'
+#' @description
+#' Reads a JPK format text file exported from JPK AFM software. Automatically detects
+#' approach (extend) and retract segments, extracts sensitivity and spring constant,
+#' and handles unit conversion from Force (N) to Voltage (V) if needed.
+#'
+#' @param file_path Path to the JPK .txt file
+#' @param height_col Column name for height/distance data. Default is "height".
+#'   If not found, falls back to "strainGaugeHeight".
+#' @param deflection_col Column name for deflection data. Default is "vDeflection".
+#'
+#' @return A list with two elements:
+#' \itemize{
+#'   \item \code{raw_data}: Data frame in curvana format with columns:
+#'     \code{Calc_Ramp_Ex_nm}, \code{Calc_Ramp_Rt_nm}, \code{Defl_V_Ex}, \code{Defl_V_Rt}.
+#'     If segments have different lengths, the shorter is padded with NA.
+#'   \item \code{parameters}: Named vector with segment-specific sensitivity and spring constant values
+#'     extracted from the file, plus actual data point counts before padding:
+#'     \code{approach_sensitivity_imported}, \code{approach_springConstant_imported},
+#'     \code{retract_sensitivity_imported}, \code{retract_springConstant_imported},
+#'     \code{Number_of_datapoints_approach}, \code{Number_of_datapoints_retract}
+#' }
+#'
+#' @details
+#' The function:
+#' \itemize{
+#'   \item Detects segments by looking for "# segment: extend" or "# segment: retract"
+#'   \item Extracts sensitivity and spring constant separately for each segment
+#'   \item Determines if deflection data is in Voltage (V) or Force (N)
+#'   \item If Force (N), converts to Voltage using: V = F / (sensitivity * springConstant)
+#'   \item Returns data in curvana's expected format with segment-specific parameters
+#' }
+#'
+#' @keywords internal
+read_jpk_file <- function(file_path, height_col = "height", deflection_col = "vDeflection") {
+  
+  # Read all lines
+  lines <- readLines(file_path, warn = FALSE)
+  
+  # Initialize storage for segments
+  segments <- list()
+  current_segment <- NULL
+  
+  # Parse the file
+  i <- 1
+  while (i <= length(lines)) {
+    line <- lines[i]
+    
+    # Check for segment start
+    if (grepl("^# segment:", line)) {
+      segment_type <- sub("^# segment:\\s*", "", line)
+      
+      # Initialize new segment
+      current_segment <- list(
+        type = segment_type,
+        sensitivity = NA_real_,
+        spring_constant = NA_real_,
+        columns = NULL,
+        units = NULL,
+        data = NULL
+      )
+    }
+    
+    # Extract sensitivity
+    if (grepl("^# sensitivity:", line)) {
+      sens_val <- as.numeric(sub("^# sensitivity:\\s*", "", line))
+      if (!is.null(current_segment)) {
+        current_segment$sensitivity <- sens_val
+      }
+    }
+    
+    # Extract spring constant
+    if (grepl("^# springConstant:", line)) {
+      sc_val <- as.numeric(sub("^# springConstant:\\s*", "", line))
+      if (!is.null(current_segment)) {
+        current_segment$spring_constant <- sc_val
+      }
+    }
+    
+    # Extract column names
+    if (grepl("^# columns:", line)) {
+      cols <- sub("^# columns:\\s*", "", line)
+      if (!is.null(current_segment)) {
+        current_segment$columns <- strsplit(cols, "\\s+")[[1]]
+      }
+    }
+    
+    # Extract units
+    if (grepl("^# units:", line)) {
+      units_str <- sub("^# units:\\s*", "", line)
+      if (!is.null(current_segment)) {
+        current_segment$units <- strsplit(units_str, "\\s+")[[1]]
+      }
+    }
+    
+    # Check if we hit data (non-comment line after segment definition)
+    if (!grepl("^#", line) && !is.null(current_segment) && nzchar(trimws(line))) {
+      # Read data until next segment or end of file
+      data_lines <- character()
+      while (i <= length(lines) && !grepl("^# segment:", lines[i])) {
+        if (!grepl("^#", lines[i]) && nzchar(trimws(lines[i]))) {
+          data_lines <- c(data_lines, lines[i])
+        }
+        i <- i + 1
+      }
+      i <- i - 1  # Step back one since we'll increment at end of loop
+      
+      # Parse data
+      if (length(data_lines) > 0) {
+        # Read as table
+        data_text <- paste(data_lines, collapse = "\n")
+        current_segment$data <- read.table(text = data_text, 
+                                           header = FALSE, 
+                                           stringsAsFactors = FALSE,
+                                           col.names = current_segment$columns)
+        
+        # Store completed segment
+        segments <- append(segments, list(current_segment))
+        current_segment <- NULL
+      }
+    }
+    
+    i <- i + 1
+  }
+  
+  # Process segments into curvana format
+  approach_data <- NULL
+  retract_data <- NULL
+  
+  for (seg in segments) {
+    if (is.null(seg$data) || nrow(seg$data) == 0) next
+    
+    # Validate that specified columns exist in segment
+    if (!(height_col %in% seg$columns)) {
+      stop(sprintf("Height column '%s' not found in segment %s. Available columns: %s",
+                   height_col, seg$type, paste(seg$columns, collapse = ", ")))
+    }
+    
+    if (!(deflection_col %in% seg$columns)) {
+      stop(sprintf("Deflection column '%s' not found in segment %s. Available columns: %s",
+                   deflection_col, seg$type, paste(seg$columns, collapse = ", ")))
+    }
+    
+    seg_height_col <- height_col
+    seg_deflection_col <- deflection_col
+    
+    # Get the data
+    height <- seg$data[[seg_height_col]]
+    deflection <- seg$data[[seg_deflection_col]]
+    
+    # Check units and convert if necessary
+    deflection_col_idx <- which(seg$columns == seg_deflection_col)
+    deflection_unit <- seg$units[deflection_col_idx]
+    
+    if (deflection_unit == "N") {
+      # Convert from Force to Voltage: V = F / (sensitivity * springConstant)
+      # Note that ths sensitivity reported in JPK files is distance per voltage (nm/V)
+      # In our pipeline, sensitivity is voltage per distance
+      if (!is.na(seg$sensitivity) && !is.na(seg$spring_constant)) {
+        deflection <- deflection / (seg$sensitivity * seg$spring_constant)
+        message(sprintf("Converted deflection from Force (N) to Voltage (V) for %s segment using sensitivity and spring constant", seg$type))
+      } else {
+        stop(sprintf("Cannot convert Force to Voltage: missing sensitivity or spring constant for %s segment", seg$type))
+      }
+    }
+    
+    # Convert height to nm based on unit
+    height_col_idx <- which(seg$columns == seg_height_col)
+    height_unit <- seg$units[height_col_idx]
+    
+    height <- switch(height_unit,
+      "m"  = height * 1e9,   # meters to nm
+      "cm" = height * 1e7,   # centimeters to nm
+      "mm" = height * 1e6,   # millimeters to nm
+      "um" = height * 1e3,   # micrometers to nm
+      "nm" = height,         # already in nm
+      stop(sprintf("Unsupported height unit '%s' in segment %s. Expected: m, cm, mm, um, or nm",
+                   height_unit, seg$type))
+    )
+    
+    # Store based on segment type
+    if (seg$type == "extend") {
+      approach_data <- data.frame(
+        distance = height,
+        deflection = deflection
+      )
+    } else if (seg$type == "retract") {
+      retract_data <- data.frame(
+        distance = height,
+        deflection = deflection
+      )
+    }
+  }
+  
+  # Create curvana-format data frame
+  # Only include columns for segments that exist
+  if (is.null(approach_data) && is.null(retract_data)) {
+    stop("No valid data found in file - both segments are missing")
+  }
+  
+  # Record actual data point counts (before any padding)
+  n_approach <- if (!is.null(approach_data)) nrow(approach_data) else 0L
+  n_retract <- if (!is.null(retract_data)) nrow(retract_data) else 0L
+  
+  # Determine if we need to align lengths (both segments exist)
+  if (!is.null(approach_data) && !is.null(retract_data)) {
+    # Both segments exist - pad the shorter one
+    max_len <- max(nrow(approach_data), nrow(retract_data))
+    
+    pad_to_length <- function(x, target_len) {
+      if (length(x) < target_len) {
+        return(c(x, rep(NA_real_, target_len - length(x))))
+      }
+      return(x[1:target_len])
+    }
+    
+    raw_data <- data.frame(
+      Calc_Ramp_Ex_nm = pad_to_length(approach_data$distance, max_len),
+      Calc_Ramp_Rt_nm = pad_to_length(retract_data$distance, max_len),
+      Defl_V_Ex = pad_to_length(approach_data$deflection, max_len),
+      Defl_V_Rt = pad_to_length(retract_data$deflection, max_len)
+    )
+  } else if (!is.null(approach_data)) {
+    # Only approach exists
+    raw_data <- data.frame(
+      Calc_Ramp_Ex_nm = approach_data$distance,
+      Defl_V_Ex = approach_data$deflection
+    )
+  } else {
+    # Only retract exists
+    raw_data <- data.frame(
+      Calc_Ramp_Rt_nm = retract_data$distance,
+      Defl_V_Rt = retract_data$deflection
+    )
+  }
+  
+  # Extract segment-specific sensitivity and spring constant values
+  approach_sensitivity <- NA_real_
+  approach_spring_constant <- NA_real_
+  retract_sensitivity <- NA_real_
+  retract_spring_constant <- NA_real_
+  
+  for (seg in segments) {
+    if (seg$type == "extend") {
+      if (!is.na(seg$sensitivity)) approach_sensitivity <- seg$sensitivity
+      if (!is.na(seg$spring_constant)) approach_spring_constant <- seg$spring_constant
+    } else if (seg$type == "retract") {
+      if (!is.na(seg$sensitivity)) retract_sensitivity <- seg$sensitivity
+      if (!is.na(seg$spring_constant)) retract_spring_constant <- seg$spring_constant
+    }
+  }
+  
+  # Create parameters vector with segment-specific values and data point counts
+  parameters <- c(
+    approach_sensitivity_imported = approach_sensitivity,
+    approach_springConstant_imported = approach_spring_constant,
+    retract_sensitivity_imported = retract_sensitivity,
+    retract_springConstant_imported = retract_spring_constant,
+    Number_of_datapoints_approach = n_approach,
+    Number_of_datapoints_retract = n_retract
+  )
+  
+  return(list(
+    raw_data = raw_data,
+    parameters = parameters
+  ))
+}
