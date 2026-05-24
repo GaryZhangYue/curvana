@@ -4,16 +4,25 @@
 \alias{calc_sensitivity}
 \title{Calculate Sensitivity from a Segment of AFM Data}
 \usage{
-calc_sensitivity(end, intv = 4, x, y)
+calc_sensitivity(x, y, R_squared_min = 0.99, end, intv = 4, minimum_length = 4)
 }
 \arguments{
-\item{end}{Integer. The maximum index to consider in the `x` and `y` vectors (i.e., up to which point to search).}
-
-\item{intv}{Integer. The chunk size to use when iteratively selecting data segments.}
-
 \item{x}{Numeric vector. The piezo extension values (e.g., distance in nm).}
 
 \item{y}{Numeric vector. The deflection values (e.g., voltage).}
+
+\item{R_squared_min}{Numeric. Minimum \eqn{R^2} threshold for accepting a
+segment as sufficiently linear during sensitivity calculation. Default is
+0.99.}
+
+\item{end}{Integer. The maximum index to consider in the `x` and `y` vectors (i.e., up to which point to search).}
+
+\item{intv}{Integer. Number of data points added per iteration when
+building the linear sensitivity segment.}
+
+\item{minimum_length}{Integer. Minimum number of accumulated points required
+for a valid sensitivity result. If the segment is shorter, sensitivity is
+reported as \code{NA}. Default is 4.}
 }
 \value{
 A list of three elements:
@@ -25,11 +34,11 @@ A list of three elements:
 \description{
 This function identifies a linear segment from AFM deflection vs. piezo extension data and calculates
 the sensitivity (slope) using linear regression. It iteratively adds chunks of data to build a segment
-with high linearity (\eqn{R^2 > 0.999}) and optionally removes outliers to maintain this criterion.
+with high linearity (\eqn{R^2 >} \code{R_squared_min}) and optionally removes outliers to maintain this criterion.
 }
 \examples{
 x <- seq(0, 100, by = 1)
 y <- 0.02 * x + rnorm(length(x), sd = 0.01)
-calc_sensitivity(end = 80, intv = 10, x = x, y = y)
+calc_sensitivity(x = x, y = y, end = 80, intv = 10)
 
 }

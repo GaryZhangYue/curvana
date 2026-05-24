@@ -264,7 +264,7 @@ plot_fd_curves <- function(fdobj,
   # Base plot
   if (!is.null(group_curves_by)) {
     p <- ggplot(plot_df, aes(x = separation_distance_nm, y = force_nN)) +
-      geom_line(
+      geom_path(
         aes(color = .data[[group_curves_by]], group = interaction(sample, segment)),
         alpha = line_alpha,
         linewidth = 0.35,
@@ -274,7 +274,7 @@ plot_fd_curves <- function(fdobj,
       labs(x = "Separation Distance (nm)", y = "Force (nN)", color = group_curves_by)
   } else {
     p <- ggplot(plot_df, aes(x = separation_distance_nm, y = force_nN)) +
-      geom_line(
+      geom_path(
         aes(group = interaction(sample, segment)),
         alpha = line_alpha,
         linewidth = 0.35,
@@ -724,8 +724,66 @@ plot_a_curve_metrics <- function(
   y_span <- y_max - y_min
   if (!is.finite(y_span) || y_span <= 0) y_span <- 1
 
-  x_offset <- 0.06 * x_span
-  y_offset <- 0.08 * y_span
+  get_label_anchor <- function(position_key) {
+    if (position_key == "bottom_left") {
+      return(list(
+        x = x_min + 0.08 * x_span,
+        y = y_min + 0.04 * y_span,
+        hjust = 0,
+        vjust = 0
+      ))
+    }
+    if (position_key == "bottom_right") {
+      return(list(
+        x = x_max - 0.08 * x_span,
+        y = y_min + 0.5 * y_span,
+        hjust = 1,
+        vjust = 0
+      ))
+    }
+
+    list(
+      x = x_min + 0.50 * x_span,
+      y = y_max - 0.04 * y_span,
+      hjust = 0.5,
+      vjust = 1
+    )
+  }
+
+  add_fixed_label <- function(plot_obj,
+                              point_x,
+                              point_y,
+                              label_text,
+                              label_color,
+                              position_key,
+                              label_fill = "white") {
+    anchor <- get_label_anchor(position_key)
+
+    plot_obj +
+      annotate(
+        "segment",
+        x = point_x,
+        y = point_y,
+        xend = anchor$x,
+        yend = anchor$y,
+        color = label_color,
+        linewidth = 0.45,
+        alpha = 0.85
+      ) +
+      annotate(
+        "label",
+        x = anchor$x,
+        y = anchor$y,
+        label = label_text,
+        color = label_color,
+        fill = label_fill,
+        size = annotation_text_size,
+        label.size = 0.25,
+        hjust = anchor$hjust,
+        vjust = anchor$vjust,
+        label.padding = grid::unit(0.15, "lines")
+      )
+  }
 
   if (!is.null(xlim) && (!is.numeric(xlim) || length(xlim) != 2 || any(is.na(xlim)))) {
     stop("xlim must be NULL or a numeric vector of length 2.")
@@ -806,9 +864,6 @@ plot_a_curve_metrics <- function(
   }
 
   if (isTRUE(annotate_adhesive_force) && is.finite(adhesive_force_val) && is.finite(adhesive_sep_val)) {
-    adhesive_label_x <- adhesive_sep_val + x_offset
-    adhesive_label_y <- (-1)*adhesive_force_val - y_offset
-
     p <- p +
       geom_point(
         data = data.frame(separation_distance_nm = adhesive_sep_val, force_nN = (-1)*adhesive_force_val),
@@ -816,29 +871,17 @@ plot_a_curve_metrics <- function(
         color = "red",
         size = 3,
         inherit.aes = FALSE
-      ) +
-      geom_segment(
-        data = data.frame(
-          x = adhesive_sep_val,
-          y = (-1)*adhesive_force_val,
-          xend = adhesive_label_x,
-          yend = adhesive_label_y
-        ),
-        aes(x = x, y = y, xend = xend, yend = yend),
-        inherit.aes = FALSE,
-        color = "red",
-        linewidth = 0.4,
-        arrow = ggplot2::arrow(length = grid::unit(0.12, "cm"))
-      ) +
-      annotate(
-        "label",
-        x = adhesive_label_x,
-        y = adhesive_label_y,
-        label = sprintf("Adhesive force = %.3g nN\nSeparation = %.3g nm", adhesive_force_val, adhesive_sep_val),
-        color = "red",
-        fill = "white",
-        size = annotation_text_size
       )
+
+    p <- add_fixed_label(
+      p,
+      point_x = adhesive_sep_val,
+      point_y = (-1) * adhesive_force_val,
+      label_text = sprintf("Adhesive force = %.3g nN\nSeparation = %.3g nm", adhesive_force_val, adhesive_sep_val),
+      label_color = "red",
+      position_key = "bottom_left",
+      label_fill = "white"
+    )
   }
 
   add_distance_annotation <- function(plot_obj, distance, threshold, type) {
@@ -850,29 +893,18 @@ plot_a_curve_metrics <- function(
     interaction_label_color <- if (type == "rupture") interaction_label_color_rupture else interaction_label_color_repulsive
     type_label <- if (type == "rupture") "Rupture" else "Repulsive"
 
-    label_x <- distance + x_offset
-    label_y <- interaction_y + if (type == "rupture") -y_offset else y_offset
+    plot_obj <- plot_obj +
+      annotate("point", x = distance, y = interaction_y, color = "dodgerblue4", size = 2)
 
-    plot_obj +
-      annotate("point", x = distance, y = interaction_y, color = "dodgerblue4", size = 2) +
-      geom_segment(
-        data = data.frame(x = distance, y = interaction_y, xend = label_x, yend = label_y),
-        aes(x = x, y = y, xend = xend, yend = yend),
-        inherit.aes = FALSE,
-        color = interaction_label_color,
-        linewidth = 0.4,
-        arrow = ggplot2::arrow(length = grid::unit(0.12, "cm"))
-      ) +
-      annotate(
-        "label",
-        x = label_x,
-        y = label_y,
-        label = sprintf("%s distance = %.3g nm\n%s threshold = %.3g nN", type_label, distance, type_label, threshold),
-        color = interaction_label_color,
-        fill = interaction_label_fill,
-        hjust = 0,
-        size = annotation_text_size
-      )
+    add_fixed_label(
+      plot_obj,
+      point_x = distance,
+      point_y = interaction_y,
+      label_text = sprintf("%s distance = %.3g nm\n%s threshold = %.3g nN", type_label, distance, type_label, threshold),
+      label_color = interaction_label_color,
+      position_key = if (type == "rupture") "bottom_right" else "top_middle",
+      label_fill = interaction_label_fill
+    )
   }
 
   if (isTRUE(annotate_rupture_distance)) {
@@ -964,10 +996,6 @@ plot_a_curve_metrics <- function(
 
     if (!is.null(xlim) || !is.null(ylim)) {
       p_raw <- p_raw + ggplot2::coord_cartesian(xlim = xlim, ylim = ylim)
-    }
-
-    if (!requireNamespace("cowplot", quietly = TRUE)) {
-      stop("plot_raw = TRUE requires package 'cowplot'. Please install it with install.packages('cowplot').")
     }
 
     return(cowplot::plot_grid(p_raw, p, ncol = 2))
@@ -1311,7 +1339,7 @@ plot_metric_violin <- function(
     if (!is.atomic(color_map) || is.null(names(color_map)) || any(names(color_map) == "")) {
       stop("color_map must be a named atomic vector (e.g., c(A = '#1b9e77', B = '#d95f02')).")
     }
-    color_map <- as.character(color_map)
+    color_map <- stats::setNames(as.character(color_map), trimws(as.character(names(color_map))))
   }
 
   if (!(metric_name %in% colnames(df))) {
@@ -1337,9 +1365,9 @@ plot_metric_violin <- function(
   pairwise_test <- match.arg(pairwise_test)
 
   plot_df <- data.frame(
-    Group = df[[group_by]],
+    Group = trimws(as.character(df[[group_by]])),
     Value = suppressWarnings(as.numeric(df[[metric_name]])),
-    ColorGroup = df[[color_by]],
+    ColorGroup = trimws(as.character(df[[color_by]])),
     stringsAsFactors = FALSE
   )
   if (length(facet_by) > 0) {
@@ -1365,31 +1393,79 @@ plot_metric_violin <- function(
   }
 
   plot_df$Group <- as.factor(plot_df$Group)
+  plot_df$ColorGroup <- as.factor(plot_df$ColorGroup)
+
+  if (!is.null(color_map)) {
+    color_levels <- levels(plot_df$ColorGroup)
+    color_map <- color_map[names(color_map) %in% color_levels]
+    if (length(color_map) == 0) {
+      stop("color_map names do not match any levels in color_by after coercion to character.")
+    }
+    color_map <- color_map[match(color_levels[color_levels %in% names(color_map)], names(color_map))]
+  }
 
   if (nrow(plot_df) == 0) {
     stop("No finite values available for plotting after filtering.")
   }
 
-  p <- ggplot(plot_df, aes(x = Group, y = Value, fill = ColorGroup, color = ColorGroup)) +
-    geom_violin(alpha = violin_alpha, trim = FALSE)
+  use_color_dodge <- !identical(color_by, group_by)
+  dodge_width <- 0.8
+
+  p <- ggplot(plot_df, aes(x = Group, y = Value, fill = ColorGroup, color = ColorGroup))
+
+  if (isTRUE(use_color_dodge)) {
+    p <- p + geom_violin(
+      aes(group = interaction(Group, ColorGroup)),
+      alpha = violin_alpha,
+      trim = FALSE,
+      position = ggplot2::position_dodge(width = dodge_width)
+    )
+  } else {
+    p <- p + geom_violin(alpha = violin_alpha, trim = FALSE)
+  }
 
   if (isTRUE(show_whisker_box)) {
-    p <- p + geom_boxplot(
-      aes(color = ColorGroup, group = Group),
-      width = 0.16,
-      outlier.shape = NA,
-      fill = NA,
-      alpha = 1,
-      linewidth = 0.35
-    )
+    if (isTRUE(use_color_dodge)) {
+      p <- p + geom_boxplot(
+        aes(color = ColorGroup, group = interaction(Group, ColorGroup)),
+        width = 0.16,
+        outlier.shape = NA,
+        fill = NA,
+        alpha = 1,
+        linewidth = 0.35,
+        position = ggplot2::position_dodge(width = dodge_width)
+      )
+    } else {
+      p <- p + geom_boxplot(
+        aes(color = ColorGroup, group = Group),
+        width = 0.16,
+        outlier.shape = NA,
+        fill = NA,
+        alpha = 1,
+        linewidth = 0.35
+      )
+    }
   }
 
   if (isTRUE(add_points)) {
-    p <- p + geom_point(
-      alpha = point_alpha,
-      size = point_size,
-      position = position_jitter(width = jitter_width, height = 0)
-    )
+    if (isTRUE(use_color_dodge)) {
+      p <- p + geom_point(
+        aes(group = interaction(Group, ColorGroup)),
+        alpha = point_alpha,
+        size = point_size,
+        position = ggplot2::position_jitterdodge(
+          jitter.width = jitter_width,
+          jitter.height = 0,
+          dodge.width = dodge_width
+        )
+      )
+    } else {
+      p <- p + geom_point(
+        alpha = point_alpha,
+        size = point_size,
+        position = position_jitter(width = jitter_width, height = 0)
+      )
+    }
   }
 
   if (isTRUE(add_smooth)) {
@@ -1428,10 +1504,6 @@ plot_metric_violin <- function(
   }
 
   if (pairwise_test != "none") {
-    if (!requireNamespace("ggpubr", quietly = TRUE)) {
-      stop("pairwise_test requires package 'ggpubr'. Please install it with install.packages('ggpubr').")
-    }
-
     if (is.null(pairwise_comparisons)) {
       groups <- as.character(stats::na.omit(unique(plot_df$Group)))
       if (length(groups) >= 2) {
@@ -1454,11 +1526,7 @@ plot_metric_violin <- function(
     }
   }
 
-  if (requireNamespace("ggpubr", quietly = TRUE)) {
-    p <- p + ggpubr::theme_pubr(base_size = base_size)
-  } else {
-    p <- p + ggplot2::theme_classic(base_size = base_size)
-  }
+  p <- p + ggpubr::theme_pubr(base_size = base_size)
 
   return(p)
 }
@@ -1530,7 +1598,7 @@ plot_pca_biplot <- function(
     if (!is.atomic(color_map) || is.null(names(color_map)) || any(names(color_map) == "")) {
       stop("color_map must be a named atomic vector (e.g., c(A = '#1b9e77', B = '#d95f02')).")
     }
-    color_map <- as.character(color_map)
+    color_map <- stats::setNames(as.character(color_map), trimws(as.character(names(color_map))))
   }
 
   work_df <- data.frame(df[, unique(c(include_columns, color_by)), drop = FALSE], stringsAsFactors = FALSE)
@@ -1541,6 +1609,7 @@ plot_pca_biplot <- function(
   keep_idx <- stats::complete.cases(work_df[, include_columns, drop = FALSE]) & !is.na(work_df[[color_by]])
   dropped_n <- sum(!keep_idx)
   work_df <- work_df[keep_idx, , drop = FALSE]
+  work_df[[color_by]] <- trimws(as.character(work_df[[color_by]]))
 
   if (dropped_n > 0) {
     message(sprintf("Dropped %d row(s) with missing/non-finite feature values or missing color group.", dropped_n))
@@ -1561,6 +1630,15 @@ plot_pca_biplot <- function(
   scores <- as.data.frame(pca_fit$x[, 1:2, drop = FALSE])
   colnames(scores) <- c("PC1", "PC2")
   scores$ColorGroup <- as.factor(work_df[[color_by]])
+
+  if (!is.null(color_map)) {
+    color_levels <- levels(scores$ColorGroup)
+    color_map <- color_map[names(color_map) %in% color_levels]
+    if (length(color_map) == 0) {
+      stop("color_map names do not match any levels in color_by after coercion to character.")
+    }
+    color_map <- color_map[match(color_levels[color_levels %in% names(color_map)], names(color_map))]
+  }
 
   loadings <- as.data.frame(pca_fit$rotation[, 1:2, drop = FALSE])
   colnames(loadings) <- c("PC1", "PC2")
@@ -1715,13 +1793,6 @@ plot_complex_heatmap <- function(
     stop("show_column_names must be TRUE or FALSE.")
   }
 
-  if (!requireNamespace("ComplexHeatmap", quietly = TRUE)) {
-    stop("This function requires package 'ComplexHeatmap'. Please install it first.")
-  }
-  if (!requireNamespace("circlize", quietly = TRUE)) {
-    stop("This function requires package 'circlize'. Please install it first.")
-  }
-
   work_cols <- unique(c(include_columns, annotate_columns))
   work_df <- data.frame(df[, work_cols, drop = FALSE], stringsAsFactors = FALSE)
 
@@ -1869,11 +1940,6 @@ plot_raw_deflection_heatmap <- function(
   ...
 ) {
   if (!inherits(fdobj, "fdObj")) stop("fdobj must be an object of class 'fdObj'.")
-  for (pkg in c("ComplexHeatmap", "circlize")) {
-    if (!requireNamespace(pkg, quietly = TRUE)) {
-      stop(sprintf("Package '%s' is required. Install it with install.packages('%s').", pkg, pkg))
-    }
-  }
 
   raw_list <- fdobj@rawCurves
   if (length(raw_list) == 0) stop("fdobj@rawCurves is empty.")

@@ -2,7 +2,13 @@
 % Please edit documentation in R/object_constructor.R
 \name{createFdObjFromFolder}
 \alias{createFdObjFromFolder}
-\title{Constructor for fdObj from a folder of AFM force–distance curve files}
+\title{Constructor for fdObj from a folder of AFM force–distance curve files
+Each curve should have the contact region at the beginning of the curve and the non-interaction region 
+at the end of the curve, so that the approach and retract segments can be correctly identified and processed.
+However, different instruments generate curves with different column names, orientations, and conventions,
+so the user must specify which columns correspond to approach and retract distances and deflections,
+and whether any of these columns need to be reversed to ensure the contact and non-interaction regions
+are correctly positioned at the beginning and end of the curve, respectively.}
 \usage{
 createFdObjFromFolder(
   folder,
@@ -13,7 +19,11 @@ createFdObjFromFolder(
   Defl_V_Ex = "Defl_V_Ex",
   Defl_V_Rt = "Defl_V_Rt",
   metadata = NULL,
-  threads = 1
+  threads = 1,
+  reverse_Calc_Ramp_Ex_nm = FALSE,
+  reverse_Calc_Ramp_Rt_nm = TRUE,
+  reverse_Defl_V_Ex = TRUE,
+  reverse_Defl_V_Rt = FALSE
 )
 }
 \arguments{
@@ -34,10 +44,24 @@ createFdObjFromFolder(
 \item{metadata}{Optional data.frame. If provided, file names (excluding the suffix) matched to rownames(metadata) will be read in. Returns error if any files not found.}
 
 \item{threads}{Number of parallel threads to use for file reading. Default = 1 (sequential).}
+
+\item{reverse_Calc_Ramp_Ex_nm}{Logical; reverse approach distance column if TRUE. Default = FALSE.}
+
+\item{reverse_Calc_Ramp_Rt_nm}{Logical; reverse retract distance column if TRUE. Default = TRUE.}
+
+\item{reverse_Defl_V_Ex}{Logical; reverse approach deflection column if TRUE. Default = TRUE.}
+
+\item{reverse_Defl_V_Rt}{Logical; reverse retract deflection column if TRUE. Default = FALSE.}
 }
 \value{
 An object of class \code{fdObj}
 }
 \description{
 Constructor for fdObj from a folder of AFM force–distance curve files
+Each curve should have the contact region at the beginning of the curve and the non-interaction region 
+at the end of the curve, so that the approach and retract segments can be correctly identified and processed.
+However, different instruments generate curves with different column names, orientations, and conventions,
+so the user must specify which columns correspond to approach and retract distances and deflections,
+and whether any of these columns need to be reversed to ensure the contact and non-interaction regions
+are correctly positioned at the beginning and end of the curve, respectively.
 }

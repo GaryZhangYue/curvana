@@ -10,7 +10,9 @@ analyze_baseline(
   useCurve = NULL,
   slp_threshold = 0.001,
   std_threshold = 0.005,
-  threads = 1
+  threads = 1,
+  soft = FALSE,
+  external_sensitivity_column = NULL
 )
 }
 \arguments{
@@ -29,6 +31,15 @@ per-curve span values are read from
 \item{std_threshold}{Numeric. Maximum standard error of the slope (default = 0.005).}
 
 \item{threads}{Integer. Number of parallel threads to use (default = 1).}
+
+\item{soft}{Logical. If \code{TRUE}, use the sensitivity column specified by
+\code{external_sensitivity_column} instead of the default
+\code{sensitivity_V_nm_approach} / \code{sensitivity_V_nm_retract}.
+Default \code{FALSE}.}
+
+\item{external_sensitivity_column}{Character. Name of a column in
+\code{fdObj@metadata} containing sensitivity values. Required when
+\code{soft = TRUE}.}
 }
 \value{
 An updated \code{fdObj} with baseline values in metadata and baseline
@@ -38,5 +49,6 @@ An updated \code{fdObj} with baseline values in metadata and baseline
 }
 \description{
 Identifies baseline segments in AFM raw force-distance curves using pre-calculated sensitivity values,
-and stores baseline values and segments in the fdObj.
+and stores baseline values and segments in the fdObj. As the undulating baseline is defined by forces, 
+the sensitivity is used to convert the deflection signal into force units for accurate baseline filtering.
 }

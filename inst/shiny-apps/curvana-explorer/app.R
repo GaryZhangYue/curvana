@@ -191,37 +191,82 @@ ui <- bs4Dash::dashboardPage(
             status      = "primary",
             solidHeader = TRUE,
             shiny::radioButtons(
-              "data_source", tooltip_label("Data source", "Choose demo extdata bundled with the package or provide your own folder path."),
+              "data_source", tooltip_label("Data source", "Use the package's built-in demo data or provide a folder path to your own raw curves."),
               choices  = c("Built-in demo data" = "demo", "Custom folder path" = "custom"),
               selected = "demo"
             ),
             shiny::conditionalPanel(
               condition = "input.data_source == 'custom'",
               shiny::textInput(
-                "custom_folder", tooltip_label("Folder path", "Folder contains the raw AFM curves."), value = "",
+                "custom_folder", tooltip_label("Folder path", "Path to the folder containing the raw AFM curve files."), value = "",
                 placeholder = "e.g. C:/data/my_experiment"
               ),
-              shiny::textInput("load_suffix", tooltip_label("suffix", "File suffix of the raw AFM curves, e.g. .txt."), value = ".txt"),
-              shiny::textInput("load_pattern", tooltip_label("pattern", "Optional filename pattern used to filter files before loading."), value = ""),
-              shiny::fluidRow(
-                shiny::column(6,
-                  shiny::textInput("load_calc_ramp_ex_nm", tooltip_label("Calc_Ramp_Ex_nm", "Column name for approach distance in raw files."), value = "Calc_Ramp_Ex_nm")
-                ),
-                shiny::column(6,
-                  shiny::textInput("load_calc_ramp_rt_nm", tooltip_label("Calc_Ramp_Rt_nm", "Column name for retract distance in raw files."), value = "Calc_Ramp_Rt_nm")
+              shiny::textInput("load_suffix", tooltip_label("File suffix", "File extension used for the raw AFM curve files, for example, .txt."), value = ".txt"),
+              shiny::textInput("load_pattern", tooltip_label("File name pattern", "Optional filename pattern used to filter files before loading them."), value = ""),
+              shiny::tags$br(),
+              shiny::h4(
+                tooltip_label(
+                  "Data Column Mapping",
+                  paste(
+                    "Each curve should place the contact region at the beginning and the non-interaction region at the end",
+                    "so the approach and retract segments can be identified and processed correctly.",
+                    "Because instruments use different column names, orientations, and naming conventions,",
+                    "you need to specify which columns contain piezo displacement and cantilever deflection for the approach and retract segments,",
+                    "and whether any columns should be reversed so the contact and non-interaction regions are positioned correctly."
+                  )
                 )
               ),
               shiny::fluidRow(
                 shiny::column(6,
-                  shiny::textInput("load_defl_v_ex", tooltip_label("Defl_V_Ex", "Column name for approach deflection in raw files."), value = "Defl_V_Ex")
+                  shiny::fluidRow(
+                    shiny::column(8,
+                      shiny::textInput("load_calc_ramp_ex_nm", tooltip_label("Displacement (approach, nm)", "Column name for piezo displacement in the approach segment of the raw files."), value = "Calc_Ramp_Ex_nm")
+                    ),
+                    shiny::column(4,
+                      shiny::tags$br(),
+                      shiny::checkboxInput("reverse_calc_ramp_ex_nm", tooltip_label("Reverse", "If checked, reverse the order of values before constructing raw curves."), value = FALSE)
+                    )
+                  )
                 ),
                 shiny::column(6,
-                  shiny::textInput("load_defl_v_rt", tooltip_label("Defl_V_Rt", "Column name for retract deflection in raw files."), value = "Defl_V_Rt")
+                  shiny::fluidRow(
+                    shiny::column(8,
+                      shiny::textInput("load_calc_ramp_rt_nm", tooltip_label("Displacement (retract, nm)", "Column name for piezo displacement in the retract segment of the raw files."), value = "Calc_Ramp_Rt_nm")
+                    ),
+                    shiny::column(4,
+                      shiny::tags$br(),
+                      shiny::checkboxInput("reverse_calc_ramp_rt_nm", tooltip_label("Reverse", "If checked, reverse the order of values before constructing raw curves."), value = TRUE)
+                    )
+                  )
+                )
+              ),
+              shiny::fluidRow(
+                shiny::column(6,
+                  shiny::fluidRow(
+                    shiny::column(8,
+                      shiny::textInput("load_defl_v_ex", tooltip_label("Deflection (approach, V)", "Column name for cantilever deflection in the approach segment of the raw files."), value = "Defl_V_Ex")
+                    ),
+                    shiny::column(4,
+                      shiny::tags$br(),
+                      shiny::checkboxInput("reverse_defl_v_ex", tooltip_label("Reverse", "If checked, reverse the order of values before constructing raw curves."), value = TRUE)
+                    )
+                  )
+                ),
+                shiny::column(6,
+                  shiny::fluidRow(
+                    shiny::column(8,
+                      shiny::textInput("load_defl_v_rt", tooltip_label("Deflection (retract, V)", "Column name for cantilever deflection in the retract segment of the raw files."), value = "Defl_V_Rt")
+                    ),
+                    shiny::column(4,
+                      shiny::tags$br(),
+                      shiny::checkboxInput("reverse_defl_v_rt", tooltip_label("Reverse", "If checked, reverse the order of values before constructing raw curves."), value = FALSE)
+                    )
+                  )
                 )
               ),
               shiny::checkboxInput(
                 "use_metadata_for_load",
-                tooltip_label("Use uploaded metadata", "When enabled, used the metadata uploaded here to select raw curve files in the folder"),
+                tooltip_label("Use uploaded metadata", "When enabled, use the uploaded metadata file to select which raw curve files to load from the folder."),
                 value = FALSE
               ),
               shiny::conditionalPanel(
@@ -243,7 +288,7 @@ ui <- bs4Dash::dashboardPage(
                                       icon = shiny::icon("file-import"))
                 )
               ),
-              shiny::numericInput("threads_load", tooltip_label("Threads", "Number of parallel workers used for loading files."), value = 1, min = 1, step = 1)
+              shiny::numericInput("threads_load", tooltip_label("Threads", "Number of parallel workers to use when loading files."), value = 1, min = 1, step = 1)
             ),
             shiny::tags$div(
               style = "margin-top:12px;",
@@ -263,10 +308,10 @@ ui <- bs4Dash::dashboardPage(
             width  = 12,
             status = "secondary",
             shiny::fluidRow(
-              shiny::column(3, shiny::textInput("new_meta_col_name", tooltip_label("New column name", "Name of the new metadata column to add to all samples."), value = "")),
-              shiny::column(3, shiny::selectInput("new_meta_col_type", tooltip_label("Column type", "Data type used for the new metadata column values."),
+              shiny::column(3, shiny::textInput("new_meta_col_name", tooltip_label("New column name", "Name of the metadata column to add."), value = "")),
+              shiny::column(3, shiny::selectInput("new_meta_col_type", tooltip_label("Column type", "Data type to use for the new metadata column."),
                 choices = c("character", "numeric", "integer", "logical"), selected = "character")),
-              shiny::column(3, shiny::textInput("new_meta_col_default", tooltip_label("Default value", "Initial value filled for all rows in the new metadata column."), value = "")),
+              shiny::column(3, shiny::textInput("new_meta_col_default", tooltip_label("Default value", "Initial value to fill into all rows of the new metadata column."), value = "")),
               shiny::column(3, shiny::tags$br(),
                 shiny::actionButton("add_meta_col_btn", "Add column", class = "btn-secondary"))
             ),
@@ -300,18 +345,18 @@ ui <- bs4Dash::dashboardPage(
               "This heatmap provides a quick overview of raw deflection behavior across all loaded curves before transformation. Each column corresponds to one curve segment (approach or retract), each row corresponds to the data point index, and colors reflect min-max scaled deflection values within each curve. Use the annotation columns to compare sample groupings and the tick interval to control row-axis readability."
             ),
             shiny::fluidRow(
-              shiny::column(3, shiny::selectInput("raw_anno_col1", tooltip_label("Annotate col 1", "First metadata column used for top annotation on raw heatmap."),
+              shiny::column(3, shiny::selectInput("raw_anno_col1", tooltip_label("Annotate col 1", "First metadata column used for the top annotation on the raw heatmap."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(3, shiny::selectInput("raw_anno_col2", tooltip_label("Annotate col 2", "Second metadata column used for top annotation on raw heatmap."),
+              shiny::column(3, shiny::selectInput("raw_anno_col2", tooltip_label("Annotate col 2", "Second metadata column used for the top annotation on the raw heatmap."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(3, shiny::numericInput("heatmap_tick_interval", tooltip_label("Row tick interval", "Index interval used for row tick marks on the heatmap."),
+              shiny::column(3, shiny::numericInput("heatmap_tick_interval", tooltip_label("Row tick interval", "Spacing between row tick marks on the heatmap index axis."),
                 value = 100, min = 1, step = 1)),
               shiny::column(3,
                 shiny::tags$br(),
                 shiny::actionButton("plot_raw_heatmap_btn", "Plot", class = "btn-warning btn-block", icon = shiny::icon("chart-area"))
               )
             ),
-            tooltip_plot("raw_heatmap", "740px", "Min-max scaled raw deflection heatmap. Columns are sample segments (approach/retract), rows are measurement index."),
+            tooltip_plot("raw_heatmap", "740px", "Min-max scaled raw deflection heatmap. Columns represent sample segments, approach or retract, and rows represent measurement indices."),
             shiny::fluidRow(
               shiny::column(3, shiny::numericInput("raw_heatmap_download_width", tooltip_label("Download width (in)", "Width in inches for exported heatmap image."), value = 12, min = 1, step = 0.5)),
               shiny::column(3, shiny::numericInput("raw_heatmap_download_height", tooltip_label("Download height (in)", "Height in inches for exported heatmap image."), value = 9, min = 1, step = 0.5)),
@@ -330,26 +375,51 @@ ui <- bs4Dash::dashboardPage(
             status      = "warning",
             solidHeader = TRUE,
             shiny::fluidRow(
+              shiny::column(6,
+                shiny::checkboxInput(
+                  "transform_approach",
+                  tooltip_label("Transform approach curves", "Uncheck to skip transforming approach curves."),
+                  value = TRUE
+                )
+              ),
+              shiny::column(6,
+                shiny::checkboxInput(
+                  "transform_retract",
+                  tooltip_label("Transform retract curves", "Uncheck to skip transforming retract curves."),
+                  value = TRUE
+                )
+              )
+            ),
+            shiny::fluidRow(
               shiny::column(
                 width = 6,
                 bs4Dash::bs4Card(
                   title = "Approach Curve Settings",
                   width = NULL,
                   collapsible = TRUE,
-                  shiny::numericInput("spring_constant_approach", tooltip_label("Spring constant (N/m)", "Cantilever spring constant used to convert deflection to force during approach transform."), value = 0.08, min = 0),
+                  shiny::radioButtons("spring_constant_mode_approach", tooltip_label("Spring constant source", "Choose whether to use one fixed spring constant for all curves or read per-curve values from a metadata column."),
+                    choices = c("Fixed value" = "fixed", "Metadata column" = "column"), selected = "fixed", inline = TRUE),
+                  shiny::conditionalPanel(
+                    condition = "input.spring_constant_mode_approach == 'fixed'",
+                    shiny::numericInput("spring_constant_value_approach", tooltip_label("Spring constant (nN/nm)", "Cantilever spring constant applied to all approach curves."), value = 0.08, min = 0, step = 0.001)
+                  ),
+                  shiny::conditionalPanel(
+                    condition = "input.spring_constant_mode_approach == 'column'",
+                    shiny::selectInput("spring_constant_col_approach", tooltip_label("Spring constant column", "Metadata column containing per-curve spring constant values in nN/nm."), choices = character(0))
+                  ),
                   shiny::checkboxInput("denoise_first_approach", tooltip_label("Denoise with Savitzky-Golay filter", "Apply Savitzky-Golay smoothing before baseline and sensitivity calculations for approach curves."), value = TRUE),
                   shiny::fluidRow(
-                    shiny::column(6, shiny::numericInput("denoise_p_approach", tooltip_label("Polynomial Degree", "Savitzky-Golay polynomial order p."), value = 1, min = 0, step = 1)),
-                    shiny::column(6, shiny::numericInput("denoise_n_approach", tooltip_label("Window Size", "Savitzky-Golay window size n (odd integer)."), value = 3, min = 3, step = 2)),
-                    shiny::column(6, shiny::numericInput("denoise_m_approach", tooltip_label("Derivative Order", "Savitzky-Golay derivative order m; set to 0 for denoising."), value = 0, min = 0, step = 1)),
-                    shiny::column(6, shiny::numericInput("denoise_ts_approach", tooltip_label("Sample Spacing", "Sampling interval ts used in Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
+                    shiny::column(6, shiny::numericInput("denoise_p_approach", tooltip_label("Polynomial degree", "Polynomial order p used by the Savitzky-Golay filter."), value = 1, min = 0, step = 1)),
+                    shiny::column(6, shiny::numericInput("denoise_n_approach", tooltip_label("Window size", "Window size n used by the Savitzky-Golay filter. This must be an odd integer."), value = 3, min = 3, step = 2)),
+                    shiny::column(6, shiny::numericInput("denoise_m_approach", tooltip_label("Derivative order", "Derivative order m used by the Savitzky-Golay filter. Use 0 for standard denoising."), value = 0, min = 0, step = 1)),
+                    shiny::column(6, shiny::numericInput("denoise_ts_approach", tooltip_label("Sample spacing", "Sampling interval ts used by the Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
                   ),
                   shiny::hr(),
                   shiny::h5("Baseline span", style = "font-size: 18px; font-weight: bold;"),
                   shiny::fluidRow(
-                    shiny::column(6, shiny::selectInput("least_mode_approach", tooltip_label("Mode", "fixed: use least_length value; automatic: use baseline_span_approach in metadata."),
+                    shiny::column(6, shiny::selectInput("least_mode_approach", tooltip_label("Mode", "Choose 'fixed' to use the value in least_length, or 'automatic' to use the column 'baseline_span_approach' from the metadata."),
                       choices = c("fixed", "automatic"), selected = "fixed")),
-                    shiny::column(6, shiny::numericInput("least_length_approach", tooltip_label("least_length", "Minimum baseline span length for approach curve; this value is only used when selecting 'fixed' mode for baseline span determination."),
+                    shiny::column(6, shiny::numericInput("least_length_approach", tooltip_label("Least length", "Minimum baseline span from the right side of the curve in terms of the number of data points for the approach curve. This value is used only when baseline mode is set to 'fixed'."),
                       value = 100, min = 1, step = 1))
                   ),
                   shiny::hr(),
@@ -360,8 +430,25 @@ ui <- bs4Dash::dashboardPage(
                     value = 0.01, min = 0, step = 0.001),
                   shiny::hr(),
                   shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
-                  shiny::numericInput("sens_end_approach", tooltip_label("End of Contact region", "Maximum number of data points to use for approach sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
-                  shiny::hr(),
+                  shiny::numericInput("sens_end_approach", tooltip_label("End of contact region", "Maximum number of data points from the left side of the curve to use for sensitivity calibration."), value = 100, min = 1, step = 1),
+                  shiny::numericInput("intv_approach", tooltip_label("Chunk size (intv)", "Number of data points added per iteration when building the linear sensitivity segment."), value = 4, min = 1, step = 1),
+                  shiny::numericInput("R_squared_min_approach", tooltip_label("R² minimum", "Minimum R² threshold for accepting a segment as sufficiently linear during sensitivity calculation."), value = 0.99, min = 0, max = 1, step = 0.001),
+                  shiny::numericInput("minimum_length_approach", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
+                  shiny::checkboxInput("soft_approach", tooltip_label("Soft substrate", "Enable this if the curves were measured on a soft substrate. You will need to provide the probe sensitivity measured on a hard reference surface."), value = FALSE),
+                  shiny::conditionalPanel(
+                    condition = "input.soft_approach == true",
+                    shiny::radioButtons("soft_sens_mode_approach", tooltip_label("Probe sensitivity source", "Choose whether to use one fixed probe sensitivity for all curves or read per-curve values from a metadata column."),
+                      choices = c("Fixed value" = "fixed", "Metadata column" = "column"), selected = "fixed", inline = TRUE),
+                    shiny::conditionalPanel(
+                      condition = "input.soft_sens_mode_approach == 'fixed'",
+                      shiny::numericInput("soft_sens_value_approach", tooltip_label("Probe sensitivity (V/nm)", "Probe sensitivity measured on a hard reference surface and applied to all curves."), value = NA, step = 0.0001)
+                    ),
+                    shiny::conditionalPanel(
+                      condition = "input.soft_sens_mode_approach == 'column'",
+                      shiny::selectInput("soft_sens_col_approach", tooltip_label("Sensitivity column", "Metadata column containing per-curve probe sensitivity values measured on a hard reference surface."), choices = character(0))
+                    )
+                  ),
+                    shiny::hr(),
                   shiny::numericInput("threads_transform_approach", tooltip_label("Threads", "Number of workers used for transforming approach curves."), value = 1, min = 1, step = 1)
                 )
               ),
@@ -371,20 +458,29 @@ ui <- bs4Dash::dashboardPage(
                   title = "Retract Curve Settings",
                   width = NULL,
                   collapsible = TRUE,
-                  shiny::numericInput("spring_constant_retract", tooltip_label("Spring constant (N/m)", "Cantilever spring constant used to convert deflection to force during retract transform."), value = 0.08, min = 0),
+                  shiny::radioButtons("spring_constant_mode_retract", tooltip_label("Spring constant source", "Choose whether to use one fixed spring constant for all curves or read per-curve values from a metadata column."),
+                    choices = c("Fixed value" = "fixed", "Metadata column" = "column"), selected = "fixed", inline = TRUE),
+                  shiny::conditionalPanel(
+                    condition = "input.spring_constant_mode_retract == 'fixed'",
+                    shiny::numericInput("spring_constant_value_retract", tooltip_label("Spring constant (nN/nm)", "Cantilever spring constant applied to all retract curves."), value = 0.08, min = 0, step = 0.001)
+                  ),
+                  shiny::conditionalPanel(
+                    condition = "input.spring_constant_mode_retract == 'column'",
+                    shiny::selectInput("spring_constant_col_retract", tooltip_label("Spring constant column", "Metadata column containing per-curve spring constant values in nN/nm."), choices = character(0))
+                  ),
                   shiny::checkboxInput("denoise_first_retract", tooltip_label("Denoise with Savitzky-Golay filter", "Apply Savitzky-Golay smoothing before baseline and sensitivity calculations for retract curves."), value = TRUE),
                   shiny::fluidRow(
-                    shiny::column(6, shiny::numericInput("denoise_p_retract", tooltip_label("Polynomial Degree", "Savitzky-Golay polynomial order p."), value = 1, min = 0, step = 1)),
-                    shiny::column(6, shiny::numericInput("denoise_n_retract", tooltip_label("Window Size", "Savitzky-Golay window size n (odd integer)."), value = 3, min = 3, step = 2)),
-                    shiny::column(6, shiny::numericInput("denoise_m_retract", tooltip_label("Derivative Order", "Savitzky-Golay derivative order m; set to 0 for denoising."), value = 0, min = 0, step = 1)),
-                    shiny::column(6, shiny::numericInput("denoise_ts_retract", tooltip_label("Sample Spacing", "Sampling interval ts used in Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
+                    shiny::column(6, shiny::numericInput("denoise_p_retract", tooltip_label("Polynomial degree", "Polynomial order p used by the Savitzky-Golay filter."), value = 1, min = 0, step = 1)),
+                    shiny::column(6, shiny::numericInput("denoise_n_retract", tooltip_label("Window size", "Window size n used by the Savitzky-Golay filter. This must be an odd integer."), value = 3, min = 3, step = 2)),
+                    shiny::column(6, shiny::numericInput("denoise_m_retract", tooltip_label("Derivative order", "Derivative order m used by the Savitzky-Golay filter. Use 0 for standard denoising."), value = 0, min = 0, step = 1)),
+                    shiny::column(6, shiny::numericInput("denoise_ts_retract", tooltip_label("Sample spacing", "Sampling interval ts used by the Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
                   ),
                   shiny::hr(),
                   shiny::h5("Baseline span", style = "font-size: 18px; font-weight: bold;"),
                   shiny::fluidRow(
-                    shiny::column(6, shiny::selectInput("least_mode_retract", tooltip_label("Mode", "fixed: use least_length value; automatic: use baseline_span_retract in metadata."),
+                    shiny::column(6, shiny::selectInput("least_mode_retract", tooltip_label("Mode", "Choose 'fixed' to use the value in least_length, or 'automatic' to use baseline_span_retract from the metadata."),
                       choices = c("fixed", "automatic"), selected = "fixed")),
-                    shiny::column(6, shiny::numericInput("least_length_retract", tooltip_label("least_length", "Minimum baseline span length for retract curve; this value is only used when selecting 'fixed' mode for baseline span determination."),
+                    shiny::column(6, shiny::numericInput("least_length_retract", tooltip_label("Least length", "Minimum baseline span from the right side of the curve in terms of the number of data points for the retract curve. This value is used only when baseline mode is set to 'fixed'."),
                       value = 100, min = 1, step = 1))
                   ),
                   shiny::hr(),
@@ -395,8 +491,25 @@ ui <- bs4Dash::dashboardPage(
                     value = 0.01, min = 0, step = 0.001),
                   shiny::hr(),
                   shiny::h5("Sensitivity Calculation", style = "font-size: 18px; font-weight: bold;"),
-                  shiny::numericInput("sens_end_retract", tooltip_label("End of Contact region", "Maximum number of data points to use for retract sensitivity calibration from initial contact."), value = 100, min = 1, step = 1),
-                  shiny::hr(),
+                  shiny::numericInput("sens_end_retract", tooltip_label("End of contact region", "Maximum number of data points from the left side of the curve to use for sensitivity calibration."), value = 100, min = 1, step = 1),
+                  shiny::numericInput("intv_retract", tooltip_label("Chunk size (intv)", "Number of data points added per iteration when building the linear sensitivity segment."), value = 4, min = 1, step = 1),
+                  shiny::numericInput("R_squared_min_retract", tooltip_label("R² minimum", "Minimum R² threshold for accepting a segment as sufficiently linear during sensitivity calculation."), value = 0.99, min = 0, max = 1, step = 0.001),
+                  shiny::numericInput("minimum_length_retract", tooltip_label("Minimum segment length", "Minimum number of accumulated points required for a valid sensitivity result. If the segment is shorter, sensitivity is reported as NA."), value = 4, min = 1, step = 1),
+                  shiny::checkboxInput("soft_retract", tooltip_label("Soft substrate", "Enable this if the curves were measured on a soft substrate. You will need to provide the probe sensitivity measured on a hard reference surface."), value = FALSE),
+                  shiny::conditionalPanel(
+                    condition = "input.soft_retract == true",
+                    shiny::radioButtons("soft_sens_mode_retract", tooltip_label("Probe sensitivity source", "Choose whether to use one fixed probe sensitivity for all curves or read per-curve values from a metadata column."),
+                      choices = c("Fixed value" = "fixed", "Metadata column" = "column"), selected = "fixed", inline = TRUE),
+                    shiny::conditionalPanel(
+                      condition = "input.soft_sens_mode_retract == 'fixed'",
+                      shiny::numericInput("soft_sens_value_retract", tooltip_label("Probe sensitivity (V/nm)", "Probe sensitivity measured on a hard reference surface and applied to all curves."), value = NA, step = 0.0001)
+                    ),
+                    shiny::conditionalPanel(
+                      condition = "input.soft_sens_mode_retract == 'column'",
+                      shiny::selectInput("soft_sens_col_retract", tooltip_label("Sensitivity column", "Metadata column containing per-curve probe sensitivity values measured on a hard reference surface."), choices = character(0))
+                    )
+                  ),
+                    shiny::hr(),
                   shiny::numericInput("threads_transform_retract", tooltip_label("Threads", "Number of workers used for transforming retract curves."), value = 1, min = 1, step = 1)
                 )
               )
@@ -416,16 +529,16 @@ ui <- bs4Dash::dashboardPage(
             status = "warning",
             solidHeader = TRUE,
             shiny::fluidRow(
-              shiny::column(4, shiny::selectInput("raw_group_by", tooltip_label("Color by", "Metadata column used for grouping/color in raw deflection curves."),
+              shiny::column(4, shiny::selectInput("raw_group_by", tooltip_label("Color by", "Metadata column used to color the raw deflection curves."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(4, shiny::selectInput("raw_split_by", tooltip_label("Split by", "Metadata column used for panel split in raw deflection curves."),
+              shiny::column(4, shiny::selectInput("raw_split_by", tooltip_label("Split by", "Metadata column used to split the raw deflection curves into panels."),
                 choices = c("None" = ""), selected = "")),
               shiny::column(4,
                 shiny::tags$br(),
                 shiny::actionButton("plot_raw_curves_btn", "Plot", class = "btn-warning btn-block", icon = shiny::icon("chart-line"))
               )
             ),
-            tooltip_plot("raw_curves_plot", "640px", "Raw deflection curves across samples. Use Group by / Split by to compare metadata-defined groups."),
+            tooltip_plot("raw_curves_plot", "640px", "Raw deflection curves across samples. Use Color by and Split by to compare groups defined in the metadata."),
             shiny::fluidRow(
               shiny::column(3, shiny::numericInput("raw_curves_download_width", tooltip_label("Download width (in)", "Width in inches for exported raw deflection curves plot."), value = 12, min = 1, step = 0.5)),
               shiny::column(3, shiny::numericInput("raw_curves_download_height", tooltip_label("Download height (in)", "Height in inches for exported raw deflection curves plot."), value = 8, min = 1, step = 0.5)),
@@ -441,16 +554,22 @@ ui <- bs4Dash::dashboardPage(
             status = "warning",
             solidHeader = TRUE,
             shiny::fluidRow(
-              shiny::column(4, shiny::selectInput("fd_group_by", tooltip_label("Color by", "Metadata column used for grouping/color in transformed FD curves."),
+              shiny::column(4, shiny::selectInput("fd_group_by", tooltip_label("Color by", "Metadata column used to color the transformed force-distance curves."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(4, shiny::selectInput("fd_split_by", tooltip_label("Split by", "Metadata column used for panel split in transformed FD curves."),
+              shiny::column(4, shiny::selectInput("fd_split_by", tooltip_label("Split by", "Metadata column used to split the transformed force-distance curves into panels."),
                 choices = c("None" = ""), selected = "")),
               shiny::column(4,
                 shiny::tags$br(),
                 shiny::actionButton("plot_fd_curves_btn", "Plot", class = "btn-warning btn-block", icon = shiny::icon("chart-line"))
               )
             ),
-            tooltip_plot("fd_curves_plot", "640px", "Transformed force-distance curves generated by transform_curves for available curve segments."),
+            shiny::fluidRow(
+              shiny::column(3, shiny::numericInput("fd_xmin", tooltip_label("X min", "Lower x-axis limit (separation distance, nm). Leave blank for auto."), value = NA, step = 1)),
+              shiny::column(3, shiny::numericInput("fd_xmax", tooltip_label("X max", "Upper x-axis limit (separation distance, nm). Leave blank for auto."), value = NA, step = 1)),
+              shiny::column(3, shiny::numericInput("fd_ymin", tooltip_label("Y min", "Lower y-axis limit (force, nN). Leave blank for auto."), value = NA, step = 0.1)),
+              shiny::column(3, shiny::numericInput("fd_ymax", tooltip_label("Y max", "Upper y-axis limit (force, nN). Leave blank for auto."), value = NA, step = 0.1))
+            ),
+            tooltip_plot("fd_curves_plot", "640px", "Transformed force-distance curves."),
             shiny::fluidRow(
               shiny::column(3, shiny::numericInput("fd_curves_download_width", tooltip_label("Download width (in)", "Width in inches for exported transformed FD curves plot."), value = 12, min = 1, step = 0.5)),
               shiny::column(3, shiny::numericInput("fd_curves_download_height", tooltip_label("Download height (in)", "Height in inches for exported transformed FD curves plot."), value = 8, min = 1, step = 0.5)),
@@ -481,16 +600,16 @@ ui <- bs4Dash::dashboardPage(
             collapsible = TRUE,
 
             shiny::checkboxInput("analyze_approach",
-              tooltip_label("Analyze approach curves", "Uncheck to skip approach curve analysis (e.g. if approach curves are absent or not needed."),
+              tooltip_label("Analyze approach curves", "Uncheck this to skip analysis of approach curves, for example if they are absent or not needed."),
               value = TRUE),
             shiny::conditionalPanel(
               condition = "input.analyze_approach == true",
             shiny::h6(shiny::strong("Noise Band Estimation")),
             shiny::textInput("noise_baseline_span_approach",
-              tooltip_label("Window size", "Number of terminal points used for noise band estimation. For example, for a curve with 512 points, setting this to 100 uses indices 413–512. Set to 'automatic' to use the predefined baseline segment."),
+              tooltip_label("Window size", "Number of end-of-curve points used for noise-band estimation. For example, in a curve with 512 points, setting this to 100 uses points 413-512. Set this to 'automatic' to use the predefined baseline segment."),
               value = "automatic"),
             shiny::selectInput("noise_threshold_method_approach",
-              tooltip_label("Noise band size estimation method", "Method used to estimate the noise band. sd: standard deviation of force values in the baseline segment; mad: median absolute deviation of force values in the baseline segment; quantile: quantile range of force values in the baseline segment, defined by the low and high quantile; fixed: use fixed noise threshold values defined by the user."),
+              tooltip_label("Noise band estimation method", "Method used to estimate the noise band. sd uses the standard deviation of force values in the baseline segment; mad uses the median absolute deviation; quantile uses a quantile range defined by the low and high quantiles; fixed uses user-defined threshold values."),
               choices = c("sd", "mad", "quantile", "fixed"), selected = "sd"),
             shiny::conditionalPanel(
               condition = "input.noise_threshold_method_approach == 'mad'",
@@ -521,38 +640,38 @@ ui <- bs4Dash::dashboardPage(
               )
             ),
             shiny::numericInput("noise_multiplier_approach",
-              tooltip_label("Noise band multiplier", "Multiplier applied to the band defined with the method selected above to adjust the band size (used for all methods)."),
+              tooltip_label("Noise band multiplier", "Multiplier applied to the noise band estimated by the selected method to scale the width of the noise band. For example, setting this to 3 means the noise band extends 3 times above and below the estimated noise level."),
               value = 3, min = 0, step = 0.1),
 
             shiny::hr(),
             shiny::h6(shiny::strong("Metrics to Compute")),
             shiny::checkboxInput("do_adhesive_force_approach",
-              tooltip_label("Adhesive force", "Calculate the maximum adhesive force in the curve (the absolute value of the most negative force value in the curve)."), value = TRUE),
+              tooltip_label("Adhesive force", "Calculate the maximum adhesive force in the curve, defined as the absolute value of the most negative force."), value = TRUE),
             shiny::checkboxInput("do_energy_approach",
-              tooltip_label("Energies", "Calculate adhesive and repulsive interaction energies. Adhesive energy: the total area above the curve and below the lower bound of the noise band; repulsive energy: the total area below the curve and above the upper bound of the noise band (in the first quadrant)."), value = TRUE),
+              tooltip_label("Energies", "Calculate adhesive and repulsive interaction energies. Adhesive energy is the area above the curve and below the lower noise-band bound in the IV quadrant. Repulsive energy is the area below the curve and above the upper noise-band bound in the first quadrant."), value = TRUE),
             shiny::checkboxInput("do_rupture_approach",
-              tooltip_label("Rupture distance", "Calculate adhesive/rupture distance. The function scans the curve from right to left to look for the first point where force < lower bound of noise band (i.e., where the curve enters the adhesive region)."), value = TRUE),
+              tooltip_label("Rupture distance", "Calculate the adhesive or rupture distance. The curve is scanned from right to left to find the first point where force falls below the lower noise-band bound, indicating entry into the adhesive region."), value = TRUE),
             shiny::conditionalPanel(
               condition = "input.do_rupture_approach == true",
               shiny::fluidRow(
                 shiny::column(8, shiny::textInput("rupture_baseline_span_approach",
-                  tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
+                  tooltip_label("Exclusion cutoff", "Points after this cutoff are excluded from scanning. For example, if a curve has 512 points and this is set to 100, points 413-512 are excluded from scanning. Set this to 'automatic' to exclude the predefined baseline segment."),
                   value = "automatic")),
                 shiny::column(4, shiny::numericInput("rupture_min_consecutive_approach",
-                  tooltip_label("Min consecutive", "Minimum number of consecutive points below the noise band required to call an adhesive event."),
+                  tooltip_label("Min consecutive", "Minimum number of consecutive points below the noise band required to classify that the curve has entered the adhesive region."),
                   value = 3, min = 1, step = 1))
               )
             ),
             shiny::checkboxInput("do_repulsive_approach",
-              tooltip_label("Repulsive distance", "Calculate repulsive distance. The function scans the curve from left to right to look for the last point where force > upper bound of noise band (i.e., where the curve exits the repulsive region)"), value = TRUE),
+              tooltip_label("Repulsive distance", "Calculate the repulsive distance. The curve is scanned from left to right to find the last point where force remains above the upper noise-band bound, indicating the end of the repulsive region."), value = TRUE),
             shiny::conditionalPanel(
               condition = "input.do_repulsive_approach == true",
               shiny::fluidRow(
                 shiny::column(8, shiny::textInput("repulsive_baseline_span_approach",
-                  tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
+                  tooltip_label("Exclusion cutoff", "Points after this cutoff are excluded from scanning. For example, if a curve has 512 points and this is set to 100, points 413-512 are excluded from scanning. Set this to 'automatic' to exclude the predefined baseline segment."),
                   value = "automatic")),
                 shiny::column(4, shiny::numericInput("repulsive_min_consecutive_approach",
-                  tooltip_label("Min consecutive", "Minimum number of consecutive points above the noise band required to call a repulsive event."),
+                  tooltip_label("Min consecutive", "Minimum number of consecutive points above the noise band required to call a repulsive event.  Because the curve is expected to begin in the repulsive region, this is generally set to 1."),
                   value = 1, min = 1, step = 1))
               )
             )
@@ -568,16 +687,16 @@ ui <- bs4Dash::dashboardPage(
             collapsible = TRUE,
 
             shiny::checkboxInput("analyze_retract",
-              tooltip_label("Analyze retract curves", "Uncheck to skip retract curve analysis (e.g. if retract curves are absent or not needed)."),
+              tooltip_label("Analyze retract curves", "Uncheck this to skip analysis of retract curves, for example if they are absent or not needed."),
               value = TRUE),
             shiny::conditionalPanel(
               condition = "input.analyze_retract == true",
             shiny::h6(shiny::strong("Noise Band Estimation")),
             shiny::textInput("noise_baseline_span_retract",
-              tooltip_label("Window size", "Number of terminal points used for noise band estimation. For example, for a curve with 512 points, setting this to 100 uses indices 413–512. Set to 'automatic' to use the predefined baseline segment."),
+              tooltip_label("Window size", "Number of end-of-curve points used for noise-band estimation. For example, in a curve with 512 points, setting this to 100 uses points 413-512. Set this to 'automatic' to use the predefined baseline segment."),
               value = "automatic"),
             shiny::selectInput("noise_threshold_method_retract",
-              tooltip_label("Noise band size estimation method", "Method used to estimate the noise band. sd: standard deviation of force values in the baseline segment; mad: median absolute deviation of force values in the baseline segment; quantile: quantile range of force values in the baseline segment, defined by the low and high quantile; fixed: use fixed noise threshold values defined by the user."),
+              tooltip_label("Noise band estimation method", "Method used to estimate the noise band. sd uses the standard deviation of force values in the baseline segment; mad uses the median absolute deviation; quantile uses a quantile range defined by the low and high quantiles; fixed uses user-defined threshold values."),
               choices = c("sd", "mad", "quantile", "fixed"), selected = "sd"),
             shiny::conditionalPanel(
               condition = "input.noise_threshold_method_retract == 'mad'",
@@ -608,38 +727,38 @@ ui <- bs4Dash::dashboardPage(
               )
             ),
             shiny::numericInput("noise_multiplier_retract",
-              tooltip_label("Noise band multiplier", "Multiplier applied to the band defined with the method selected above to adjust the band size (used for all methods)."),
+              tooltip_label("Noise band multiplier", "Multiplier applied to the noise band estimated by the selected method to scale the width of the noise band. For example, setting this to 3 means the noise band extends 3 times above and below the estimated noise level."),
               value = 3, min = 0, step = 0.1),
 
             shiny::hr(),
             shiny::h6(shiny::strong("Metrics to Compute")),
             shiny::checkboxInput("do_adhesive_force_retract",
-              tooltip_label("Adhesive force", "Calculate the maximum adhesive force in the curve (the absolute value of the most negative force value in the curve)."), value = TRUE),
+              tooltip_label("Adhesive force", "Calculate the maximum adhesive force in the curve, defined as the absolute value of the most negative force."), value = TRUE),
             shiny::checkboxInput("do_energy_retract",
-              tooltip_label("Energies", "Calculate adhesive and repulsive interaction energies. Adhesive energy: the total area above the curve and below the lower bound of the noise band; repulsive energy: the total area below the curve and above the upper bound of the noise band (in the first quadrant)."), value = TRUE),
+              tooltip_label("Energies", "Calculate adhesive and repulsive interaction energies. Adhesive energy is the area above the curve and below the lower noise-band bound in the IV quadrant. Repulsive energy is the area below the curve and above the upper noise-band bound in the first quadrant."), value = TRUE),
             shiny::checkboxInput("do_rupture_retract",
-              tooltip_label("Rupture distance", "Calculate adhesive/rupture distance. The function scans the curve from right to left to look for the first point where force < lower bound of noise band (i.e., where the curve enters the adhesive region)."), value = TRUE),
+              tooltip_label("Rupture distance", "Calculate the adhesive or rupture distance. The curve is scanned from right to left to find the first point where force falls below the lower noise-band bound, indicating entry into the adhesive region."), value = TRUE),
             shiny::conditionalPanel(
               condition = "input.do_rupture_retract == true",
               shiny::fluidRow(
                 shiny::column(8, shiny::textInput("rupture_baseline_span_retract",
-                  tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
+                  tooltip_label("Exclusion cutoff", "Points after this cutoff are excluded from scanning. For example, if a curve has 512 points and this is set to 100, points 413-512 are excluded from scanning. Set this to 'automatic' to exclude the predefined baseline segment."),
                   value = "automatic")),
                 shiny::column(4, shiny::numericInput("rupture_min_consecutive_retract",
-                  tooltip_label("Min consecutive", "Minimum number of consecutive points below the noise band required to call a adhesive event."),
+                  tooltip_label("Min consecutive", "Minimum number of consecutive points below the noise band required to classify that the curve has entered the adhesive region."),
                   value = 3, min = 1, step = 1))
               )
             ),
             shiny::checkboxInput("do_repulsive_retract",
-              tooltip_label("Repulsive distance", "Calculate repulsive distance The function scans the curve from left to right to look for the last point where force > upper bound of noise band (i.e., where the curve exits the repulsive region)"), value = TRUE),
+              tooltip_label("Repulsive distance", "Calculate the repulsive distance. The curve is scanned from left to right to find the last point where force remains above the upper noise-band bound, indicating the end of the repulsive region."), value = TRUE),
             shiny::conditionalPanel(
               condition = "input.do_repulsive_retract == true",
               shiny::fluidRow(
                 shiny::column(8, shiny::textInput("repulsive_baseline_span_retract",
-                  tooltip_label("Exclusion cutoff", "The region after this data point is excluded from scanning. For example, if the curve has 100 points and this is set to 10, the segment from point 91 to 100 will be excluded from scanning. Set to 'automatic' to exclude the predefined baseline segment."),
+                  tooltip_label("Exclusion cutoff", "Points after this cutoff are excluded from scanning. For example, if a curve has 512 points and this is set to 100, points 413-512 are excluded from scanning. Set this to 'automatic' to exclude the predefined baseline segment."),
                   value = "automatic")),
                 shiny::column(4, shiny::numericInput("repulsive_min_consecutive_retract",
-                  tooltip_label("Min consecutive", "Minimum number of consecutive points above the noise band required to call a repulsive event."),
+                  tooltip_label("Min consecutive", "Minimum number of consecutive points above the noise band required to call a repulsive event.  Because the curve is expected to begin in the repulsive region, this is generally set to 1."),
                   value = 1, min = 1, step = 1))
               )
             )
@@ -655,7 +774,7 @@ ui <- bs4Dash::dashboardPage(
             shiny::fluidRow(
               shiny::column(3,
                 shiny::numericInput("threads_metrics",
-                  tooltip_label("Threads", "Number of parallel workers for metrics computation."),
+                  tooltip_label("Threads", "Number of parallel workers to use for metric calculations."),
                   value = 1, min = 1, step = 1)
               ),
               shiny::column(9,
@@ -677,13 +796,13 @@ ui <- bs4Dash::dashboardPage(
             width = 12,
             shiny::fluidRow(
               shiny::column(8, shiny::selectInput("metric_curve_name",
-                tooltip_label("Curve name", "Sample/curve identifier to visualize in the single-curve inspector."),
+                tooltip_label("Curve name", "Sample or curve identifier to display in the single-curve inspector."),
                 choices = character(0))),
               shiny::column(4, shiny::selectInput("metric_use_curve",
-                tooltip_label("Segment", "Choose approach or retract segment for single-curve metrics display."),
+                tooltip_label("Segment", "Choose whether to display the approach or retract segment for the selected curve."),
                 choices = c("retract", "approach"), selected = "retract"))
             ),
-            tooltip_plot("single_curve_plot", "480px", "Single selected curve with analytical metric annotations. Toggle segment to inspect approach or retract."),
+            tooltip_plot("single_curve_plot", "480px", "Selected curve with analytical metric annotations."),
             shiny::fluidRow(
               shiny::column(3, shiny::numericInput("single_curve_download_width", tooltip_label("Download width (in)", "Width in inches for exported single-curve plot."), value = 14, min = 1, step = 0.5)),
               shiny::column(3, shiny::numericInput("single_curve_download_height", tooltip_label("Download height (in)", "Height in inches for exported single-curve plot."), value = 7, min = 1, step = 0.5)),
@@ -709,10 +828,10 @@ ui <- bs4Dash::dashboardPage(
             status      = "info",
             solidHeader = TRUE,
             shiny::fluidRow(
-              shiny::column(3, shiny::textInput("results_new_meta_col_name", tooltip_label("New column name", "Name of the new metadata column to add to all samples."), value = "")),
-              shiny::column(3, shiny::selectInput("results_new_meta_col_type", tooltip_label("Column type", "Data type used for the new metadata column values."),
+              shiny::column(3, shiny::textInput("results_new_meta_col_name", tooltip_label("New column name", "Name of the metadata column to add for all samples."), value = "")),
+              shiny::column(3, shiny::selectInput("results_new_meta_col_type", tooltip_label("Column type", "Data type to use for the new metadata column."),
                 choices = c("character", "numeric", "integer", "logical"), selected = "character")),
-              shiny::column(3, shiny::textInput("results_new_meta_col_default", tooltip_label("Default value", "Initial value filled for all rows in the new metadata column."), value = "")),
+              shiny::column(3, shiny::textInput("results_new_meta_col_default", tooltip_label("Default value", "Initial value to fill into all rows of the new metadata column."), value = "")),
               shiny::column(3, shiny::tags$br(),
                 shiny::actionButton("add_meta_col_results_btn", "Add column", class = "btn-secondary"))
             ),
@@ -774,13 +893,13 @@ ui <- bs4Dash::dashboardPage(
             solidHeader = TRUE,
             
             shiny::fluidRow(
-              shiny::column(12, shiny::selectInput("summary_group_by", tooltip_label("Group by", "Metadata column used to group samples in violin and PCA coloring."),
+              shiny::column(12, shiny::selectInput("summary_group_by", tooltip_label("Group by", "Metadata column used to group samples and color points in the PCA and violin plots."),
                 choices = c("None" = ""), selected = ""))
             ),
             shiny::fluidRow(
               shiny::column(12, shiny::div(
                 class = "pca-checkbox-grid",
-                shiny::checkboxGroupInput("pca_include_columns", tooltip_label("PCA include columns", "Choose metadata columns to include in PCA. Only columns containing terms like force, energy, or distance are offered."),
+                shiny::checkboxGroupInput("pca_include_columns", tooltip_label("PCA include columns", "Choose the metadata columns to include in the PCA. Only columns containing terms such as force, energy, or distance are offered."),
                   choices = character(0), selected = character(0), inline = FALSE)
               ))
             ),
@@ -796,7 +915,7 @@ ui <- bs4Dash::dashboardPage(
               shiny::column(6, shiny::numericInput("pca_feature_label_size", tooltip_label("Feature label size", "Text size for PCA feature labels."), value = 3.5, min = 0.1, step = 0.1)),
               shiny::column(6, shiny::numericInput("pca_base_size", tooltip_label("Base size", "Base font size for the PCA plot."), value = 12, min = 1, step = 1))
             ),
-            tooltip_plot("pca_plot", "460px", "PCA biplot built from selected analytical metrics; points are samples and arrows are feature loadings."),
+            tooltip_plot("pca_plot", "460px", "PCA biplot built from the selected analytical metrics. Points represent samples, and arrows represent feature loadings."),
             shiny::fluidRow(
               shiny::column(3, shiny::numericInput("pca_download_width", tooltip_label("Download width (in)", "Width in inches for exported PCA plot."), value = 10, min = 1, step = 0.5)),
               shiny::column(3, shiny::numericInput("pca_download_height", tooltip_label("Download height (in)", "Height in inches for exported PCA plot."), value = 7, min = 1, step = 0.5)),
@@ -811,11 +930,11 @@ ui <- bs4Dash::dashboardPage(
             status      = "info",
             solidHeader = TRUE,
             shiny::fluidRow(
-              shiny::column(4, shiny::selectInput("violin_metric", tooltip_label("Metric", "Analytical metric column to display in violin plot."),
+              shiny::column(4, shiny::selectInput("violin_metric", tooltip_label("Metric", "Analytical metric column to display in the violin plot."),
                 choices = character(0))),
-              shiny::column(4, shiny::selectInput("violin_group_by", tooltip_label("Group by", "Metadata column used for grouping on the violin-plot x-axis."),
+              shiny::column(4, shiny::selectInput("violin_group_by", tooltip_label("Group by", "Metadata column used to group samples."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(4, shiny::selectInput("violin_color_by", tooltip_label("Color by", "Metadata column used to color violins and points. If set to None, uses Violin Group by."),
+              shiny::column(4, shiny::selectInput("violin_color_by", tooltip_label("Color by", "Metadata column used to color the samples. If set to None, the Group by column is used."),
                 choices = c("None" = ""), selected = ""))
             ),
             shiny::fluidRow(
@@ -824,15 +943,15 @@ ui <- bs4Dash::dashboardPage(
               shiny::column(2, shiny::checkboxInput("violin_log10", tooltip_label("Log10", "Apply log10 transform to positive metric values before plotting and testing."), value = FALSE)),
               shiny::column(3, shiny::selectInput("violin_global_test", tooltip_label("Global test", "Global significance test across groups."),
                 choices = c("none", "anova", "kruskal"), selected = "anova")),
-              shiny::column(3, shiny::selectInput("violin_pairwise_test", tooltip_label("Pairwise test", "Pairwise group-comparison test."),
+              shiny::column(3, shiny::selectInput("violin_pairwise_test", tooltip_label("Pairwise test", "Statistical test used for pairwise group comparisons."),
                 choices = c("none", "t.test", "wilcox"), selected = "t.test"))
             ),
             shiny::fluidRow(
-              shiny::column(6, shiny::selectInput("violin_p_adjust_method", tooltip_label("p adjust method", "Multiple-testing correction method for pairwise comparisons."),
+              shiny::column(6, shiny::selectInput("violin_p_adjust_method", tooltip_label("P adjust method", "Multiple-testing correction method used for pairwise comparisons."),
                 choices = stats::p.adjust.methods, selected = "BH")),
               shiny::column(6)
             ),
-            tooltip_plot("violin_plot", "400px", "Distribution of selected metric across groups from the selected metadata column."),
+            tooltip_plot("violin_plot", "400px", "Distribution of the selected metric across groups defined by the chosen metadata column."),
             shiny::fluidRow(
               shiny::column(3, shiny::numericInput("violin_download_width", tooltip_label("Download width (in)", "Width in inches for exported violin plot."), value = 9, min = 1, step = 0.5)),
               shiny::column(3, shiny::numericInput("violin_download_height", tooltip_label("Download height (in)", "Height in inches for exported violin plot."), value = 7, min = 1, step = 0.5)),
@@ -849,14 +968,14 @@ ui <- bs4Dash::dashboardPage(
             shiny::fluidRow(
               shiny::column(12, shiny::div(
                 class = "pca-checkbox-grid",
-                shiny::checkboxGroupInput("heatmap_include_columns", tooltip_label("Heatmap include columns", "Choose metadata feature columns to display as heatmap rows."),
+                shiny::checkboxGroupInput("heatmap_include_columns", tooltip_label("Heatmap include columns", "Choose the metadata feature columns to display as heatmap rows."),
                   choices = character(0), selected = character(0), inline = FALSE)
               ))
             ),
             shiny::fluidRow(
-              shiny::column(3, shiny::selectInput("heatmap_anno_col1", tooltip_label("Annotate col 1", "First metadata column for heatmap column annotation."),
+              shiny::column(3, shiny::selectInput("heatmap_anno_col1", tooltip_label("Annotate col 1", "First metadata column used for heatmap column annotation."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(3, shiny::selectInput("heatmap_anno_col2", tooltip_label("Annotate col 2", "Second metadata column for heatmap column annotation."),
+              shiny::column(3, shiny::selectInput("heatmap_anno_col2", tooltip_label("Annotate col 2", "Second metadata column used for heatmap column annotation."),
                 choices = c("None" = ""), selected = "")),
               shiny::column(3),
               shiny::column(3)
@@ -889,6 +1008,8 @@ server <- function(input, output, session) {
     fdobj             = NULL,
     fdobj_clean       = NULL,
     fdobj_transformed = NULL,
+    fdobj_final       = NULL,
+    clean_metadata_cols = NULL,
     status = "No data loaded yet."
   )
 
@@ -992,6 +1113,18 @@ server <- function(input, output, session) {
     stats::setNames(cols, vals)
   }
 
+  metadata_keep_clean_only <- function(md) {
+    keep_cols <- rv$clean_metadata_cols
+    if (is.null(keep_cols) || !is.data.frame(md)) {
+      return(md)
+    }
+    keep_cols <- keep_cols[keep_cols %in% colnames(md)]
+    if (length(keep_cols) == 0) {
+      return(md[, 0, drop = FALSE])
+    }
+    md[, keep_cols, drop = FALSE]
+  }
+
   update_choices <- function(fdobj) {
     md_cols <- colnames(fdobj@metadata)
     if (is.null(md_cols)) md_cols <- character(0)
@@ -1022,6 +1155,16 @@ server <- function(input, output, session) {
       }
       ""
     }
+
+    sens_col_chooser <- stats::setNames(md_cols, md_cols)
+    shiny::updateSelectInput(session, "soft_sens_col_approach",
+      choices = sens_col_chooser, selected = keep_or_none(input$soft_sens_col_approach))
+    shiny::updateSelectInput(session, "soft_sens_col_retract",
+      choices = sens_col_chooser, selected = keep_or_none(input$soft_sens_col_retract))
+    shiny::updateSelectInput(session, "spring_constant_col_approach",
+      choices = sens_col_chooser, selected = keep_or_none(input$spring_constant_col_approach))
+    shiny::updateSelectInput(session, "spring_constant_col_retract",
+      choices = sens_col_chooser, selected = keep_or_none(input$spring_constant_col_retract))
 
     shiny::updateSelectInput(session, "raw_anno_col1",
       choices = chooser, selected = keep_or_none(input$raw_anno_col1))
@@ -1168,10 +1311,14 @@ server <- function(input, output, session) {
           folder  = folder,
           suffix = suffix,
           pattern = pattern,
-          Calc_Ramp_Ex_nm = col_calc_ramp_ex,
-          Calc_Ramp_Rt_nm = col_calc_ramp_rt,
-          Defl_V_Ex = col_defl_v_ex,
-          Defl_V_Rt = col_defl_v_rt,
+          Displacement_Approach = col_calc_ramp_ex,
+          Displacement_Retract = col_calc_ramp_rt,
+          Deflection_Approach = col_defl_v_ex,
+          Deflection_Retract = col_defl_v_rt,
+          reverse_Displacement_Approach = isTRUE(input$reverse_calc_ramp_ex_nm),
+          reverse_Displacement_Retract = isTRUE(input$reverse_calc_ramp_rt_nm),
+          reverse_Deflection_Approach = isTRUE(input$reverse_defl_v_ex),
+          reverse_Deflection_Retract = isTRUE(input$reverse_defl_v_rt),
           metadata = metadata_for_load,
           threads = max(1L, as.integer(input$threads_load))
         ),
@@ -1185,6 +1332,8 @@ server <- function(input, output, session) {
       rv$fdobj             <- fdobj
       rv$fdobj_clean       <- fdobj
       rv$fdobj_transformed <- NULL
+      rv$fdobj_final       <- NULL
+      rv$clean_metadata_cols <- colnames(fdobj@metadata)
       rv$status <- sprintf(
         "Loaded %d raw curves from:\n%s\nGenerated metadata: %d rows x %d columns.\ncreateFdObjFromFolder args: suffix='%s', pattern='%s'.%s",
         length(fdobj@rawCurves),
@@ -1228,6 +1377,7 @@ server <- function(input, output, session) {
     imported_df            <- imported_df[matched_idx, , drop = FALSE]
     imported_df[[key_col]] <- NULL
     rownames(imported_df)  <- rownames(md)
+    rv$clean_metadata_cols <- colnames(imported_df)
     rv$fdobj@metadata <- imported_df
     if (!is.null(rv$fdobj_clean)) {
       rv$fdobj_clean@metadata <- imported_df
@@ -1245,43 +1395,86 @@ server <- function(input, output, session) {
   shiny::observeEvent(input$transform_btn, {
     shiny::req(rv$fdobj_clean)
     shiny::withProgress(message = "Running transform_curves...", value = 0.1, {
-      fdobj     <- rv$fdobj_clean
+      if (!isTRUE(input$transform_approach) && !isTRUE(input$transform_retract)) {
+        shiny::showNotification("Please enable transformation for at least one curve segment (approach or retract).", type = "warning")
+        return(NULL)
+      }
+
+      fdobj_current <- rv$fdobj_clean
+      fdobj_current@metadata <- metadata_keep_clean_only(fdobj_current@metadata)
       least_app <- if (identical(input$least_mode_approach, "automatic")) "automatic" else as.integer(input$least_length_approach)
       least_ret <- if (identical(input$least_mode_retract,  "automatic")) "automatic" else as.integer(input$least_length_retract)
-      fdobj <- tryCatch({
-        shiny::incProgress(0.35, detail = "Approach")
-        fdobj <- curvana::transform_curves(
-          fdObj = fdobj, spring_constant = as.numeric(input$spring_constant_approach), useCurve = "approach",
-          threads = max(1L, as.integer(input$threads_transform_approach)),
-          denoise_first = isTRUE(input$denoise_first_approach),
-          p = as.integer(input$denoise_p_approach), n = as.integer(input$denoise_n_approach),
-          m = as.integer(input$denoise_m_approach), ts = as.numeric(input$denoise_ts_approach),
-          least_length  = least_app,
-          slp_threshold = as.numeric(input$slp_threshold_approach),
-          std_threshold = as.numeric(input$std_threshold_approach),
-          end           = as.integer(input$sens_end_approach)
-        )
-        shiny::incProgress(0.45, detail = "Retract")
-        curvana::transform_curves(
-          fdObj = fdobj, spring_constant = as.numeric(input$spring_constant_retract), useCurve = "retract",
-          threads = max(1L, as.integer(input$threads_transform_retract)),
-          denoise_first = isTRUE(input$denoise_first_retract),
-          p = as.integer(input$denoise_p_retract), n = as.integer(input$denoise_n_retract),
-          m = as.integer(input$denoise_m_retract), ts = as.numeric(input$denoise_ts_retract),
-          least_length  = least_ret,
-          slp_threshold = as.numeric(input$slp_threshold_retract),
-          std_threshold = as.numeric(input$std_threshold_retract),
-          end           = as.integer(input$sens_end_retract)
-        )
-      }, error = function(e) {
-        shiny::showNotification(paste("Transform failed:", e$message), type = "error", duration = NULL)
-        NULL
-      })
-      if (is.null(fdobj)) return(NULL)
-      rv$fdobj             <- fdobj
-      rv$fdobj_transformed <- fdobj
-      rv$status <- "Transformation completed for approach and retract curves."
-      update_choices(fdobj)
+      if (isTRUE(input$transform_approach)) {
+        fdobj_current <- tryCatch({
+          shiny::incProgress(0.35, detail = "Approach")
+          soft_app <- isTRUE(input$soft_approach)
+          probe_sens_app <- if (soft_app) {
+            if (identical(input$soft_sens_mode_approach, "column")) input$soft_sens_col_approach else as.numeric(input$soft_sens_value_approach)
+          } else { NULL }
+          sc_app <- if (identical(input$spring_constant_mode_approach, "column")) input$spring_constant_col_approach else as.numeric(input$spring_constant_value_approach)
+          curvana::transform_curves(
+            fdObj = fdobj_current, spring_constant = sc_app, useCurve = "approach",
+            threads = max(1L, as.integer(input$threads_transform_approach)),
+            denoise_first = isTRUE(input$denoise_first_approach),
+            p = as.integer(input$denoise_p_approach), n = as.integer(input$denoise_n_approach),
+            m = as.integer(input$denoise_m_approach), ts = as.numeric(input$denoise_ts_approach),
+            least_length  = least_app,
+            slp_threshold = as.numeric(input$slp_threshold_approach),
+            std_threshold = as.numeric(input$std_threshold_approach),
+            end           = as.integer(input$sens_end_approach),
+            intv          = as.integer(input$intv_approach),
+            R_squared_min = as.numeric(input$R_squared_min_approach),
+            minimum_length = as.integer(input$minimum_length_approach),
+            soft = soft_app,
+            probe_sensitivity_external = probe_sens_app
+          )
+        }, error = function(e) {
+          shiny::showNotification(paste("Approach transform failed:", e$message), type = "error", duration = NULL)
+          NULL
+        })
+        if (is.null(fdobj_current)) return(NULL)
+      }
+
+      if (isTRUE(input$transform_retract)) {
+        fdobj_current <- tryCatch({
+          shiny::incProgress(0.45, detail = "Retract")
+          soft_ret <- isTRUE(input$soft_retract)
+          probe_sens_ret <- if (soft_ret) {
+            if (identical(input$soft_sens_mode_retract, "column")) input$soft_sens_col_retract else as.numeric(input$soft_sens_value_retract)
+          } else { NULL }
+          sc_ret <- if (identical(input$spring_constant_mode_retract, "column")) input$spring_constant_col_retract else as.numeric(input$spring_constant_value_retract)
+          curvana::transform_curves(
+            fdObj = fdobj_current, spring_constant = sc_ret, useCurve = "retract",
+            threads = max(1L, as.integer(input$threads_transform_retract)),
+            denoise_first = isTRUE(input$denoise_first_retract),
+            p = as.integer(input$denoise_p_retract), n = as.integer(input$denoise_n_retract),
+            m = as.integer(input$denoise_m_retract), ts = as.numeric(input$denoise_ts_retract),
+            least_length  = least_ret,
+            slp_threshold = as.numeric(input$slp_threshold_retract),
+            std_threshold = as.numeric(input$std_threshold_retract),
+            end           = as.integer(input$sens_end_retract),
+            intv          = as.integer(input$intv_retract),
+            R_squared_min = as.numeric(input$R_squared_min_retract),
+            minimum_length = as.integer(input$minimum_length_retract),
+            soft = soft_ret,
+            probe_sensitivity_external = probe_sens_ret
+          )
+        }, error = function(e) {
+          shiny::showNotification(paste("Retract transform failed:", e$message), type = "error", duration = NULL)
+          NULL
+        })
+        if (is.null(fdobj_current)) return(NULL)
+      }
+
+      rv$fdobj             <- fdobj_current
+      rv$fdobj_transformed <- fdobj_current
+      rv$fdobj_final       <- NULL
+      transformed_segments <- c(
+        if (isTRUE(input$transform_approach)) "approach" else NULL,
+        if (isTRUE(input$transform_retract)) "retract" else NULL
+      )
+      rv$status <- sprintf("Transformation completed for selected curve segments: %s.", paste(transformed_segments, collapse = ", "))
+      update_choices(fdobj_current)
       shiny::incProgress(0.1)
       shiny::showNotification("Transform complete.", type = "message")
     })
@@ -1391,6 +1584,7 @@ server <- function(input, output, session) {
       } # end if analyze_retract
 
       rv$fdobj  <- fdobj_current
+      rv$fdobj_final <- fdobj_current
       rv$status <- "Analytical metrics completed."
       update_choices(fdobj_current)
       shiny::incProgress(0.9)
@@ -1399,14 +1593,12 @@ server <- function(input, output, session) {
   })
 
   # Add metadata column
-  add_metadata_column <- function(new_col, col_type, default_text) {
-    shiny::req(rv$fdobj)
+  build_metadata_with_new_column <- function(md, new_col, col_type, default_text) {
     new_col <- trimws(as.character(new_col))
     if (!nzchar(new_col)) {
       shiny::showNotification("Please provide a non-empty column name.", type = "error")
       return(NULL)
     }
-    md <- rv$fdobj@metadata
     if (new_col %in% colnames(md)) {
       shiny::showNotification("Column already exists in metadata.", type = "error")
       return(NULL)
@@ -1430,9 +1622,22 @@ server <- function(input, output, session) {
       "logical"  = rep(as.logical(default_val),  n),
                    rep(as.character(default_val), n)
     )
+    md
+  }
+
+  add_metadata_column <- function(new_col, col_type, default_text) {
+    md_source <- if (!is.null(rv$fdobj_clean)) rv$fdobj_clean else rv$fdobj
+    shiny::req(md_source)
+    md <- build_metadata_with_new_column(md_source@metadata, new_col, col_type, default_text)
+    if (is.null(md)) {
+      return(NULL)
+    }
     rv$fdobj@metadata <- md
+    rv$clean_metadata_cols <- unique(c(rv$clean_metadata_cols, new_col))
     if (!is.null(rv$fdobj_clean)) {
-      rv$fdobj_clean@metadata <- md
+      md_clean <- rv$fdobj_clean@metadata
+      md_clean[[new_col]] <- md[[new_col]]
+      rv$fdobj_clean@metadata <- md_clean
     }
     if (!is.null(rv$fdobj_transformed)) {
       rv$fdobj_transformed@metadata <- md
@@ -1450,19 +1655,28 @@ server <- function(input, output, session) {
   })
 
   shiny::observeEvent(input$add_meta_col_results_btn, {
-    add_metadata_column(
-      new_col = input$results_new_meta_col_name,
-      col_type = input$results_new_meta_col_type,
-      default_text = input$results_new_meta_col_default
+    shiny::req(rv$fdobj_final)
+    md_final <- build_metadata_with_new_column(
+      rv$fdobj_final@metadata,
+      input$results_new_meta_col_name,
+      input$results_new_meta_col_type,
+      input$results_new_meta_col_default
     )
+    if (is.null(md_final)) {
+      return(NULL)
+    }
+
+    rv$fdobj_final@metadata <- md_final
+    rv$fdobj@metadata <- md_final
+    rv$status <- sprintf("Added final metadata column '%s'.", trimws(as.character(input$results_new_meta_col_name)))
+    update_choices(rv$fdobj)
   })
 
   # Handsontable edits
-  apply_metadata_hot_edit <- function(hot_df) {
+  apply_metadata_hot_edit <- function(hot_df, md_old) {
     tryCatch({
-      shiny::req(rv$fdobj)
+      if (is.null(md_old)) return(NULL)
       if (is.null(hot_df) || nrow(hot_df) == 0 || !("sample" %in% colnames(hot_df))) return(NULL)
-      md_old     <- rv$fdobj@metadata
       sample_ids <- as.character(hot_df$sample)
       hot_df$sample <- NULL
       if (length(sample_ids) != nrow(hot_df)) return(NULL)
@@ -1494,15 +1708,7 @@ server <- function(input, output, session) {
           as.character(new_col)
         }
       }
-      rv$fdobj@metadata <- hot_df
-      if (!is.null(rv$fdobj_clean)) {
-        rv$fdobj_clean@metadata <- hot_df
-      }
-      if (!is.null(rv$fdobj_transformed)) {
-        rv$fdobj_transformed@metadata <- hot_df
-      }
-      rv$status <- "Metadata updated from spreadsheet editor."
-      update_choices(rv$fdobj)
+      hot_df
     }, error = function(e) {
       shiny::showNotification(
         paste("Metadata edit was ignored:", e$message),
@@ -1513,11 +1719,36 @@ server <- function(input, output, session) {
   }
 
   shiny::observeEvent(input$metadata_hot, {
-    apply_metadata_hot_edit(rhandsontable::hot_to_r(input$metadata_hot))
+    md_source <- if (!is.null(rv$fdobj_clean)) rv$fdobj_clean else rv$fdobj
+    shiny::req(md_source)
+    edited_md <- apply_metadata_hot_edit(
+      rhandsontable::hot_to_r(input$metadata_hot),
+      md_source@metadata
+    )
+    if (is.null(edited_md)) return(NULL)
+
+    rv$fdobj@metadata <- edited_md
+
+    if (!is.null(rv$fdobj_clean)) {
+      rv$fdobj_clean@metadata <- metadata_keep_clean_only(edited_md)
+    }
+
+    rv$status <- "Metadata updated from Load Data table."
+    update_choices(rv$fdobj)
   }, ignoreInit = TRUE)
 
   shiny::observeEvent(input$results_metadata_hot, {
-    apply_metadata_hot_edit(rhandsontable::hot_to_r(input$results_metadata_hot))
+    shiny::req(rv$fdobj_final)
+    edited_md <- apply_metadata_hot_edit(
+      rhandsontable::hot_to_r(input$results_metadata_hot),
+      rv$fdobj_final@metadata
+    )
+    if (is.null(edited_md)) return(NULL)
+
+    rv$fdobj_final@metadata <- edited_md
+    rv$fdobj@metadata <- edited_md
+    rv$status <- "Metadata updated from Results table."
+    update_choices(rv$fdobj)
   }, ignoreInit = TRUE)
 
   save_plot_png <- function(file, plot_fun, width = 10, height = 7, res = 300) {
@@ -1537,9 +1768,9 @@ server <- function(input, output, session) {
     dim_val
   }
 
-  metadata_export_df <- function() {
-    shiny::req(rv$fdobj)
-    md <- rv$fdobj@metadata
+  metadata_export_df <- function(fdobj) {
+    shiny::req(fdobj)
+    md <- fdobj@metadata
     data.frame(sample = rownames(md), md, check.names = FALSE, stringsAsFactors = FALSE)
   }
 
@@ -1633,12 +1864,16 @@ server <- function(input, output, session) {
 
   draw_fd_curves <- function() {
     shiny::req(rv$fdobj)
+    fd_xlim <- if (is.finite(input$fd_xmin) && is.finite(input$fd_xmax)) c(input$fd_xmin, input$fd_xmax) else NULL
+    fd_ylim <- if (is.finite(input$fd_ymin) && is.finite(input$fd_ymax)) c(input$fd_ymin, input$fd_ymax) else NULL
     curvana::plot_fd_curves(
       fdobj           = rv$fdobj,
       curve           = "both",
       group_curves_by = if (nzchar(input$fd_group_by)) input$fd_group_by else NULL,
       split_curves_by = if (nzchar(input$fd_split_by)) input$fd_split_by else NULL,
-      point_alpha = 0.5, line_alpha = 0.3, point_size = 0.5
+      point_alpha = 0.5, line_alpha = 0.3, point_size = 0.5,
+      xlim = fd_xlim,
+      ylim = fd_ylim
     )
   }
 
@@ -1657,8 +1892,8 @@ server <- function(input, output, session) {
   }
 
   draw_pca <- function() {
-    shiny::req(rv$fdobj)
-    md <- rv$fdobj@metadata
+    shiny::req(rv$fdobj_final)
+    md <- rv$fdobj_final@metadata
     pca_features <- intersect(input$pca_include_columns, colnames(md))
     if (length(pca_features) < 2) {
       stop("Select at least 2 PCA feature columns.")
@@ -1688,12 +1923,12 @@ server <- function(input, output, session) {
   }
 
   draw_violin <- function() {
-    shiny::req(rv$fdobj)
+    shiny::req(rv$fdobj_final)
     shiny::req(nzchar(input$violin_metric))
     if (!nzchar(input$violin_group_by)) {
       stop("Select a grouping column.")
     }
-    md <- rv$fdobj@metadata
+    md <- rv$fdobj_final@metadata
     if (!(input$violin_group_by %in% colnames(md))) {
       stop("Grouping column not found.")
     }
@@ -1724,8 +1959,8 @@ server <- function(input, output, session) {
   }
 
   draw_complex_heatmap <- function() {
-    shiny::req(rv$fdobj)
-    md <- rv$fdobj@metadata
+    shiny::req(rv$fdobj_final)
+    md <- rv$fdobj_final@metadata
 
     include_cols <- intersect(input$heatmap_include_columns, colnames(md))
     if (length(include_cols) < 1) {
@@ -1776,32 +2011,50 @@ server <- function(input, output, session) {
   })
 
   # Metadata handsontable
-  render_metadata_hot <- function(validation_message) {
-    shiny::validate(shiny::need(!is.null(rv$fdobj), validation_message))
-    md   <- rv$fdobj@metadata
+  render_metadata_hot <- function(fdobj, validation_message, editable = TRUE) {
+    shiny::validate(shiny::need(!is.null(fdobj), validation_message))
+    md   <- fdobj@metadata
     disp <- data.frame(
       sample = rownames(md),
       md,
       check.names = FALSE,
       stringsAsFactors = FALSE
     )
-    rhandsontable::rhandsontable(disp, rowHeaders = NULL, stretchH = "all", height = 520) |>
-      rhandsontable::hot_col("sample", readOnly = TRUE) |>
-      rhandsontable::hot_table(
-        contextMenu = TRUE,
-        allowInsertRow = FALSE,
-        manualColumnResize = TRUE,
-        fillHandle = TRUE,
-        columnSorting = TRUE
-      )
+    hot <- rhandsontable::rhandsontable(disp, rowHeaders = NULL, stretchH = "all", height = 520)
+    if (isTRUE(editable)) {
+      hot |>
+        rhandsontable::hot_col("sample", readOnly = TRUE) |>
+        rhandsontable::hot_table(
+          contextMenu = TRUE,
+          allowInsertRow = FALSE,
+          manualColumnResize = TRUE,
+          fillHandle = TRUE,
+          columnSorting = TRUE
+        )
+    } else {
+      for (cn in colnames(disp)) {
+        hot <- rhandsontable::hot_col(hot, cn, readOnly = TRUE)
+      }
+      hot |>
+        rhandsontable::hot_table(
+          contextMenu = FALSE,
+          allowInsertRow = FALSE,
+          manualColumnResize = TRUE,
+          fillHandle = FALSE,
+          columnSorting = TRUE
+        )
+    }
   }
 
   output$metadata_hot <- rhandsontable::renderRHandsontable({
-    render_metadata_hot("Load curve data to preview the metadata generated by createFdObjFromFolder.")
+    render_metadata_hot(
+      if (!is.null(rv$fdobj_clean)) rv$fdobj_clean else rv$fdobj,
+      "Load curve data to preview the metadata generated by createFdObjFromFolder."
+    )
   })
 
   output$results_metadata_hot <- rhandsontable::renderRHandsontable({
-    render_metadata_hot("Load curve data to view metadata results.")
+    render_metadata_hot(rv$fdobj_final, "Run analytical metrics to view final metadata results.")
   })
 
   output$download_metadata_csv <- shiny::downloadHandler(
@@ -1809,7 +2062,7 @@ server <- function(input, output, session) {
       paste0("curvana_metadata_", Sys.Date(), ".csv")
     },
     content = function(file) {
-      out <- metadata_export_df()
+      out <- metadata_export_df(rv$fdobj_clean)
       utils::write.csv(out, file = file, row.names = FALSE, na = "")
     }
   )
@@ -1819,7 +2072,7 @@ server <- function(input, output, session) {
       paste0("curvana_metadata_", Sys.Date(), ".xlsx")
     },
     content = function(file) {
-      out <- metadata_export_df()
+      out <- metadata_export_df(rv$fdobj_clean)
       write_metadata_xlsx(out, file)
     }
   )
@@ -1829,7 +2082,7 @@ server <- function(input, output, session) {
       paste0("curvana_results_metadata_", Sys.Date(), ".csv")
     },
     content = function(file) {
-      out <- metadata_export_df()
+      out <- metadata_export_df(rv$fdobj_final)
       utils::write.csv(out, file = file, row.names = FALSE, na = "")
     }
   )
@@ -1839,7 +2092,7 @@ server <- function(input, output, session) {
       paste0("curvana_results_metadata_", Sys.Date(), ".xlsx")
     },
     content = function(file) {
-      out <- metadata_export_df()
+      out <- metadata_export_df(rv$fdobj_final)
       write_metadata_xlsx(out, file)
     }
   )
@@ -1849,8 +2102,8 @@ server <- function(input, output, session) {
       paste0("curvana_raw_curves_", Sys.Date(), ".zip")
     },
     content = function(file) {
-      shiny::req(rv$fdobj)
-      raw_curves <- rv$fdobj@rawCurves
+      shiny::req(rv$fdobj_final)
+      raw_curves <- rv$fdobj_final@rawCurves
       if (is.null(raw_curves) || length(raw_curves) == 0) {
         stop("No raw curves available in rawCurves slot.")
       }
@@ -1872,9 +2125,9 @@ server <- function(input, output, session) {
       paste0("curvana_transformed_curves_", Sys.Date(), ".zip")
     },
     content = function(file) {
-      shiny::req(rv$fdobj)
-      approach_curves <- rv$fdobj@approachCurves
-      retract_curves <- rv$fdobj@retractCurves
+      shiny::req(rv$fdobj_final)
+      approach_curves <- rv$fdobj_final@approachCurves
+      retract_curves <- rv$fdobj_final@retractCurves
 
       tmp_dir <- tempfile("transformed_curves_zip_")
       dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
@@ -1896,8 +2149,8 @@ server <- function(input, output, session) {
       paste0("curvana_fdobj_", Sys.Date(), ".rds")
     },
     content = function(file) {
-      shiny::req(rv$fdobj)
-      saveRDS(rv$fdobj, file = file)
+      shiny::req(rv$fdobj_final)
+      saveRDS(rv$fdobj_final, file = file)
     }
   )
 

@@ -10,7 +10,19 @@ transform_curves(
   useCurve = c("approach", "retract"),
   threads = 1,
   denoise_first = FALSE,
-  ...
+  p = 1,
+  n = 3,
+  m = 0,
+  ts = 1,
+  end = 200,
+  intv = 4,
+  R_squared_min = 0.99,
+  minimum_length = 4,
+  least_length = 150,
+  slp_threshold = 0.001,
+  std_threshold = 0.005,
+  soft = FALSE,
+  probe_sensitivity_external = NULL
 )
 }
 \arguments{
@@ -28,11 +40,53 @@ in \code{fdObj@metadata} that contains per-curve spring constants.}
 \item{denoise_first}{Logical. If \code{TRUE}, denoise raw curves for the
 selected \code{useCurve} before transformation.}
 
-\item{...}{Additional arguments passed to `analyze_sensitivity()` or
-`analyze_baseline()` if they are invoked automatically. When
-\code{denoise_first = TRUE}, optional denoising arguments can also be
-supplied via \code{...} using \code{denoise_curves()} argument names
-(e.g., \code{p}, \code{n}, \code{m}, \code{ts}).}
+\item{p}{Integer. Savitzky-Golay polynomial order used by
+\code{denoise_curves()} when \code{denoise_first = TRUE}.}
+
+\item{n}{Integer. Savitzky-Golay window size (odd integer) used by
+\code{denoise_curves()} when \code{denoise_first = TRUE}.}
+
+\item{m}{Integer. Savitzky-Golay derivative order used by
+\code{denoise_curves()} when \code{denoise_first = TRUE}.}
+
+\item{ts}{Numeric. Sampling interval used by \code{denoise_curves()} when
+\code{denoise_first = TRUE}.}
+
+\item{end}{Integer. Maximum index considered during sensitivity estimation
+in \code{analyze_sensitivity()}.}
+
+\item{intv}{Integer. Number of data points added per iteration when
+building the linear sensitivity segment in \code{calc_sensitivity()} via
+\code{analyze_sensitivity()}.}
+
+\item{R_squared_min}{Numeric. Minimum \eqn{R^2} threshold for accepting a
+segment as sufficiently linear during sensitivity calculation in
+\code{calc_sensitivity()}. Default is 0.99.}
+
+\item{minimum_length}{Integer. Minimum number of accumulated points required
+for a valid sensitivity result. If the segment is shorter, sensitivity is
+reported as \code{NA} in \code{analyze_sensitivity()}.}
+
+\item{least_length}{Either a single integer (minimum baseline span) or
+\code{"automatic"}. Passed to \code{analyze_baseline()} when baseline
+metadata is missing.}
+
+\item{slp_threshold}{Numeric. Maximum absolute baseline slope allowed in
+\code{analyze_baseline()}.}
+
+\item{std_threshold}{Numeric. Maximum baseline slope standard error allowed
+in \code{analyze_baseline()}.}
+
+\item{soft}{Logical. If \code{TRUE}, use \code{probe_sensitivity_external}
+for force conversion in \code{transform_a_curve()} and pass the
+resulting sensitivity column to \code{analyze_baseline()}.
+Default \code{FALSE}.}
+
+\item{probe_sensitivity_external}{Numeric or character. Required when
+\code{soft = TRUE}. If numeric, a single probe sensitivity value applied
+to all curves. If character, the name of an existing column in
+\code{fdObj@metadata} containing per-curve probe sensitivity values.
+The values are stored in \code{probe_true_sensitivity_V_nm_<useCurve>}.}
 }
 \value{
 An updated \code{fdObj} with transformed curves stored in the corresponding slot.

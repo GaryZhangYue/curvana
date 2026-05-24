@@ -2,12 +2,19 @@
 #'
 #' This function identifies a linear segment from AFM deflection vs. piezo extension data and calculates
 #' the sensitivity (slope) using linear regression. It iteratively adds chunks of data to build a segment
-#' with high linearity (\eqn{R^2 > 0.999}) and optionally removes outliers to maintain this criterion.
+#' with high linearity (\eqn{R^2 >} \code{R_squared_min}) and optionally removes outliers to maintain this criterion.
 #'
-#' @param end Integer. The maximum index to consider in the `x` and `y` vectors (i.e., up to which point to search).
-#' @param intv Integer. The chunk size to use when iteratively selecting data segments.
 #' @param x Numeric vector. The piezo extension values (e.g., distance in nm).
 #' @param y Numeric vector. The deflection values (e.g., voltage).
+#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for accepting a
+#'   segment as sufficiently linear during sensitivity calculation. Default is
+#'   0.99.
+#' @param end Integer. The maximum index to consider in the `x` and `y` vectors (i.e., up to which point to search).
+#' @param intv Integer. Number of data points added per iteration when
+#'   building the linear sensitivity segment.
+#' @param minimum_length Integer. Minimum number of accumulated points required
+#'   for a valid sensitivity result. If the segment is shorter, sensitivity is
+#'   reported as \code{NA}. Default is 4.
 #'
 #' @return A list of three elements:
 #' \describe{
@@ -18,10 +25,10 @@
 #' @examples
 #' x <- seq(0, 100, by = 1)
 #' y <- 0.02 * x + rnorm(length(x), sd = 0.01)
-#' calc_sensitivity(end = 80, intv = 10, x = x, y = y)
+#' calc_sensitivity(x = x, y = y, end = 80, intv = 10)
 #'
 #' @export
-calc_sensitivity <- function(end, intv=4, x, y) {
+calc_sensitivity <- function(x, y, R_squared_min = 0.99, end, intv = 4, minimum_length = 4) {
   sens_x <- numeric()
   sens_y <- numeric()
 
@@ -36,31 +43,31 @@ calc_sensitivity <- function(end, intv=4, x, y) {
 
     r <- suppressWarnings(cor(combined_x, combined_y, use = "complete.obs"))
 
-    if (!is.na(r) && r^2 > 0.999) {
+    if (!is.na(r) && r^2 > R_squared_min) {
       sens_x <- combined_x
       sens_y <- combined_y
     } else {
+      rescued <- FALSE
       for (j in intv:1) {
-        temp_x <- x_seg
-        temp_y <- y_seg
-
-        temp_x <- temp_x[-j]
-        temp_y <- temp_y[-j]
+        temp_x <- x_seg[-j]
+        temp_y <- y_seg[-j]
 
         r_try <- suppressWarnings(cor(c(sens_x, temp_x), c(sens_y, temp_y), use = "complete.obs"))
 
-        if (!is.na(r_try) && r_try^2 > 0.999) {
+        if (!is.na(r_try) && r_try^2 > R_squared_min) {
           sens_x <- c(sens_x, temp_x)
           sens_y <- c(sens_y, temp_y)
+          rescued <- TRUE
           break
         }
       }
+      if (!rescued) break
     }
 
     i <- i + intv
   }
 
-  if (length(sens_x) == 0 || length(sens_y) == 0) {
+  if (length(sens_x) < minimum_length || length(sens_y) < minimum_length) {
     return(list(NULL, NULL))
   } else {
     fit <- lm(sens_y ~ sens_x)
@@ -77,13 +84,20 @@ calc_sensitivity <- function(end, intv=4, x, y) {
 #'
 #' @param fdObj An object of class \code{fdObj}.
 #' @param end Integer. The maximum index in raw curves to consider (e.g., 200).
-#' @param intv Integer. Chunk size for sensitivity calculation (e.g., 4).
+#' @param intv Integer. Number of data points added per iteration when
+#'   building the linear sensitivity segment in \code{calc_sensitivity()}.
+#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for accepting a
+#'   segment as sufficiently linear during sensitivity calculation in
+#'   \code{calc_sensitivity()}. Default is 0.99.
+#' @param minimum_length Integer. Minimum number of accumulated points required
+#'   for a valid sensitivity result. If the segment is shorter, sensitivity is
+#'   reported as \code{NA}. Passed to \code{calc_sensitivity()}. Default is 4.
 #' @param useCurve Character. Either "approach" or "retract" to determine which curve to use.
 #' @param threads Number of parallel threads to use (default = 1).
 #'
 #' @return An updated \code{fdObj} with sensitivity values in metadata and segments in senscal_segment.
 #' @export
-analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach", threads = 1) {
+analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99, minimum_length = 4, useCurve = "approach", threads = 1) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
   if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
 
@@ -111,7 +125,7 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach
       }
       x <- df[[x_col]]
       y <- df[[y_col]]
-      calc_sensitivity(end = end, intv = intv, x = x, y = y)
+      calc_sensitivity(x = x, y = y, R_squared_min = R_squared_min, end = end, intv = intv, minimum_length = minimum_length)
     },future.packages = "curvana")
   } else {
     results <- lapply(curve_names, function(name) {
@@ -121,7 +135,7 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, useCurve = "approach
       }
       x <- df[[x_col]]
       y <- df[[y_col]]
-      calc_sensitivity(end = end, intv = intv, x = x, y = y)
+      calc_sensitivity(x = x, y = y, R_squared_min = R_squared_min, end = end, intv = intv, minimum_length = minimum_length)
     })
   }
 
@@ -221,7 +235,8 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001
 #' Analyze Baseline from AFM Raw Curves in an fdObj
 #'
 #' Identifies baseline segments in AFM raw force-distance curves using pre-calculated sensitivity values,
-#' and stores baseline values and segments in the fdObj.
+#' and stores baseline values and segments in the fdObj. As the undulating baseline is defined by forces, 
+#' the sensitivity is used to convert the deflection signal into force units for accurate baseline filtering.
 #'
 #' @param fdObj An object of class \code{fdObj}.
 #' @param least_length Either a single integer (minimum number of points in
@@ -233,6 +248,13 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001
 #' @param slp_threshold Numeric. Maximum absolute slope allowed for baseline detection (default = 0.001).
 #' @param std_threshold Numeric. Maximum standard error of the slope (default = 0.005).
 #' @param threads Integer. Number of parallel threads to use (default = 1).
+#' @param soft Logical. If \code{TRUE}, use the sensitivity column specified by
+#'   \code{external_sensitivity_column} instead of the default
+#'   \code{sensitivity_V_nm_approach} / \code{sensitivity_V_nm_retract}.
+#'   Default \code{FALSE}.
+#' @param external_sensitivity_column Character. Name of a column in
+#'   \code{fdObj@metadata} containing sensitivity values. Required when
+#'   \code{soft = TRUE}.
 #'
 #' @return An updated \code{fdObj} with baseline values in metadata and baseline
 #'   segments in \code{baseline_segment}. If \code{least_length} is numeric,
@@ -241,7 +263,8 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001
 #' @export
 analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
                              slp_threshold = 0.001, std_threshold = 0.005,
-                             threads = 1) {
+                             threads = 1, soft = FALSE,
+                             external_sensitivity_column = NULL) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
   if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
 
@@ -273,12 +296,28 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
     x_col <- "Calc_Ramp_Ex_nm"
     y_col <- "Defl_V_Ex"
     empty_seg <- data.frame(Calc_Ramp_Ex_nm = numeric(0), Defl_V_Ex = numeric(0))
-    sensitivity_vec <- fdObj@metadata$sensitivity_V_nm_approach
   } else {
     x_col <- "Calc_Ramp_Rt_nm"
     y_col <- "Defl_V_Rt"
     empty_seg <- data.frame(Calc_Ramp_Rt_nm = numeric(0), Defl_V_Rt = numeric(0))
-    sensitivity_vec <- fdObj@metadata$sensitivity_V_nm_retract
+  }
+
+  if (soft) {
+    if (is.null(external_sensitivity_column) ||
+        !is.character(external_sensitivity_column) ||
+        length(external_sensitivity_column) != 1) {
+      stop("external_sensitivity_column must be a single column name when soft = TRUE.")
+    }
+    if (!external_sensitivity_column %in% colnames(fdObj@metadata)) {
+      stop(sprintf("Column '%s' not found in fdObj@metadata.", external_sensitivity_column))
+    }
+    sensitivity_vec <- fdObj@metadata[[external_sensitivity_column]]
+  } else {
+    if (useCurve == "approach") {
+      sensitivity_vec <- fdObj@metadata$sensitivity_V_nm_approach
+    } else {
+      sensitivity_vec <- fdObj@metadata$sensitivity_V_nm_retract
+    }
   }
 
   raw_list <- fdObj@rawCurves
@@ -501,7 +540,10 @@ denoise_curves <- function(fdObj,
 #' Transform a Single AFM Curve into Separation Distance and Force
 #'
 #' Converts raw AFM deflection and piezo data into calibrated separation distance and force.
-#' The zero-separation position is estimated from the sensitivity calibration segment.
+#' If the measurement is performed on a soft sample rather than a hard reference,
+#' the \code{soft} argument can be set to \code{TRUE} and a \code{probe_sensitivity}
+#' value, which should be acquired by measurements on a hard surface,
+#'  needs to be provided to convert deflection to force.
 #'
 #' @param x Numeric vector. Piezo position (distance) in nm.
 #' @param y Numeric vector. Deflection signal in volts.
@@ -510,17 +552,21 @@ denoise_curves <- function(fdObj,
 #' @param spring_constant Numeric. Spring constant in nN/nm.
 #' @param senscal_seg_x Numeric vector. X-values of the sensitivity calibration segment.
 #' @param senscal_seg_y Numeric vector. Y-values of the sensitivity calibration segment (in volts).
+#' @param soft Logical. If \code{TRUE}, use \code{probe_sensitivity} for
+#'   force conversion while retaining the current transformation equations.
+#' @param probe_sensitivity Numeric. Probe sensitivity measured on a hard
+#'   reference surface, required when \code{soft = TRUE}.
 #'
 #' @return A data.frame with:
 #' \describe{
 #'   \item{separation_distance_nm}{Tip-sample separation (nm).}
 #'   \item{force_nN}{Force (nN).}
 #' }
-#' If any of the input is NULL, an empty dataframe will be returned
+#' If required inputs are missing, an empty data frame is returned.
 #' @export
 transform_a_curve <- function(x, y,
                               baseline, sensitivity, spring_constant,
-                              senscal_seg_x, senscal_seg_y) {
+                              senscal_seg_x, senscal_seg_y,soft = FALSE, probe_sensitivity = NULL) {
   if (length(x) != length(y)) stop("x and y must be the same length.")
   if (length(senscal_seg_x) != length(senscal_seg_y)) stop("senscal_seg_x and senscal_seg_y must be the same length.")
 
@@ -530,9 +576,17 @@ transform_a_curve <- function(x, y,
       force_nN = numeric(0)
     ))
   }
+  if(soft && (!is.numeric(probe_sensitivity) || length(probe_sensitivity) != 1 || is.na(probe_sensitivity) || !is.finite(probe_sensitivity) || probe_sensitivity == 0)){
+    stop("probe_sensitivity must be provided as one finite non-zero numeric value when soft = TRUE.")
+  }
+
   # Correct deflection
   new_defl_v <- y - baseline
-  new_defl_length_nm <- new_defl_v / sensitivity
+  if(soft){
+    new_defl_length_nm <- new_defl_v / probe_sensitivity
+  } else {
+    new_defl_length_nm <- new_defl_v / sensitivity
+  }
   force_nN <- new_defl_length_nm * spring_constant
 
   # Estimate contact point using sensitivity calibration segment
@@ -569,11 +623,43 @@ transform_a_curve <- function(x, y,
 #' @param threads Integer. Number of parallel threads to use (default = 1).
 #' @param denoise_first Logical. If \code{TRUE}, denoise raw curves for the
 #'   selected \code{useCurve} before transformation.
-#' @param ... Additional arguments passed to `analyze_sensitivity()` or
-#'   `analyze_baseline()` if they are invoked automatically. When
-#'   \code{denoise_first = TRUE}, optional denoising arguments can also be
-#'   supplied via \code{...} using \code{denoise_curves()} argument names
-#'   (e.g., \code{p}, \code{n}, \code{m}, \code{ts}).
+#' @param p Integer. Savitzky-Golay polynomial order used by
+#'   \code{denoise_curves()} when \code{denoise_first = TRUE}.
+#' @param n Integer. Savitzky-Golay window size (odd integer) used by
+#'   \code{denoise_curves()} when \code{denoise_first = TRUE}.
+#' @param m Integer. Savitzky-Golay derivative order used by
+#'   \code{denoise_curves()} when \code{denoise_first = TRUE}.
+#' @param ts Numeric. Sampling interval used by \code{denoise_curves()} when
+#'   \code{denoise_first = TRUE}.
+#' @param end Integer. Maximum index considered during sensitivity estimation
+#'   in \code{analyze_sensitivity()}.
+#' @param intv Integer. Number of data points added per iteration when
+#'   building the linear sensitivity segment in \code{calc_sensitivity()} via
+#'   \code{analyze_sensitivity()}.
+#' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for accepting a
+#'   segment as sufficiently linear during sensitivity calculation in
+#'   \code{calc_sensitivity()}. Default is 0.99.
+#' @param minimum_length Integer. Minimum number of accumulated points required
+#'   for a valid sensitivity result. If the segment is shorter, sensitivity is
+#'   reported as \code{NA} in \code{analyze_sensitivity()}.
+#' @param least_length Either a single integer (minimum baseline span) or
+#'   \code{"automatic"}. Passed to \code{analyze_baseline()} when baseline
+#'   metadata is missing. when \code{"automatic"}, per-curve span values are read from
+#'   \code{fdObj@metadata$baseline_span_approach} or
+#'  \code{fdObj@metadata$baseline_span_retract} depending on \code{useCurve}.
+#' @param slp_threshold Numeric. Maximum absolute baseline slope allowed in
+#'   \code{analyze_baseline()}.
+#' @param std_threshold Numeric. Maximum baseline slope standard error allowed
+#'   in \code{analyze_baseline()}.
+#' @param soft Logical. If \code{TRUE}, use \code{probe_sensitivity_external}
+#'   for force conversion in \code{transform_a_curve()} and pass the
+#'   resulting sensitivity column to \code{analyze_baseline()}.
+#'   Default \code{FALSE}.
+#' @param probe_sensitivity_external Numeric or character. Required when
+#'   \code{soft = TRUE}. If numeric, a single probe sensitivity value applied
+#'   to all curves. If character, the name of an existing column in
+#'   \code{fdObj@metadata} containing per-curve probe sensitivity values.
+#'   The values are stored in \code{probe_true_sensitivity_V_nm_<useCurve>}.
 #'
 #' @return An updated \code{fdObj} with transformed curves stored in the corresponding slot.
 #' @export
@@ -582,7 +668,19 @@ transform_curves <- function(fdObj,
                              useCurve = c("approach", "retract"),
                              threads = 1,
                              denoise_first = FALSE,
-                             ...) {
+                             p = 1,
+                             n = 3,
+                             m = 0,
+                             ts = 1,
+                             end = 200,
+                             intv = 4,
+                             R_squared_min = 0.99,
+                             minimum_length = 4,
+                             least_length = 150,
+                             slp_threshold = 0.001,
+                             std_threshold = 0.005,
+                             soft = FALSE,
+                             probe_sensitivity_external = NULL) {
   # ---- Validation ----
   if (!inherits(fdObj, "fdObj"))
     stop("fdObj must be of class 'fdObj'")
@@ -592,15 +690,41 @@ transform_curves <- function(fdObj,
   if (!is.logical(denoise_first) || length(denoise_first) != 1 || is.na(denoise_first)) {
     stop("denoise_first must be a single TRUE/FALSE value.")
   }
+  if (!is.logical(soft) || length(soft) != 1 || is.na(soft)) {
+    stop("soft must be a single TRUE/FALSE value.")
+  }
+
+  # ---- Handle probe sensitivity for soft mode ----
+  probe_sens_col <- paste0("probe_true_sensitivity_V_nm_", useCurve)
+  if (soft) {
+    if (is.null(probe_sensitivity_external)) {
+      stop("probe_sensitivity_external must be provided when soft = TRUE.")
+    }
+    if (is.numeric(probe_sensitivity_external) && length(probe_sensitivity_external) == 1) {
+      fdObj@metadata[[probe_sens_col]] <- rep(probe_sensitivity_external, nrow(fdObj@metadata))
+      message(sprintf("Using fixed probe sensitivity: %g (stored in metadata$%s).", probe_sensitivity_external, probe_sens_col))
+    } else if (is.character(probe_sensitivity_external) && length(probe_sensitivity_external) == 1) {
+      if (!probe_sensitivity_external %in% names(fdObj@metadata)) {
+        stop(sprintf("Column '%s' not found in fdObj@metadata for probe sensitivity.", probe_sensitivity_external))
+      }
+      fdObj@metadata[[probe_sens_col]] <- fdObj@metadata[[probe_sensitivity_external]]
+      message(sprintf("Copied probe sensitivity from column '%s' to metadata$%s.", probe_sensitivity_external, probe_sens_col))
+    } else {
+      stop("probe_sensitivity_external must be a single numeric value or a column name (string) in metadata.")
+    }
+  }
 
   # ---- Optional denoising ----
   if (denoise_first) {
-    denoise_args <- list(...)
-    denoise_args <- denoise_args[names(denoise_args) %in% names(formals(denoise_curves))]
-    denoise_args$fdObj <- fdObj
-    if (is.null(denoise_args$useCurve)) denoise_args$useCurve <- useCurve
-    if (is.null(denoise_args$threads)) denoise_args$threads <- threads
-    fdObj <- do.call(denoise_curves, denoise_args)
+    fdObj <- denoise_curves(
+      fdObj = fdObj,
+      p = p,
+      n = n,
+      m = m,
+      ts = ts,
+      useCurve = useCurve,
+      threads = threads
+    )
   }
 
   # ---- Determine column names ----
@@ -636,11 +760,15 @@ transform_curves <- function(fdObj,
   sens_col <- paste0("sensitivity_V_nm_", useCurve)
   if (!sens_col %in% names(fdObj@metadata)) {
     message(sprintf("Column '%s' not found in metadata. Running analyze_sensitivity()...", sens_col))
-    call_args <- c(as.list(environment()), list(...))
-    sens_args <- call_args[names(call_args) %in% names(formals(analyze_sensitivity))]
-    sens_args$fdObj <- fdObj
-    if (is.null(sens_args$useCurve)) sens_args$useCurve <- useCurve
-    fdObj <- do.call(analyze_sensitivity, sens_args)
+    fdObj <- analyze_sensitivity(
+      fdObj = fdObj,
+      end = end,
+      intv = intv,
+      R_squared_min = R_squared_min,
+      minimum_length = minimum_length,
+      useCurve = useCurve,
+      threads = threads
+    )
   }
 
   sensitivity_vec <- fdObj@metadata[[sens_col]]
@@ -651,15 +779,29 @@ transform_curves <- function(fdObj,
   base_col <- paste0("baseline_V_", useCurve)
   if (!base_col %in% names(fdObj@metadata)) {
     message(sprintf("Column '%s' not found in metadata. Running analyze_baseline()...", base_col))
-    call_args <- c(as.list(environment()), list(...))
-    base_args <- call_args[names(call_args) %in% names(formals(analyze_baseline))]
-    base_args$fdObj <- fdObj
-    if (is.null(base_args$useCurve)) base_args$useCurve <- useCurve
-    fdObj <- do.call(analyze_baseline, base_args)
+    fdObj <- analyze_baseline(
+      fdObj = fdObj,
+      least_length = least_length,
+      useCurve = useCurve,
+      slp_threshold = slp_threshold,
+      std_threshold = std_threshold,
+      threads = threads,
+      soft = soft,
+      external_sensitivity_column = if (soft) probe_sens_col else NULL
+    )
   }
 
   baseline_vec <- fdObj@metadata[[base_col]]
   names(baseline_vec) <- rownames(fdObj@metadata)
+
+  # ---- Probe sensitivity vector for soft mode ----
+  probe_sensitivity_vec <- if (soft) {
+    pv <- fdObj@metadata[[probe_sens_col]]
+    names(pv) <- rownames(fdObj@metadata)
+    pv
+  } else {
+    NULL
+  }
 
   # ---- Transform a single curve ----
   transform_one <- function(name) {
@@ -685,7 +827,9 @@ transform_curves <- function(fdObj,
         sensitivity = sensitivity,
         spring_constant = spring_const,
         senscal_seg_x = senscal_seg[[1]],
-        senscal_seg_y = senscal_seg[[2]]
+        senscal_seg_y = senscal_seg[[2]],
+        soft = soft,
+        probe_sensitivity = if (soft) probe_sensitivity_vec[name] else NULL
       )
     }
   }
@@ -999,7 +1143,7 @@ analyze_curves_noise <- function(
     fdObj,
     useCurve = c("retract", "approach"),
     threads = 1,
-    baseline_span,
+    baseline_span = "automatic",
     threshold_method = c("sd", "mad", "quantile", "fixed"),
     multiplier = 3,
     mad_constant = 1.4826,
@@ -1220,7 +1364,7 @@ analyze_a_curve_interaction_distance <- function(
   run_id <- qualifying_runs[1L]
   hit <- if (y_direction == "negative") run_starts[run_id] else run_ends[run_id]
 
-  c(distance = x[scan_idx[hit]], threshold = threshold)
+  c(distance = max(0, x[scan_idx[hit]]), threshold = threshold)
 }
 
 #' Interaction Distance (nm) for All Transformed Curves in an fdObj
@@ -1798,7 +1942,7 @@ analyze_curves_all_analytical_metrics <- function(
     analyze_rupture_distance = TRUE,
     analyze_rupture_distance_baseline_span = "automatic",
     analyze_rupture_distance_x_direction = c("left", "right"),
-    analyze_rupture_distance_min_consecutive = 1,
+    analyze_rupture_distance_min_consecutive = 3,
     analyze_repulsive_distance = TRUE,
     analyze_repulsive_distance_baseline_span = "automatic",
     analyze_repulsive_distance_x_direction = c("right", "left"),

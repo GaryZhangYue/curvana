@@ -11,7 +11,9 @@ transform_a_curve(
   sensitivity,
   spring_constant,
   senscal_seg_x,
-  senscal_seg_y
+  senscal_seg_y,
+  soft = FALSE,
+  probe_sensitivity = NULL
 )
 }
 \arguments{
@@ -28,6 +30,12 @@ transform_a_curve(
 \item{senscal_seg_x}{Numeric vector. X-values of the sensitivity calibration segment.}
 
 \item{senscal_seg_y}{Numeric vector. Y-values of the sensitivity calibration segment (in volts).}
+
+\item{soft}{Logical. If \code{TRUE}, use \code{probe_sensitivity} for
+force conversion while retaining the current transformation equations.}
+
+\item{probe_sensitivity}{Numeric. Probe sensitivity measured on a hard
+reference surface, required when \code{soft = TRUE}.}
 }
 \value{
 A data.frame with:
@@ -35,9 +43,12 @@ A data.frame with:
   \item{separation_distance_nm}{Tip-sample separation (nm).}
   \item{force_nN}{Force (nN).}
 }
-If any of the input is NULL, an empty dataframe will be returned
+If required inputs are missing, an empty data frame is returned.
 }
 \description{
 Converts raw AFM deflection and piezo data into calibrated separation distance and force.
-The zero-separation position is estimated from the sensitivity calibration segment.
+If the measurement is performed on a soft sample rather than a hard reference,
+the \code{soft} argument can be set to \code{TRUE} and a \code{probe_sensitivity}
+value, which should be acquired by measurements on a hard surface,
+ needs to be provided to convert deflection to force.
 }

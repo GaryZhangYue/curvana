@@ -9,6 +9,9 @@ The `fdObj` structure organizes all raw and processed data into designated slots
 ensuring data integrity, simplifying analysis workflows, and facilitating
 reproducible data sharing.
 
+The package supports both script-based workflows in R and an interactive Shiny
+application for users who prefer a graphical interface.
+
 ---
 
 ## Installation
@@ -47,24 +50,83 @@ maintaining a complete, self-contained record of the analysis.
 
 ---
 
+## Main Utilities
+
+The package provides utilities for the full AFM force-curve workflow:
+
+- **Data import and object construction**: `createFdObjFromFolder()` creates an
+  `fdObj` from a folder of AFM text files.
+- **Curve transformation**: `transform_curves()` converts raw deflection curves
+  into calibrated force-distance curves and stores the processed outputs in the
+  `fdObj` object.
+- **Analytical metrics**: `analyze_curves_all_analytical_metrics()` calculates
+  adhesive force, adhesive and repulsive energies, rupture distance, repulsive
+  distance, and related metrics.
+- **Curve-level visualization**: `plot_deflection_curves()`, `plot_fd_curves()`,
+  and `plot_a_curve_metrics()` support quality control, single-curve inspection,
+  and annotated metric visualization.
+- **Summary visualization**: `plot_metric_violin()`, `plot_pca_biplot()`,
+  `plot_complex_heatmap()`, and `plot_raw_deflection_heatmap()` help compare
+  groups and explore multivariate patterns across samples.
+
+---
+
 ## Visualization and Reporting
 
 **curvana** includes flexible plotting utilities for generating publication-ready figures:
 
-- **Scatter plots** of individual or batch-wise raw and processed curves  
-- **Violin plots** summarizing distributions of curve-derived properties  
+- **Single-curve plots** for detailed inspection of transformed curves and annotated metrics  
+- **Batch-curve plots** for visualizing raw or processed curves across many samples  
+- **PCA biplots** for visualizing main trend of variation across groups and the feature driving it
+- **Violin plots** for summarizing distributions of curve-derived properties and performing statistical tests
+- **Heatmaps** for exploring raw deflection patterns and multivariate feature trends  
 
 These tools make it easy to explore data quality, compare experimental conditions,
 and visualize quantitative trends across samples.
 
 ---
 
-## Integration with shinyCurvana
+## Shiny App
 
-**curvana** seamlessly integrates with **shinyCurvana**, an R Shiny application that
-provides a **code-free, user-friendly interface** for performing the same analyses
-interactively.
+**curvana** includes an interactive Shiny application for code-free exploration
+and analysis of AFM force-distance datasets.
 
-Together, they enable both scripting-based and graphical workflows for AFM
-force–distance data processing and interpretation.
+Main app capabilities include:
+
+- importing AFM datasets and metadata
+- transforming curves and calculating analytical metrics
+- inspecting annotated single-curve plots
+- generating violin plots, PCA biplots, and heatmaps
+- downloading processed results for downstream analysis
+
+You can launch the app from R with:
+
+```r
+library(curvana)
+run_curvana_app()
+```
+
+The packaged app entry points are:
+
+- `R/shiny_app.R`
+- `inst/shiny-apps/curvana-explorer/app.R`
+
+---
+
+## Tutorials
+
+The repository includes the tutorials and rendered walkthroughs below:
+
+- `vignettes/vignette_minimal_workflow.html`
+- `vignettes/vignette_full_workflow.html`
+- `vignettes/tutorial.html`
+
+`vignette_minimal_workflow.html` presents the shortest practical path through
+the package, focusing on the core steps needed to import data, transform curves,
+calculate analytical metrics, and generate the main result plots.
+
+`vignette_full_workflow.html` provides a more complete walkthrough of the
+package, covering the same core pipeline in greater depth along with more
+extensive visualization, comparison, and exploratory analysis examples.
+
 
