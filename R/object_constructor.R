@@ -157,6 +157,10 @@ createFdObjFromFolder <- function(folder,
 #' @param threads Number of parallel threads to use for file reading. Default = 1 (sequential).
 #' @param height_col Column name for height/distance data in JPK files. Default is "height".
 #' @param deflection_col Column name for deflection data in JPK files. Default is "vDeflection".
+#' @param reverse_Displacement_Approach Logical; reverse approach distance column if TRUE. Default = FALSE.
+#' @param reverse_Displacement_Retract Logical; reverse retract distance column if TRUE. Default = FALSE.
+#' @param reverse_Deflection_Approach Logical; reverse approach deflection column if TRUE. Default = FALSE.
+#' @param reverse_Deflection_Retract Logical; reverse retract deflection column if TRUE. Default = FALSE.
 #'
 #' @return An object of class \code{fdObj}
 #' @export
@@ -169,6 +173,7 @@ createFdObjFromFolder <- function(folder,
 #'   \item Determines if deflection data is in Voltage (V) or Force (N)
 #'   \item If Force (N), converts to Voltage using: V = F / (sensitivity * springConstant)
 #'   \item Converts distance from meters to nanometers
+#'   \item Optionally reverses approach/retract distance and deflection columns (Approach: all TRUE by default; Retract: all FALSE by default) to ensure contact region is at the beginning and non-interaction region is at the end of the curve
 #'   \item Adds segment-specific columns to metadata: \code{approach_sensitivity_imported}, 
 #'     \code{approach_springConstant_imported}, \code{retract_sensitivity_imported}, 
 #'     \code{retract_springConstant_imported}, \code{Number_of_datapoints_approach},
@@ -212,7 +217,11 @@ createFdObjFromJPKFolder <- function(folder,
                                      metadata = NULL,
                                      threads = 1,
                                      height_col = "height",
-                                     deflection_col = "vDeflection") {
+                                     deflection_col = "vDeflection",
+                                     reverse_Displacement_Approach = TRUE,
+                                     reverse_Displacement_Retract = FALSE,
+                                     reverse_Deflection_Approach = TRUE,
+                                     reverse_Deflection_Retract = FALSE) {
   
   if (!dir.exists(folder)) {
     stop("Folder does not exist: ", folder)
@@ -276,7 +285,23 @@ createFdObjFromJPKFolder <- function(folder,
   # Extract raw curves and add parameters to metadata
   rawCurves <- setNames(
     lapply(names(jpk_data_list), function(name) {
-      jpk_data_list[[name]]$raw_data
+      raw_df <- jpk_data_list[[name]]$raw_data
+      
+      # Apply column reversals if requested
+      if ("Calc_Ramp_Ex_nm" %in% colnames(raw_df) && reverse_Displacement_Approach) {
+        raw_df$Calc_Ramp_Ex_nm <- rev(raw_df$Calc_Ramp_Ex_nm)
+      }
+      if ("Calc_Ramp_Rt_nm" %in% colnames(raw_df) && reverse_Displacement_Retract) {
+        raw_df$Calc_Ramp_Rt_nm <- rev(raw_df$Calc_Ramp_Rt_nm)
+      }
+      if ("Defl_V_Ex" %in% colnames(raw_df) && reverse_Deflection_Approach) {
+        raw_df$Defl_V_Ex <- rev(raw_df$Defl_V_Ex)
+      }
+      if ("Defl_V_Rt" %in% colnames(raw_df) && reverse_Deflection_Retract) {
+        raw_df$Defl_V_Rt <- rev(raw_df$Defl_V_Rt)
+      }
+      
+      raw_df
     }),
     names(jpk_data_list)
   )
