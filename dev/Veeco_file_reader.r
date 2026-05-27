@@ -3,11 +3,13 @@ load_all()
 test = createFdObjFromFolder(folder = "dev/input_files/veeco",
                                       suffix = ".txt",
                                       Displacement_Approach = "Calc_Ramp_Ex_nm", 
-                                      Deflection_Approach = "Defl_pN_Ex")
+                                      Deflection_Approach = "Defl_pN_Ex",
+                                      Displacement_Retract = "Calc_Ramp_Rt_nm",
+                                      Deflection_Retract = "Defl_pN_Rt")
 
 
 View(test@rawCurves[[1]])
-
+plot_deflection_curves(test)
 
 test = createFdObjFromFolder(folder = "dev/input_files/bruker_with_NA",
                                       suffix = ".txt")
