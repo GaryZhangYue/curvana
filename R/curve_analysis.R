@@ -115,6 +115,10 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
   raw_list <- fdObj@rawCurves
   curve_names <- names(raw_list)
 
+  # Determine data point count column name
+  n_datapoints_col <- if (useCurve == "approach") "Number_of_datapoints_approach" else "Number_of_datapoints_retract"
+  has_datapoint_info <- n_datapoints_col %in% names(fdObj@metadata)
+
   # Choose parallel or sequential
   if (threads > 1) {
     future::plan(future::multisession, workers = threads)
@@ -125,6 +129,16 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
       }
       x <- df[[x_col]]
       y <- df[[y_col]]
+      
+      # Subset to valid data if metadata is available
+      if (has_datapoint_info) {
+        n_valid <- fdObj@metadata[name, n_datapoints_col]
+        if (!is.na(n_valid) && n_valid > 0 && n_valid <= length(x)) {
+          x <- x[seq_len(n_valid)]
+          y <- y[seq_len(n_valid)]
+        }
+      }
+      
       calc_sensitivity(x = x, y = y, R_squared_min = R_squared_min, end = end, intv = intv, minimum_length = minimum_length)
     },future.packages = "curvana")
   } else {
@@ -135,6 +149,16 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
       }
       x <- df[[x_col]]
       y <- df[[y_col]]
+      
+      # Subset to valid data if metadata is available
+      if (has_datapoint_info) {
+        n_valid <- fdObj@metadata[name, n_datapoints_col]
+        if (!is.na(n_valid) && n_valid > 0 && n_valid <= length(x)) {
+          x <- x[seq_len(n_valid)]
+          y <- y[seq_len(n_valid)]
+        }
+      }
+      
       calc_sensitivity(x = x, y = y, R_squared_min = R_squared_min, end = end, intv = intv, minimum_length = minimum_length)
     })
   }
@@ -326,6 +350,10 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 
   if (is.null(sensitivity_vec)) stop("No sensitivity values found in metadata.")
 
+  # Determine data point count column name
+  n_datapoints_col <- if (useCurve == "approach") "Number_of_datapoints_approach" else "Number_of_datapoints_retract"
+  has_datapoint_info <- n_datapoints_col %in% names(fdObj@metadata)
+
   find_result_for_curve <- function(name) {
     df <- raw_list[[name]]
     sensitivity <- sensitivity_vec[name]
@@ -339,6 +367,16 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 
     x <- df[[x_col]]
     y <- df[[y_col]]
+    
+    # Subset to valid data if metadata is available
+    if (has_datapoint_info) {
+      n_valid <- fdObj@metadata[name, n_datapoints_col]
+      if (!is.na(n_valid) && n_valid > 0 && n_valid <= length(x)) {
+        x <- x[seq_len(n_valid)]
+        y <- y[seq_len(n_valid)]
+      }
+    }
+    
     res <- find_baseline(
       x = x,
       y = y,
@@ -415,6 +453,9 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 #' Applies Savitzky-Golay smoothing to deflection columns in a raw curve data frame.
 #' The original values are first copied to new columns with suffix
 #' \code{_original}, then the target columns are overwritten with smoothed values.
+#' If segment length information is provided via \code{n_approach} and \code{n_retract},
+#' only the valid (non-NA) portion of each segment is denoised, and the result is
+#' padded back to the original length with NA.
 #'
 #' @param raw_curve A raw curve data frame containing deflection columns.
 #' @param p Filter polynomial order.
@@ -422,6 +463,10 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 #' @param m Order of the derivative to compute.
 #' @param ts Sampling interval.
 #' @param useCurve Character; one of \code{c("retract", "approach", "both")}.
+#' @param n_approach Optional. Number of valid data points in approach segment.
+#'   If provided, only the first \code{n_approach} rows of approach columns are denoised.
+#' @param n_retract Optional. Number of valid data points in retract segment.
+#'   If provided, only the first \code{n_retract} rows of retract columns are denoised.
 #'
 #' @return A data frame with original columns preserved and additional
 #' \code{*_original} backup column(s) for the smoothed deflection column(s).
@@ -431,7 +476,9 @@ denoise_a_curve <- function(raw_curve,
                     n = 3,
                     m = 0,
                     ts = 1,
-                    useCurve = c("retract", "approach", "both")) {
+                    useCurve = c("retract", "approach", "both"),
+                    n_approach = NULL,
+                    n_retract = NULL) {
   if (!is.data.frame(raw_curve)) {
     stop("raw_curve must be a data.frame")
   }
@@ -465,12 +512,50 @@ denoise_a_curve <- function(raw_curve,
 
   backup_cols <- paste0(target_cols, "_original")
 
+  # Create backup columns
   raw_curve <- raw_curve %>%
-    dplyr::mutate(dplyr::across(dplyr::all_of(target_cols), ~ .x, .names = "{.col}_original")) %>%
-    dplyr::mutate(dplyr::across(
-      dplyr::all_of(target_cols),
-      ~ signal::sgolayfilt(.x, p = p, n = n, m = m, ts = ts)
-    ))
+    dplyr::mutate(dplyr::across(dplyr::all_of(target_cols), ~ .x, .names = "{.col}_original"))
+  
+  # Process each target column with appropriate subsetting
+  for (col_name in target_cols) {
+    # Determine valid data range for this column
+    if (col_name == "Defl_V_Ex" && !is.null(n_approach)) {
+      # Approach segment - use first n_approach rows
+      n_valid <- min(n_approach, nrow(raw_curve))
+      if (n_valid > 0) {
+        valid_idx <- seq_len(n_valid)
+        valid_data <- raw_curve[[col_name]][valid_idx]
+        
+        # Denoise only valid data
+        denoised <- signal::sgolayfilt(valid_data, p = p, n = n, m = m, ts = ts)
+        
+        # Pad back to original length with NA
+        padded <- rep(NA_real_, nrow(raw_curve))
+        padded[valid_idx] <- denoised
+        raw_curve[[col_name]] <- padded
+      }
+      
+    } else if (col_name == "Defl_V_Rt" && !is.null(n_retract)) {
+      # Retract segment - use first n_retract rows
+      n_valid <- min(n_retract, nrow(raw_curve))
+      if (n_valid > 0) {
+        valid_idx <- seq_len(n_valid)
+        valid_data <- raw_curve[[col_name]][valid_idx]
+        
+        # Denoise only valid data
+        denoised <- signal::sgolayfilt(valid_data, p = p, n = n, m = m, ts = ts)
+        
+        # Pad back to original length with NA
+        padded <- rep(NA_real_, nrow(raw_curve))
+        padded[valid_idx] <- denoised
+        raw_curve[[col_name]] <- padded
+      }
+      
+    } else {
+      # No subsetting info provided - denoise entire column (may contain NA)
+      raw_curve[[col_name]] <- signal::sgolayfilt(raw_curve[[col_name]], p = p, n = n, m = m, ts = ts)
+    }
+  }
 
   core_cols <- c("Calc_Ramp_Ex_nm", "Calc_Ramp_Rt_nm", "Defl_V_Ex", "Defl_V_Rt")
   raw_curve <- raw_curve %>%
@@ -509,15 +594,25 @@ denoise_curves <- function(fdObj,
   useCurve <- match.arg(useCurve)
   raw_list <- fdObj@rawCurves
   curve_names <- names(raw_list)
+  
+  # Extract metadata for data point counts (if available)
+  metadata <- fdObj@metadata
+  has_counts <- all(c("Number_of_datapoints_approach", "Number_of_datapoints_retract") %in% colnames(metadata))
 
   run_one <- function(name) {
+    # Get data point counts for this curve if available
+    n_approach <- if (has_counts) metadata[name, "Number_of_datapoints_approach"] else NULL
+    n_retract <- if (has_counts) metadata[name, "Number_of_datapoints_retract"] else NULL
+    
     denoise_a_curve(
       raw_curve = raw_list[[name]],
       p = p,
       n = n,
       m = m,
       ts = ts,
-      useCurve = useCurve
+      useCurve = useCurve,
+      n_approach = n_approach,
+      n_retract = n_retract
     )
   }
 
@@ -803,6 +898,10 @@ transform_curves <- function(fdObj,
     NULL
   }
 
+  # ---- Determine data point count column ----
+  n_datapoints_col <- if (useCurve == "approach") "Number_of_datapoints_approach" else "Number_of_datapoints_retract"
+  has_datapoint_info <- n_datapoints_col %in% names(fdObj@metadata)
+
   # ---- Transform a single curve ----
   transform_one <- function(name) {
     df <- raw_list[[name]]
@@ -812,6 +911,16 @@ transform_curves <- function(fdObj,
 
     x <- df[[x_col]]
     y <- df[[y_col]]
+    
+    # Subset to valid data if metadata is available
+    if (has_datapoint_info) {
+      n_valid <- fdObj@metadata[name, n_datapoints_col]
+      if (!is.na(n_valid) && n_valid > 0 && n_valid <= length(x)) {
+        x <- x[seq_len(n_valid)]
+        y <- y[seq_len(n_valid)]
+      }
+    }
+    
     baseline <- baseline_vec[name]
     sensitivity <- sensitivity_vec[name]
     spring_const <- spring_constant_vec[name]

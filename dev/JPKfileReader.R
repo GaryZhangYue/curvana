@@ -96,11 +96,7 @@ fdobj.jpk <- createFdObjFromJPKFolder(folder = jpk_dir,
                                      metadata = NULL,
                                      threads = 1,
                                      height_col = "height",
-                                     deflection_col = "vDeflection",
-                                     reverse_Displacement_Approach = FALSE,
-                                     reverse_Displacement_Retract = FALSE,
-                                     reverse_Deflection_Approach = FALSE,
-                                     reverse_Deflection_Retract = FALSE)
+                                     deflection_col = "vDeflection")
 
 fdobj.jpk@metadata$sample = rownames(fdobj.jpk@metadata)
 
@@ -126,7 +122,7 @@ plot_deflection_curves(
   color_map = NULL
 )
 
-fdobj.jpk.s = extract(fdobj.jpk,by_sample = c('force-save-JPK-2h'))
+fdobj.jpk.s = extract(fdobj.jpk,by_sample = c('force-save-JPK-2h','force-save-JPK-3h'))
 fdobj.jpk.s = transform_curves(fdobj.jpk.s,
                         useCurve = 'approach', # analyze the approach curve
 
@@ -137,22 +133,90 @@ fdobj.jpk.s = transform_curves(fdobj.jpk.s,
 
                         # baseline determination and filtering
                         least_length = 50, # use the last (right side) 300 points as baseline
-                        slp_threshold = 0.2, # any curve with a baseline-region slope > 0.01 will be discarded
-                        std_threshold = 1, # any curve with a baseline-region standard deviation of y values > 0.01 will be discarded
+                        slp_threshold = 0.1, # any curve with a baseline-region slope > 0.01 will be discarded
+                        std_threshold = 0.1, # any curve with a baseline-region standard deviation of y values > 0.01 will be discarded
 
                         # sensitivity calibration
                         intv = 10, # number of data points added per iteration when building the linear sensitivity segment
                         end = 100, # use at most the first 20 data points on the left side of the curve to calculate sensitivity
-                        R_squared_min = 0.5, # minimum R^2 threshold for accepting a segment as sufficiently linear during sensitivity calculation
+                        R_squared_min = 0.8, # minimum R^2 threshold for accepting a segment as sufficiently linear during sensitivity calculation
                         minimum_length = 10, # minimum number of accumulated points required for a valid sensitivity result; if shorter, sensitivity is reported as NA
                         threads = 1 # number of threads to use for parallel processing; set to 1 for no parallelization; increase for faster processing of large datasets (e.g., > 5000 curves)
                         )
 
+fdobj.jpk.s = transform_curves(fdobj.jpk.s,
+                        useCurve = 'retract', # analyze the approach curve
 
-y <- fdobj.jpk.s@rawCurves$`force-save-JPK-2h`$Defl_V_Ex[564:614] 
-x <- fdobj.jpk.s@rawCurves$`force-save-JPK-2h`$Calc_Ramp_Ex_nm[564:614] 
+                        denoise_first = TRUE, # whether to denoise raw curves before transformation. Denoising can improve the reliability of sensitivity and baseline calculations, especially for noisy curves. The smoothed curve will be used for downstream analysis, while the original raw curve will be preserved in the rawCurves slot for reference.
+                        p = 1, n = 3, # parameters for the Savitzky-Golay filter used for denoising. p is the polynomial order (default 1, meaning linear), and n is the window size (default 3, meaning each point is smoothed by fitting a polynomial to itself and its 2 neighbors). Users can adjust these parameters based on curve noise and shape. This setting is equivalent to a simple moving average.
+                        
+                        spring_constant = 0.08, # spring constant; can be a single numeric value applied to all curves, or the name of a metadata column containing per-curve spring constant values.
 
-plot(x, y)
+                        # baseline determination and filtering
+                        least_length = 50, # use the last (right side) 300 points as baseline
+                        slp_threshold = 0.1, # any curve with a baseline-region slope > 0.01 will be discarded
+                        std_threshold = 0.1, # any curve with a baseline-region standard deviation of y values > 0.01 will be discarded
 
-model <- lm(y ~ x)
-summary(model)          # includes slope, R², p-values, etc.
+                        # sensitivity calibration
+                        intv = 10, # number of data points added per iteration when building the linear sensitivity segment
+                        end = 100, # use at most the first 20 data points on the left side of the curve to calculate sensitivity
+                        R_squared_min = 0.8, # minimum R^2 threshold for accepting a segment as sufficiently linear during sensitivity calculation
+                        minimum_length = 10, # minimum number of accumulated points required for a valid sensitivity result; if shorter, sensitivity is reported as NA
+                        threads = 1 # number of threads to use for parallel processing; set to 1 for no parallelization; increase for faster processing of large datasets (e.g., > 5000 curves)
+                        )
+
+plot_fd_curves(fdobj.jpk.s,split_curves_by = 'sample',
+               point_alpha = 0.5,line_alpha = 0.3, point_size = 0.5)
+
+
+
+fdobj.jpk.s = analyze_curves_all_analytical_metrics(
+  fdobj.jpk.s, # the object
+  useCurve = "both", # run analysis for both approach and retract 
+  threads = 1, 
+
+  # noise band parameters
+  noise_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for noise band calculation
+  noise_threshold_method = "quantile", # use quantile method to define the noise band
+  noise_quantile_low = 0.00, # define the lower end of noise band as minimum y value of the baseline section
+  noise_quantile_high = 1, # define the upper end of noise band as maximum y value of the baseline section
+  noise_multiplier = 3, # multiply the noise band by 1 to directly use the min-max range of the force in baseline region without further scaling.
+
+  # adhesive force
+  analyze_adhesive_force = TRUE, # whether to analyze adhesive force
+  # adhesive energy and repulsive energy
+  analyze_energy = TRUE, # whether to analyze interaction energy (repulsive and adhesive)
+  # rupture (adhesive) distance
+  analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
+  # repulsive distance
+  analyze_repulsive_distance = TRUE # whether to analyze repulsive distance
+)
+
+
+plot_a_curve_metrics(
+  fdobj = fdobj.jpk.s,
+  curve_name = 'force-save-JPK-2h'	,
+  useCurve = "retract", # which curve to plot, can be "approach" or "retract".
+  plot_raw = T, # whether to plot the raw curve together with the transformed curve. 
+  base_size = 15,
+  annotation_text_size = 5
+)
+
+plot_a_curve_metrics(
+  fdobj = fdobj.jpk.s,
+  curve_name = 'force-save-JPK-2h'	,
+  useCurve = "approach", # which curve to plot, can be "approach" or "retract".
+  plot_raw = T, # whether to plot the raw curve together with the transformed curve. 
+  base_size = 15,
+  annotation_text_size = 5
+)
+
+plot_a_curve_metrics(
+  fdobj = fdobj.jpk.s,
+  curve_name = 'force-save-JPK-3h'	,
+  useCurve = "approach", # which curve to plot, can be "approach" or "retract".
+  plot_raw = T, # whether to plot the raw curve together with the transformed curve. 
+  base_size = 15,
+  annotation_text_size = 5
+)
+

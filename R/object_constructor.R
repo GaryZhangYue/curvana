@@ -1,10 +1,16 @@
 #' Constructor for fdObj from a folder of AFM force–distance curve files
+#'
+#' @description
+#' This function imports raw AFM force-distance curve files where cantilever deflection (in Voltage)
+#' and piezo displacement are stored as separate columns for approach and retract segments, such as
+#' files exported from Veeco and Bruker Nanoscope softwares.
 #' Each curve should have the contact region at the beginning of the curve and the non-interaction region 
 #' at the end of the curve, so that the approach and retract segments can be correctly identified and processed.
 #' However, different instruments generate curves with different column names, orientations, and conventions,
 #' so the user must specify which columns correspond to approach and retract distances and deflections,
 #' and whether any of these columns need to be reversed to ensure the contact and non-interaction regions
 #' are correctly positioned at the beginning and end of the curve, respectively.
+#'
 #' @param folder Path to a folder containing the raw AFM curve files
 #' @param suffix File extension to look for (e.g., ".txt")
 #' @param pattern Optional string pattern to filter files (e.g., "experiment"); default is "" (no filtering)
@@ -21,6 +27,12 @@
 #'
 #' @return An object of class \code{fdObj}
 #' @export
+#' 
+#' @details
+#' The function automatically counts the number of non-NA data points in each segment and adds
+#' \code{Number_of_datapoints_approach} and \code{Number_of_datapoints_retract} columns to the
+#' metadata. These counts can be useful for quality control and for identifying segments with
+#' incomplete data.
 createFdObjFromFolder <- function(folder,
                                   suffix = ".txt",
                                   pattern = "",
@@ -82,7 +94,16 @@ createFdObjFromFolder <- function(folder,
 
   rawCurves <- setNames(
     read_func(files_to_read, function(f) {
-      df <- read.table(f, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+      # Determine separator based on file suffix
+      sep_char <- if (suffix == ".csv") "," else "\t"
+      
+      # Read lines and filter out comment lines starting with # or "
+      lines <- readLines(f, warn = FALSE)
+      lines <- lines[!grepl("^[#\"]", lines)]
+      
+      df <- read.table(text = paste(lines, collapse = "\n"), 
+                       header = TRUE, sep = sep_char, stringsAsFactors = FALSE,
+                       fill = TRUE, na.strings = c("NA", ""))
 
       has_approach <- all(c(Calc_Ramp_Ex_nm, Defl_V_Ex) %in% colnames(df))
       has_retract <- all(c(Calc_Ramp_Rt_nm, Defl_V_Rt) %in% colnames(df))
@@ -112,6 +133,25 @@ createFdObjFromFolder <- function(folder,
     }),
     curve_names
   )
+
+  # Count data points for each segment and add to metadata
+  for (name in curve_names) {
+    raw_df <- rawCurves[[name]]
+    
+    # Count non-NA data points for approach segment
+    if ("Calc_Ramp_Ex_nm" %in% colnames(raw_df)) {
+      metadata[name, "Number_of_datapoints_approach"] <- sum(!is.na(raw_df$Calc_Ramp_Ex_nm))
+    } else {
+      metadata[name, "Number_of_datapoints_approach"] <- 0L
+    }
+    
+    # Count non-NA data points for retract segment
+    if ("Calc_Ramp_Rt_nm" %in% colnames(raw_df)) {
+      metadata[name, "Number_of_datapoints_retract"] <- sum(!is.na(raw_df$Calc_Ramp_Rt_nm))
+    } else {
+      metadata[name, "Number_of_datapoints_retract"] <- 0L
+    }
+  }
 
   # Initialize empty lists for approach/retract
   empty_appr_df <- data.frame(distance = numeric(0), force = numeric(0))
@@ -147,8 +187,10 @@ createFdObjFromFolder <- function(folder,
 #'
 #' @description
 #' This function reads JPK format force-distance curve files exported from JPK AFM software.
-#' The function automatically detects and separates approach and retract segments, extracts
-#' sensitivity and spring constant, and handles unit conversion from Force to Voltage if needed.
+#' The function automatically detects and separates approach and retract segments, and extracts
+#' sensitivity and spring constant. Users are encouraged to export deflection data directly in Voltage.
+#' However, if force data is provided (indicated by "N" as the column unit), it will be converted back
+#' to Voltage using the associated sensitivity and spring constant values.
 #'
 #' @param folder Path to a folder containing JPK format AFM curve files (.txt)
 #' @param suffix File extension to look for (default: ".txt")

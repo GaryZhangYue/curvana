@@ -37,4 +37,9 @@ done 12. Shiny app, plot fd curves, give options to adjust x and y lim
 done 20. in plot a curve metric, the labels sometimes overlap in shiny app, try to adjust ggrepel
      21. omit comment line reading in original constructor
      22. rename original constructor and where it is called
+     23. in original constructor, make it create the same columns as in jpk that records the number of points
+     24. in all transform curve related functions, make sure it uses these datapoint count columns to correctly extract non-NA datapoints
+     25. edit the shiny app to include the jpk
+     26. update vignette
+     27. update explanations?
      
