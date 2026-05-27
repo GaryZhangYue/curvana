@@ -28,3 +28,11 @@ test3@metadata
 test3 = analyze_curves_all_analytical_metrics(test3, useCurve = 'both')
 plot_a_curve_metrics(test3,useCurve = 'approach',plot_raw = T,curve_name = rownames(test@metadata)[1],
 )
+
+df <- test@rawCurves[[1]]
+df <- df %>%
+transmute(approach_displacement = Calc_Ramp_Ex_nm,
+       approach_deflection = Defl_V_Ex/100,
+       retract_displacement = Calc_Ramp_Rt_nm,
+       retract_deflection = Defl_V_Rt/100)
+readr::write_tsv(df, file = "inst/shiny-apps/curvana-explorer/input.example.generic.txt")

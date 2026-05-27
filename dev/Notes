@@ -42,4 +42,5 @@ done 20. in plot a curve metric, the labels sometimes overlap in shiny app, try 
      25. edit the shiny app to include the jpk
      26. update vignette
      27. update explanations?
-     
+     28. test shiny app importer function
+     29. for generic file format import, change the example file to a file with two columns having customized header.
