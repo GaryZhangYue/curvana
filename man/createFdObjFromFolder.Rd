@@ -2,28 +2,22 @@
 % Please edit documentation in R/object_constructor.R
 \name{createFdObjFromFolder}
 \alias{createFdObjFromFolder}
-\title{Constructor for fdObj from a folder of AFM force–distance curve files
-Each curve should have the contact region at the beginning of the curve and the non-interaction region 
-at the end of the curve, so that the approach and retract segments can be correctly identified and processed.
-However, different instruments generate curves with different column names, orientations, and conventions,
-so the user must specify which columns correspond to approach and retract distances and deflections,
-and whether any of these columns need to be reversed to ensure the contact and non-interaction regions
-are correctly positioned at the beginning and end of the curve, respectively.}
+\title{Constructor for fdObj from a folder of AFM force–distance curve files}
 \usage{
 createFdObjFromFolder(
   folder,
   suffix = ".txt",
   pattern = "",
-  Calc_Ramp_Ex_nm = "Calc_Ramp_Ex_nm",
-  Calc_Ramp_Rt_nm = "Calc_Ramp_Rt_nm",
-  Defl_V_Ex = "Defl_V_Ex",
-  Defl_V_Rt = "Defl_V_Rt",
+  Displacement_Approach = "Calc_Ramp_Ex_nm",
+  Displacement_Retract = "Calc_Ramp_Rt_nm",
+  Deflection_Approach = "Defl_V_Ex",
+  Deflection_Retract = "Defl_V_Rt",
   metadata = NULL,
   threads = 1,
-  reverse_Calc_Ramp_Ex_nm = FALSE,
-  reverse_Calc_Ramp_Rt_nm = TRUE,
-  reverse_Defl_V_Ex = TRUE,
-  reverse_Defl_V_Rt = FALSE
+  reverse_Displacement_Approach = FALSE,
+  reverse_Displacement_Retract = TRUE,
+  reverse_Deflection_Approach = TRUE,
+  reverse_Deflection_Retract = FALSE
 )
 }
 \arguments{
@@ -33,6 +27,10 @@ createFdObjFromFolder(
 
 \item{pattern}{Optional string pattern to filter files (e.g., "experiment"); default is "" (no filtering)}
 
+\item{metadata}{Optional data.frame. If provided, file names (excluding the suffix) matched to rownames(metadata) will be read in. Returns error if any files not found.}
+
+\item{threads}{Number of parallel threads to use for file reading. Default = 1 (sequential).}
+
 \item{Calc_Ramp_Ex_nm}{Column name for approach distance (default: "Calc_Ramp_Ex_nm")}
 
 \item{Calc_Ramp_Rt_nm}{Column name for retract distance (default: "Calc_Ramp_Rt_nm")}
@@ -40,10 +38,6 @@ createFdObjFromFolder(
 \item{Defl_V_Ex}{Column name for approach deflection (default: "Defl_V_Ex")}
 
 \item{Defl_V_Rt}{Column name for retract deflection (default: "Defl_V_Rt")}
-
-\item{metadata}{Optional data.frame. If provided, file names (excluding the suffix) matched to rownames(metadata) will be read in. Returns error if any files not found.}
-
-\item{threads}{Number of parallel threads to use for file reading. Default = 1 (sequential).}
 
 \item{reverse_Calc_Ramp_Ex_nm}{Logical; reverse approach distance column if TRUE. Default = FALSE.}
 
@@ -57,11 +51,19 @@ createFdObjFromFolder(
 An object of class \code{fdObj}
 }
 \description{
-Constructor for fdObj from a folder of AFM force–distance curve files
+This function imports raw AFM force-distance curve files where cantilever deflection (in Voltage)
+and piezo displacement are stored as separate columns for approach and retract segments, such as
+files exported from Veeco and Bruker Nanoscope softwares.
 Each curve should have the contact region at the beginning of the curve and the non-interaction region 
 at the end of the curve, so that the approach and retract segments can be correctly identified and processed.
 However, different instruments generate curves with different column names, orientations, and conventions,
 so the user must specify which columns correspond to approach and retract distances and deflections,
 and whether any of these columns need to be reversed to ensure the contact and non-interaction regions
 are correctly positioned at the beginning and end of the curve, respectively.
+}
+\details{
+The function automatically counts the number of non-NA data points in each segment and adds
+\code{Number_of_datapoints_approach} and \code{Number_of_datapoints_retract} columns to the
+metadata. These counts can be useful for quality control and for identifying segments with
+incomplete data.
 }

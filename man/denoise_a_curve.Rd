@@ -10,7 +10,9 @@ denoise_a_curve(
   n = 3,
   m = 0,
   ts = 1,
-  useCurve = c("retract", "approach", "both")
+  useCurve = c("retract", "approach", "both"),
+  n_approach = NULL,
+  n_retract = NULL
 )
 }
 \arguments{
@@ -25,6 +27,12 @@ denoise_a_curve(
 \item{ts}{Sampling interval.}
 
 \item{useCurve}{Character; one of \code{c("retract", "approach", "both")}.}
+
+\item{n_approach}{Optional. Number of valid data points in approach segment.
+If provided, only the first \code{n_approach} rows of approach columns are denoised.}
+
+\item{n_retract}{Optional. Number of valid data points in retract segment.
+If provided, only the first \code{n_retract} rows of retract columns are denoised.}
 }
 \value{
 A data frame with original columns preserved and additional
@@ -34,4 +42,7 @@ A data frame with original columns preserved and additional
 Applies Savitzky-Golay smoothing to deflection columns in a raw curve data frame.
 The original values are first copied to new columns with suffix
 \code{_original}, then the target columns are overwritten with smoothed values.
+If segment length information is provided via \code{n_approach} and \code{n_retract},
+only the valid (non-NA) portion of each segment is denoised, and the result is
+padded back to the original length with NA.
 }
