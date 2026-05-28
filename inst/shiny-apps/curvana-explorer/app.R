@@ -480,32 +480,30 @@ ui <- bs4Dash::dashboardPage(
 
         shiny::fluidRow(
           bs4Dash::bs4Card(
-            title       = "Raw Deflection Heatmap",
+            title       = "Raw Deflection Curves by Data Point Index",
             width       = 12,
             status      = "warning",
             solidHeader = TRUE,
             shiny::helpText(
-              "This heatmap provides a quick overview of raw deflection behavior across all loaded curves before transformation. Each column corresponds to one curve segment (approach or retract), each row corresponds to the data point index, and colors reflect min-max scaled deflection values within each curve. Use the annotation columns to compare sample groupings and the tick interval to control row-axis readability."
+              "This plot shows raw deflection values against the row index (data point number) for each curve. This helps verify data orientation (contact region at beginning, non-interaction region at end), visualize the number of data points in each curve, and help select appropriate regions for baseline calibration and sensitivity calculation."
             ),
             shiny::fluidRow(
-              shiny::column(3, shiny::selectInput("raw_anno_col1", tooltip_label("Annotate col 1", "First metadata column used for the top annotation on the raw heatmap."),
+              shiny::column(4, shiny::selectInput("raw_index_group_by", tooltip_label("Color by", "Metadata column to use for coloring curves."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(3, shiny::selectInput("raw_anno_col2", tooltip_label("Annotate col 2", "Second metadata column used for the top annotation on the raw heatmap."),
+              shiny::column(4, shiny::selectInput("raw_index_split_by", tooltip_label("Facet by", "Metadata column to use for splitting curves into subpanels."),
                 choices = c("None" = ""), selected = "")),
-              shiny::column(3, shiny::numericInput("heatmap_tick_interval", tooltip_label("Row tick interval", "Spacing between row tick marks on the heatmap index axis."),
-                value = 100, min = 1, step = 1)),
-              shiny::column(3,
+              shiny::column(4,
                 shiny::tags$br(),
-                shiny::actionButton("plot_raw_heatmap_btn", "Plot", class = "btn-warning btn-block", icon = shiny::icon("chart-area"))
+                shiny::actionButton("plot_raw_index_btn", "Plot", class = "btn-warning btn-block", icon = shiny::icon("chart-line"))
               )
             ),
-            tooltip_plot("raw_heatmap", "740px", "Min-max scaled raw deflection heatmap. Columns represent sample segments, approach or retract, and rows represent measurement indices."),
+            tooltip_plot("raw_index_plot", "370px", "Raw deflection vs data point index. Each curve shows deflection values plotted against row number."),
             shiny::fluidRow(
-              shiny::column(3, shiny::numericInput("raw_heatmap_download_width", tooltip_label("Download width (in)", "Width in inches for exported heatmap image."), value = 12, min = 1, step = 0.5)),
-              shiny::column(3, shiny::numericInput("raw_heatmap_download_height", tooltip_label("Download height (in)", "Height in inches for exported heatmap image."), value = 9, min = 1, step = 0.5)),
+              shiny::column(3, shiny::numericInput("raw_index_download_width", tooltip_label("Download width (in)", "Width in inches for exported plot."), value = 12, min = 1, step = 0.5)),
+              shiny::column(3, shiny::numericInput("raw_index_download_height", tooltip_label("Download height (in)", "Height in inches for exported plot."), value = 9, min = 1, step = 0.5)),
               shiny::column(6,
                 shiny::tags$br(),
-                shiny::downloadButton("download_raw_heatmap", "Download heatmap", class = "btn-info btn-block")
+                shiny::downloadButton("download_raw_index_plot", "Download plot", class = "btn-info btn-block")
               )
             )
           )
@@ -1312,10 +1310,10 @@ server <- function(input, output, session) {
     shiny::updateSelectInput(session, "spring_constant_col_retract",
       choices = sens_col_chooser, selected = keep_or_none(input$spring_constant_col_retract))
 
-    shiny::updateSelectInput(session, "raw_anno_col1",
-      choices = chooser, selected = keep_or_none(input$raw_anno_col1))
-    shiny::updateSelectInput(session, "raw_anno_col2",
-      choices = chooser, selected = keep_or_none(input$raw_anno_col2))
+    shiny::updateSelectInput(session, "raw_index_group_by",
+      choices = chooser, selected = keep_or_none(input$raw_index_group_by))
+    shiny::updateSelectInput(session, "raw_index_split_by",
+      choices = chooser, selected = keep_or_none(input$raw_index_split_by))
     shiny::updateSelectInput(session, "raw_group_by",
       choices = chooser, selected = keep_or_none(input$raw_group_by))
     shiny::updateSelectInput(session, "raw_split_by",
@@ -1972,28 +1970,15 @@ server <- function(input, output, session) {
     invisible(TRUE)
   }
 
-  draw_raw_heatmap <- function() {
+  draw_raw_index_plot <- function() {
     shiny::req(rv$fdobj)
-    anno_cols <- c(input$raw_anno_col1, input$raw_anno_col2)
-    anno_cols <- intersect(anno_cols[nzchar(anno_cols)], colnames(rv$fdobj@metadata))
 
-    anno_color_list <- list()
-    if (length(anno_cols) > 0) {
-      for (cn in anno_cols) {
-        cmap <- make_discrete_color_map(rv$fdobj@metadata[[cn]])
-        if (!is.null(cmap)) {
-          anno_color_list[[cn]] <- cmap
-        }
-      }
-    }
-
-    curvana::plot_raw_deflection_heatmap(
-      fdobj               = rv$fdobj,
-      annotate_columns    = if (length(anno_cols) > 0) anno_cols else NULL,
-      annotation_colors   = anno_color_list,
-      index_tick_interval = as.integer(input$heatmap_tick_interval),
-      show_column_names   = FALSE,
-      draw                = TRUE
+    curvana::plot_deflection_curves_by_index(
+      fdobj           = rv$fdobj,
+      curve           = "both",
+      group_curves_by = if (nzchar(input$raw_index_group_by)) input$raw_index_group_by else NULL,
+      split_curves_by = if (nzchar(input$raw_index_split_by)) input$raw_index_split_by else NULL,
+      alpha = 0.5, point_size = 0.5, line_alpha = 0.3
     )
   }
 
@@ -2300,22 +2285,22 @@ server <- function(input, output, session) {
     }
   )
 
-  # Raw heatmap
-  output$raw_heatmap <- shiny::renderPlot({
-    shiny::req(input$plot_raw_heatmap_btn > 0)
-    isolate(draw_raw_heatmap())
+  # Raw deflection index plot
+  output$raw_index_plot <- shiny::renderPlot({
+    shiny::req(input$plot_raw_index_btn > 0)
+    isolate(draw_raw_index_plot())
   })
 
-  output$download_raw_heatmap <- shiny::downloadHandler(
+  output$download_raw_index_plot <- shiny::downloadHandler(
     filename = function() {
-      paste0("curvana_raw_deflection_heatmap_", Sys.Date(), ".png")
+      paste0("curvana_raw_deflection_by_index_", Sys.Date(), ".png")
     },
     content = function(file) {
       save_plot_png(
         file,
-        draw_raw_heatmap,
-        width = resolve_download_dim(input$raw_heatmap_download_width, 12),
-        height = resolve_download_dim(input$raw_heatmap_download_height, 9),
+        draw_raw_index_plot,
+        width = resolve_download_dim(input$raw_index_download_width, 12),
+        height = resolve_download_dim(input$raw_index_download_height, 9),
         res = 300
       )
     }

@@ -19,28 +19,30 @@ done 2. in curve transform settings, everthing except spring constant should be 
 done 3. in analytical metrics, include all settings analyze metrics function take.
 done 4. keep working on the name of the analyze metric arguments and their explanations (repulsive distance not done)
 done 5. check the page 4 analytic metric argument setting name and explanations
-     6. include function to download transformed curves one by one or by all. (download data/ download figure)
+done 6. include function to download transformed curves one by one or by all. (download data/ download figure)
 done 7. make rupture distance detection consider at least 3 consecutive points below lower noise bound
-     8. check allowOnlyExOrRtOnly branch and if it works, merge
+done 8. check allowOnlyExOrRtOnly branch and if it works, merge
 done 9. make a new branch to add functions to transform curves on a soft surface
 done 10. include the soft surface algorithm. Briefly, in transform_curves, if soft =T, then probe_sensitivity_external need to be assigned as either a numeric value or a character (column name in metadata). The function will copy that value or the designated column to a new column with standardized name probe_true_sensitivity_V_nm_<useCurve>. Then, during curve transformation, 1) the analyze_baseline will take this probe_true_sensitivity as its input, as opposed to the sensitivity value defined with the curve. This value only influences the filtering criteria for removing curves with undulating baseline (std and slp is calculated with force instead of raw deflection value), but will not influence the baseline value (the average of defelection of last N points). Note that analyze_baseline() is edited to include soft and external_sensitivity_column arguments. 2) before running transform_one (the wrapper of transform_a_curve), if soft=T, probe_sensitivity_vec will be assigned values with the value in the probe_true_sensitivity_V_nm_<useCurve>. This value will be inserted to transform_one as the other values for each curve iteratively. Transform_one will call transform_a_curve, which has been updated so that 1) takes soft and probe_sensitivity arguments. if soft, it will use probe_sensitivity as opposed to the sensitivity defined with the given curve for tranforming deflection to force_nN. The operation on x-axis (i.e., tranform piezo moving distance to separation distance), is not affected, so that no matter if soft is True or False, it is always transformed using the sensitivity defined with the given curve. This function is checked with test_softsurface_option.R under curvana_test.
 done 12. Shiny app, plot fd curves, give options to adjust x and y lim
      11. check shiny app, all buttons, downloads
-     12. check shiny app, check how return to previoius step works, and if it loads correct fdobj.
-     13. select 20 lines for each group region combination for tutorial
-     14. update tutorial
+done 12. check shiny app, check how return to previoius step works, and if it loads correct fdobj.
+done 13. select 20 lines for each group region combination for tutorial
+done 14. update tutorial
      15. check the explanations in app
      16. check the explanations and tests in package functions
-     17. write the github page
+done 17. write the github page
      18. write a tutorial for shiny app.
      19. in app page2, edit column name header to make it easier to understand. also make sure users know what to do if one side of curve is missing (discuss with xitong about the column name)
 done 20. in plot a curve metric, the labels sometimes overlap in shiny app, try to adjust ggrepel
-     21. omit comment line reading in original constructor
-     22. rename original constructor and where it is called
-     23. in original constructor, make it create the same columns as in jpk that records the number of points
-     24. in all transform curve related functions, make sure it uses these datapoint count columns to correctly extract non-NA datapoints
-     25. edit the shiny app to include the jpk
+done 21. omit comment line reading in original constructor
+done 22. rename original constructor and where it is called
+done 23. in original constructor, make it create the same columns as in jpk that records the number of points
+done 24. in all transform curve related functions, make sure it uses these datapoint count columns to correctly extract non-NA datapoints
+done 25. edit the shiny app to include the jpk
      26. update vignette
      27. update explanations?
      28. test shiny app importer function
-     29. for generic file format import, change the example file to a file with two columns having customized header.
+done 29. for generic file format import, change the example file to a file with two columns having customized header.
+     30. change the first heatmap to a scatter plot but having x showing the number of data points.
+     31. update metadata read into shiny app (change group names to non-meaningful ones just like in the vignette)

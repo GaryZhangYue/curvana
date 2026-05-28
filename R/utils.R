@@ -151,6 +151,189 @@ plot_deflection_curves <- function(fdobj,
 }
 
 
+#' Plot raw deflection vs row index from rawCurves slot of fdObj
+#'
+#' Similar to \code{plot_deflection_curves} but uses row numbers (data point index) 
+#' on the x-axis instead of distance values. This is useful for visualizing:
+#' \itemize{
+#'   \item How many data points are in each curve
+#'   \item Whether the data is oriented in the correct direction
+#'   \item The general shape and quality of raw deflection data
+#' }
+#'
+#' @param fdobj A `fdObj` object
+#' @param curve Which segment(s) to plot: "approach", "retract", or "both"
+#' @param group_curves_by Metadata column to color by (optional)
+#' @param split_curves_by Metadata column to facet by (optional)
+#' @param color_map Named vector of colors (optional)
+#' @param point_size Size of points (default = 0.5)
+#' @param alpha Transparency of points (default = 0.6)
+#' @param line_alpha Transparency of connecting paths (default = 0.5)
+#'
+#' @return A ggplot2 object showing raw deflection signal vs data point index.
+#' @export
+#' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
+plot_deflection_curves_by_index <- function(fdobj,
+                                            curve = c("both", "approach", "retract"),
+                                            group_curves_by = NULL,
+                                            split_curves_by = NULL,
+                                            point_size = 0.5,
+                                            alpha = 0.5,
+                                            line_alpha = 0.5,
+                                            color_map = NULL) {
+  curve <- match.arg(curve)
+  meta <- fdobj@metadata
+  curves <- fdobj@rawCurves
+
+  if (!is.null(color_map)) {
+    if (is.list(color_map)) {
+      color_map <- unlist(color_map, use.names = TRUE)
+    }
+    if (!is.atomic(color_map) || is.null(names(color_map))) {
+      stop("color_map must be a named atomic vector (e.g., c('1' = 'darkred', '2' = 'orange')).")
+    }
+    color_map <- as.character(color_map)
+  }
+
+  # Validate metadata inputs
+  if (!is.null(group_curves_by) && !group_curves_by %in% colnames(meta)) {
+    stop("group_curves_by must be a column name in metadata")
+  }
+  if (!is.null(split_curves_by) && !split_curves_by %in% colnames(meta)) {
+    stop("split_curves_by must be a column name in metadata")
+  }
+
+  meta_scalar <- function(col_name, idx) {
+    if (is.na(idx)) return(NA_character_)
+    value <- meta[[col_name]][idx]
+    if (is.list(value)) {
+      value <- unlist(value, recursive = TRUE, use.names = FALSE)
+    }
+    if (length(value) == 0) return(NA_character_)
+    as.character(value[[1]])
+  }
+
+  # Collect data
+  df_list <- lapply(names(curves), function(name) {
+    df <- curves[[name]]
+    if (nrow(df) == 0) return(NULL)
+
+    idx <- match(name, rownames(meta))
+    segments <- list()
+
+    if (curve %in% c("both", "approach") && all(c("Calc_Ramp_Ex_nm", "Defl_V_Ex") %in% colnames(df))) {
+      # Retrieve number of data points from metadata
+      n_points_col <- "Number_of_datapoints_approach"
+      if (n_points_col %in% colnames(meta) && !is.na(idx)) {
+        n_points <- as.integer(meta[idx, n_points_col])
+        if (is.na(n_points) || n_points <= 0) {
+          n_points <- sum(!is.na(df$Calc_Ramp_Ex_nm))
+        }
+      } else {
+        n_points <- sum(!is.na(df$Calc_Ramp_Ex_nm))
+      }
+      
+      segments$approach <- data.frame(
+        row_index = seq_len(n_points),
+        deflection = df$Defl_V_Ex[seq_len(n_points)],
+        segment = "Approach"
+      )
+    }
+    
+    if (curve %in% c("both", "retract") && all(c("Calc_Ramp_Rt_nm", "Defl_V_Rt") %in% colnames(df))) {
+      # Retrieve number of data points from metadata
+      n_points_col <- "Number_of_datapoints_retract"
+      if (n_points_col %in% colnames(meta) && !is.na(idx)) {
+        n_points <- as.integer(meta[idx, n_points_col])
+        if (is.na(n_points) || n_points <= 0) {
+          n_points <- sum(!is.na(df$Calc_Ramp_Rt_nm))
+        }
+      } else {
+        n_points <- sum(!is.na(df$Calc_Ramp_Rt_nm))
+      }
+      
+      segments$retract <- data.frame(
+        row_index = seq_len(n_points),
+        deflection = df$Defl_V_Rt[seq_len(n_points)],
+        segment = "Retract"
+      )
+    }
+
+    if (length(segments) == 0) return(NULL)
+
+    df_combined <- do.call(rbind, segments)
+    df_combined$sample <- name
+
+    if (!is.null(group_curves_by)) {
+      df_combined[[group_curves_by]] <- meta_scalar(group_curves_by, idx)
+    }
+    if (!is.null(split_curves_by)) {
+      df_combined[[split_curves_by]] <- meta_scalar(split_curves_by, idx)
+    }
+
+    df_combined
+  })
+
+  plot_df <- do.call(rbind, df_list)
+  if (is.null(plot_df) || nrow(plot_df) == 0) return(NULL)
+
+  # Base plot
+  p <- ggplot(plot_df, aes(x = row_index, y = deflection)) +
+    labs(x = "Data Point Index (Row Number)", y = "Deflection (V)")
+
+  if (!is.null(group_curves_by)) {
+    p <- p + geom_path(aes(color = .data[[group_curves_by]], group = interaction(sample, segment)),
+                       alpha = line_alpha,
+                       linewidth = 0.35,
+                       show.legend = FALSE) +
+      geom_point(aes(color = .data[[group_curves_by]]),
+                        size = point_size, alpha = alpha) +
+      labs(color = group_curves_by)
+  } else {
+    p <- p + geom_path(aes(group = interaction(sample, segment)),
+                       alpha = line_alpha,
+                       linewidth = 0.35,
+                       color = "grey50") +
+      geom_point(size = point_size, alpha = alpha)
+  }
+
+  # Faceting
+  if (!is.null(split_curves_by)) {
+    if (curve == "both") {
+      p <- p + facet_grid(as.formula(paste(split_curves_by, "~segment")))
+    } else {
+      p <- p + facet_wrap(as.formula(paste("~", split_curves_by)))
+    }
+  } else if (curve == "both") {
+    p <- p + facet_wrap(~segment)
+  }
+
+  # Optional color map
+  if (!is.null(color_map)) {
+    p <- p + scale_color_manual(values = color_map)
+  }
+
+  # Theme
+  p <- p + theme_minimal(base_size = 14) +
+    theme(
+      panel.grid.minor = element_blank(),
+      strip.background = element_rect(fill = "#f0f0f0"),
+      strip.text = element_text(face = "bold")
+    )
+
+  n_samples <- length(fdobj@rawCurves)
+  n_approach <- length(unique(plot_df$sample[plot_df$segment == "Approach"]))
+  n_retract  <- length(unique(plot_df$sample[plot_df$segment == "Retract"]))
+
+  message(sprintf(
+    "%d samples in the input; %d approach and %d retract curves are plotted.",
+    n_samples, n_approach, n_retract
+  ))
+
+  return(p)
+}
+
+
 #' Plot Force-Distance Curves from an fdObj
 #'
 #' Generates force-distance plots from the calibrated approach or retract curves in an \code{fdObj}.
