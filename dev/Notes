@@ -42,7 +42,8 @@ done 24. in all transform curve related functions, make sure it uses these datap
 done 25. edit the shiny app to include the jpk
      26. update vignette
      27. update explanations?
-     28. test shiny app importer function
+done 28. test shiny app importer function (jpk done; generic done; bruker done)
 done 29. for generic file format import, change the example file to a file with two columns having customized header.
-     30. change the first heatmap to a scatter plot but having x showing the number of data points.
-     31. update metadata read into shiny app (change group names to non-meaningful ones just like in the vignette)
+done 30. change the first heatmap to a scatter plot but having x showing the number of data points.
+done 31. update metadata read into shiny app (change group names to non-meaningful ones just like in the vignette)
+     32. update default

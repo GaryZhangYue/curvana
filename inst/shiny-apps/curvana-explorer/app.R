@@ -111,6 +111,13 @@ ui <- bs4Dash::dashboardPage(
           "  .pca-checkbox-grid .shiny-options-group {\n",
           "    grid-template-columns: 1fr;\n",
           "  }\n",
+          "}\n",
+          ".shiny-notification {\n",
+          "  max-width: 500px;\n",
+          "  width: auto;\n",
+          "  white-space: pre-wrap;\n",
+          "  word-wrap: break-word;\n",
+          "  overflow-wrap: break-word;\n",
           "}\n"
         )
       ))
@@ -1408,14 +1415,23 @@ server <- function(input, output, session) {
       suffix <- if (startsWith(suffix_in, ".")) suffix_in else paste0(".", suffix_in)
       pattern <- as.character(input$load_pattern)
 
-      col_calc_ramp_ex <- trimws(as.character(input$load_calc_ramp_ex_nm))
-      col_calc_ramp_rt <- trimws(as.character(input$load_calc_ramp_rt_nm))
-      col_defl_v_ex <- trimws(as.character(input$load_defl_v_ex))
-      col_defl_v_rt <- trimws(as.character(input$load_defl_v_rt))
-      req_cols <- c(col_calc_ramp_ex, col_calc_ramp_rt, col_defl_v_ex, col_defl_v_rt)
-      if (any(!nzchar(req_cols))) {
-        shiny::showNotification("Column-name arguments cannot be empty.", type = "error")
-        return(NULL)
+      # Get selected file format
+      file_format <- as.character(input$file_format_tabs)
+      if (!nzchar(file_format)) {
+        file_format <- "Bruker NanoScope/Veeco ASCII"  # default
+      }
+
+      # Get column names based on selected format
+      if (file_format == "Bruker NanoScope/Veeco ASCII") {
+        col_calc_ramp_ex <- trimws(as.character(input$load_calc_ramp_ex_nm))
+        col_calc_ramp_rt <- trimws(as.character(input$load_calc_ramp_rt_nm))
+        col_defl_v_ex <- trimws(as.character(input$load_defl_v_ex))
+        col_defl_v_rt <- trimws(as.character(input$load_defl_v_rt))
+      } else if (file_format == "Generic Column-Separated Format") {
+        col_calc_ramp_ex <- trimws(as.character(input$generic_calc_ramp_ex_nm))
+        col_calc_ramp_rt <- trimws(as.character(input$generic_calc_ramp_rt_nm))
+        col_defl_v_ex <- trimws(as.character(input$generic_defl_v_ex))
+        col_defl_v_rt <- trimws(as.character(input$generic_defl_v_rt))
       }
 
       metadata_for_load <- NULL
@@ -1450,27 +1466,96 @@ server <- function(input, output, session) {
       }
 
       shiny::incProgress(0.3)
-      fdobj <- tryCatch(
-        curvana::createFdObjFromFolder(
-          folder  = folder,
-          suffix = suffix,
-          pattern = pattern,
-          Displacement_Approach = col_calc_ramp_ex,
-          Displacement_Retract = col_calc_ramp_rt,
-          Deflection_Approach = col_defl_v_ex,
-          Deflection_Retract = col_defl_v_rt,
-          reverse_Displacement_Approach = isTRUE(input$reverse_calc_ramp_ex_nm),
-          reverse_Displacement_Retract = isTRUE(input$reverse_calc_ramp_rt_nm),
-          reverse_Deflection_Approach = isTRUE(input$reverse_defl_v_ex),
-          reverse_Deflection_Retract = isTRUE(input$reverse_defl_v_rt),
-          metadata = metadata_for_load,
-          threads = max(1L, as.integer(input$threads_load))
-        ),
-        error = function(e) {
-          shiny::showNotification(paste("Load failed:", e$message), type = "error", duration = NULL)
-          NULL
-        }
-      )
+      
+      # Call appropriate function based on file format
+      if (file_format == "JPK ASCII Format") {
+        # JPK format: use createFdObjFromJPKFolder
+        jpk_height <- trimws(as.character(input$jpk_height_col))
+        jpk_deflection <- trimws(as.character(input$jpk_deflection_col))
+        fdobj <- tryCatch(
+          curvana::createFdObjFromJPKFolder(
+            folder = folder,
+            suffix = suffix,
+            pattern = pattern,
+            metadata = metadata_for_load,
+            threads = max(1L, as.integer(input$threads_load)),
+            height_col = jpk_height,
+            deflection_col = jpk_deflection,
+            reverse_Displacement_Approach = isTRUE(input$jpk_reverse_calc_ramp_ex_nm),
+            reverse_Displacement_Retract = isTRUE(input$jpk_reverse_calc_ramp_rt_nm),
+            reverse_Deflection_Approach = isTRUE(input$jpk_reverse_defl_v_ex),
+            reverse_Deflection_Retract = isTRUE(input$jpk_reverse_defl_v_rt)
+          ),
+          error = function(e) {
+            shiny::showNotification(
+              paste0("JPK load failed with height_col='", jpk_height, "', deflection_col='", jpk_deflection, "'. Error: ", e$message),
+              type = "error", duration = NULL
+            )
+            NULL
+          }
+        )
+      } else if (file_format == "Bruker NanoScope/Veeco ASCII") {
+        # Bruker format: use createFdObjFromFolder with Bruker inputs
+        fdobj <- tryCatch(
+          curvana::createFdObjFromFolder(
+            folder  = folder,
+            suffix = suffix,
+            pattern = pattern,
+            Displacement_Approach = col_calc_ramp_ex,
+            Displacement_Retract = col_calc_ramp_rt,
+            Deflection_Approach = col_defl_v_ex,
+            Deflection_Retract = col_defl_v_rt,
+            reverse_Displacement_Approach = isTRUE(input$reverse_calc_ramp_ex_nm),
+            reverse_Displacement_Retract = isTRUE(input$reverse_calc_ramp_rt_nm),
+            reverse_Deflection_Approach = isTRUE(input$reverse_defl_v_ex),
+            reverse_Deflection_Retract = isTRUE(input$reverse_defl_v_rt),
+            metadata = metadata_for_load,
+            threads = max(1L, as.integer(input$threads_load))
+          ),
+          error = function(e) {
+            shiny::showNotification(
+              paste0("Bruker load failed with columns: Displacement_Approach='", col_calc_ramp_ex,
+                     "', Displacement_Retract='", col_calc_ramp_rt,
+                     "', Deflection_Approach='", col_defl_v_ex,
+                     "', Deflection_Retract='", col_defl_v_rt,
+                     "'. Error: ", e$message),
+              type = "error", duration = NULL
+            )
+            NULL
+          }
+        )
+      } else {
+        # Generic format: use createFdObjFromFolder with Generic inputs
+        fdobj <- tryCatch(
+          curvana::createFdObjFromFolder(
+            folder  = folder,
+            suffix = suffix,
+            pattern = pattern,
+            Displacement_Approach = col_calc_ramp_ex,
+            Displacement_Retract = col_calc_ramp_rt,
+            Deflection_Approach = col_defl_v_ex,
+            Deflection_Retract = col_defl_v_rt,
+            reverse_Displacement_Approach = isTRUE(input$generic_reverse_calc_ramp_ex_nm),
+            reverse_Displacement_Retract = isTRUE(input$generic_reverse_calc_ramp_rt_nm),
+            reverse_Deflection_Approach = isTRUE(input$generic_reverse_defl_v_ex),
+            reverse_Deflection_Retract = isTRUE(input$generic_reverse_defl_v_rt),
+            metadata = metadata_for_load,
+            threads = max(1L, as.integer(input$threads_load))
+          ),
+          error = function(e) {
+            shiny::showNotification(
+              paste0("Generic load failed with columns: Displacement_Approach='", col_calc_ramp_ex,
+                     "', Displacement_Retract='", col_calc_ramp_rt,
+                     "', Deflection_Approach='", col_defl_v_ex,
+                     "', Deflection_Retract='", col_defl_v_rt,
+                     "'. Error: ", e$message),
+              type = "error", duration = NULL
+            )
+            NULL
+          }
+        )
+      }
+      
       if (is.null(fdobj)) return(NULL)
       shiny::incProgress(0.3)
       rv$fdobj             <- fdobj
@@ -1478,12 +1563,22 @@ server <- function(input, output, session) {
       rv$fdobj_transformed <- NULL
       rv$fdobj_final       <- NULL
       rv$clean_metadata_cols <- colnames(fdobj@metadata)
+      
+      # Update status message based on file format
+      function_used <- if (file_format == "JPK ASCII Format") {
+        "createFdObjFromJPKFolder"
+      } else {
+        "createFdObjFromFolder"
+      }
+      
       rv$status <- sprintf(
-        "Loaded %d raw curves from:\n%s\nGenerated metadata: %d rows x %d columns.\ncreateFdObjFromFolder args: suffix='%s', pattern='%s'.%s",
+        "Loaded %d raw curves from:\n%s\nFile format: %s\nGenerated metadata: %d rows x %d columns.\n%s args: suffix='%s', pattern='%s'.%s",
         length(fdobj@rawCurves),
         folder,
+        file_format,
         nrow(fdobj@metadata),
         ncol(fdobj@metadata),
+        function_used,
         suffix,
         pattern,
         metadata_source_note
@@ -1548,15 +1643,19 @@ server <- function(input, output, session) {
       fdobj_current@metadata <- metadata_keep_clean_only(fdobj_current@metadata)
       least_app <- if (identical(input$least_mode_approach, "automatic")) "automatic" else as.integer(input$least_length_approach)
       least_ret <- if (identical(input$least_mode_retract,  "automatic")) "automatic" else as.integer(input$least_length_retract)
+      
+      transform_messages <- c()
+      
       if (isTRUE(input$transform_approach)) {
-        fdobj_current <- tryCatch({
+        result <- tryCatch({
           shiny::incProgress(0.35, detail = "Approach")
           soft_app <- isTRUE(input$soft_approach)
           probe_sens_app <- if (soft_app) {
             if (identical(input$soft_sens_mode_approach, "column")) input$soft_sens_col_approach else as.numeric(input$soft_sens_value_approach)
           } else { NULL }
           sc_app <- if (identical(input$spring_constant_mode_approach, "column")) input$spring_constant_col_approach else as.numeric(input$spring_constant_value_approach)
-          curvana::transform_curves(
+          
+          fdobj_result <- curvana::transform_curves(
             fdObj = fdobj_current, spring_constant = sc_app, useCurve = "approach",
             threads = max(1L, as.integer(input$threads_transform_approach)),
             denoise_first = isTRUE(input$denoise_first_approach),
@@ -1572,22 +1671,26 @@ server <- function(input, output, session) {
             soft = soft_app,
             probe_sensitivity_external = probe_sens_app
           )
+          
+          fdobj_result
         }, error = function(e) {
           shiny::showNotification(paste("Approach transform failed:", e$message), type = "error", duration = NULL)
           NULL
         })
+        fdobj_current <- result
         if (is.null(fdobj_current)) return(NULL)
       }
 
       if (isTRUE(input$transform_retract)) {
-        fdobj_current <- tryCatch({
+        result <- tryCatch({
           shiny::incProgress(0.45, detail = "Retract")
           soft_ret <- isTRUE(input$soft_retract)
           probe_sens_ret <- if (soft_ret) {
             if (identical(input$soft_sens_mode_retract, "column")) input$soft_sens_col_retract else as.numeric(input$soft_sens_value_retract)
           } else { NULL }
           sc_ret <- if (identical(input$spring_constant_mode_retract, "column")) input$spring_constant_col_retract else as.numeric(input$spring_constant_value_retract)
-          curvana::transform_curves(
+          
+          fdobj_result <- curvana::transform_curves(
             fdObj = fdobj_current, spring_constant = sc_ret, useCurve = "retract",
             threads = max(1L, as.integer(input$threads_transform_retract)),
             denoise_first = isTRUE(input$denoise_first_retract),
@@ -1603,24 +1706,96 @@ server <- function(input, output, session) {
             soft = soft_ret,
             probe_sensitivity_external = probe_sens_ret
           )
+          
+          fdobj_result
         }, error = function(e) {
           shiny::showNotification(paste("Retract transform failed:", e$message), type = "error", duration = NULL)
           NULL
         })
+        fdobj_current <- result
         if (is.null(fdobj_current)) return(NULL)
       }
 
       rv$fdobj             <- fdobj_current
       rv$fdobj_transformed <- fdobj_current
       rv$fdobj_final       <- NULL
+      
+      # Build status message with transform output
       transformed_segments <- c(
         if (isTRUE(input$transform_approach)) "approach" else NULL,
         if (isTRUE(input$transform_retract)) "retract" else NULL
       )
-      rv$status <- sprintf("Transformation completed for selected curve segments: %s.", paste(transformed_segments, collapse = ", "))
+      
+      # Generate detailed summary from final fdObj
+      summary_lines <- character(0)
+      
+      if (isTRUE(input$transform_approach)) {
+        n_total <- length(fdobj_current@approachCurves)
+        n_success <- sum(sapply(fdobj_current@approachCurves, function(x) !is.null(x) && nrow(x) > 0))
+        n_fail <- n_total - n_success
+        
+        sens_col <- "sensitivity_V_nm_approach"
+        base_col <- "baseline_V_approach"
+        n_sens_fail <- if (sens_col %in% names(fdobj_current@metadata)) {
+          sum(is.na(fdobj_current@metadata[[sens_col]]))
+        } else { NA }
+        n_base_fail <- if (base_col %in% names(fdobj_current@metadata) && sens_col %in% names(fdobj_current@metadata)) {
+          # Only count baseline failures where sensitivity exists
+          sum(!is.na(fdobj_current@metadata[[sens_col]]) & is.na(fdobj_current@metadata[[base_col]]))
+        } else { NA }
+        
+        approach_msg <- sprintf("Approach: %d processed, %d successful, %d failed transformation", 
+                              n_total, n_success, n_fail)
+        if (!is.na(n_sens_fail) && n_sens_fail > 0) {
+          approach_msg <- paste0(approach_msg, sprintf("\n  - %d failed linear contact region detection", n_sens_fail))
+        }
+        if (!is.na(n_base_fail) && n_base_fail > 0) {
+          approach_msg <- paste0(approach_msg, sprintf("\n  - %d has undulating baseline", n_base_fail))
+        }
+        summary_lines <- c(summary_lines, approach_msg)
+      }
+      
+      if (isTRUE(input$transform_retract)) {
+        n_total <- length(fdobj_current@retractCurves)
+        n_success <- sum(sapply(fdobj_current@retractCurves, function(x) !is.null(x) && nrow(x) > 0))
+        n_fail <- n_total - n_success
+        
+        sens_col <- "sensitivity_V_nm_retract"
+        base_col <- "baseline_V_retract"
+        n_sens_fail <- if (sens_col %in% names(fdobj_current@metadata)) {
+          sum(is.na(fdobj_current@metadata[[sens_col]]))
+        } else { NA }
+        n_base_fail <- if (base_col %in% names(fdobj_current@metadata) && sens_col %in% names(fdobj_current@metadata)) {
+          # Only count baseline failures where sensitivity exists
+          sum(!is.na(fdobj_current@metadata[[sens_col]]) & is.na(fdobj_current@metadata[[base_col]]))
+        } else { NA }
+        
+        retract_msg <- sprintf("Retract: %d processed, %d successful, %d failed transformation", 
+                              n_total, n_success, n_fail)
+        if (!is.na(n_sens_fail) && n_sens_fail > 0) {
+          retract_msg <- paste0(retract_msg, sprintf("\n  - %d failed linear contact region detection", n_sens_fail))
+        }
+        if (!is.na(n_base_fail) && n_base_fail > 0) {
+          retract_msg <- paste0(retract_msg, sprintf("\n  - %d has undulating baseline", n_base_fail))
+        }
+        summary_lines <- c(summary_lines, retract_msg)
+      }
+      
+      status_msg <- sprintf("Transformation completed for: %s.", paste(transformed_segments, collapse = ", "))
+      if (length(summary_lines) > 0) {
+        status_msg <- paste(status_msg, "\n\n", paste(summary_lines, collapse = "\n"), sep = "")
+      }
+      rv$status <- status_msg
+      
       update_choices(fdobj_current)
       shiny::incProgress(0.1)
-      shiny::showNotification("Transform complete.", type = "message")
+      
+      # Show notification with summary
+      shiny::showNotification(
+        paste(summary_lines, collapse = "\n"),
+        type = "message",
+        duration = 10
+      )
     })
   })
 

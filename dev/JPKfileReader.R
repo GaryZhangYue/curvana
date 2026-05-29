@@ -90,7 +90,8 @@ ggpubr::ggscatter(test$raw_data, x='Calc_Ramp_Rt_nm', y='Defl_V_Rt') + ggtitle('
 
 # check batch read with multiple files
 jpk_dir <- c('dev/input_files/JPK')
-fdobj.jpk <- createFdObjFromJPKFolder(folder = jpk_dir,
+jpk_dir2 <- c('/Users/zhangy68/Library/CloudStorage/OneDrive-NationalInstitutesofHealth/R_dev/curvana/inst/extdata_jpk')
+fdobj.jpk <- createFdObjFromJPKFolder(folder = jpk_dir2,
                                      suffix = ".txt",
                                      pattern = "",
                                      metadata = NULL,
