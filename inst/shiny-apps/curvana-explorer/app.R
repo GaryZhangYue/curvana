@@ -1145,7 +1145,28 @@ ui <- bs4Dash::dashboardPage(
       )
 
     ) # tabItems
-  )   # dashboardBody
+  ),  # dashboardBody
+  
+  controlbar = bs4Dash::dashboardControlbar(
+    id = "controlbar",
+    skin = "light",
+    shiny::div(
+      style = "padding: 15px;",
+      shiny::h4("About curvana", style = "margin-top: 0;"),
+      shiny::p(
+        shiny::strong("Version:"), " 0.1.0", shiny::br(),
+        shiny::strong("Purpose:"), " Interactive AFM force curve analysis"
+      ),
+      shiny::tags$hr(),
+      
+      shiny::h5("Links"),
+      shiny::tags$ul(
+        shiny::tags$li(shiny::tags$a("Tutorial", href = "https://github.com/GaryZhangYue/fdafmR", target = "_blank")),
+        shiny::tags$li(shiny::tags$a("GitHub Repository", href = "https://github.com/GaryZhangYue/fdafmR", target = "_blank")),
+        shiny::tags$li(shiny::tags$a("Report Issues", href = "https://github.com/GaryZhangYue/fdafmR/issues", target = "_blank"))
+      )
+    )
+  )
 )     # dashboardPage
 
 
