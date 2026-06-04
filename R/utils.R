@@ -151,6 +151,189 @@ plot_deflection_curves <- function(fdobj,
 }
 
 
+#' Plot raw deflection vs row index from rawCurves slot of fdObj
+#'
+#' Similar to \code{plot_deflection_curves} but uses row numbers (data point index) 
+#' on the x-axis instead of distance values. This is useful for visualizing:
+#' \itemize{
+#'   \item How many data points are in each curve
+#'   \item Whether the data is oriented in the correct direction
+#'   \item The general shape and quality of raw deflection data
+#' }
+#'
+#' @param fdobj A `fdObj` object
+#' @param curve Which segment(s) to plot: "approach", "retract", or "both"
+#' @param group_curves_by Metadata column to color by (optional)
+#' @param split_curves_by Metadata column to facet by (optional)
+#' @param color_map Named vector of colors (optional)
+#' @param point_size Size of points (default = 0.5)
+#' @param alpha Transparency of points (default = 0.6)
+#' @param line_alpha Transparency of connecting paths (default = 0.5)
+#'
+#' @return A ggplot2 object showing raw deflection signal vs data point index.
+#' @export
+#' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
+plot_deflection_curves_by_index <- function(fdobj,
+                                            curve = c("both", "approach", "retract"),
+                                            group_curves_by = NULL,
+                                            split_curves_by = NULL,
+                                            point_size = 0.5,
+                                            alpha = 0.5,
+                                            line_alpha = 0.5,
+                                            color_map = NULL) {
+  curve <- match.arg(curve)
+  meta <- fdobj@metadata
+  curves <- fdobj@rawCurves
+
+  if (!is.null(color_map)) {
+    if (is.list(color_map)) {
+      color_map <- unlist(color_map, use.names = TRUE)
+    }
+    if (!is.atomic(color_map) || is.null(names(color_map))) {
+      stop("color_map must be a named atomic vector (e.g., c('1' = 'darkred', '2' = 'orange')).")
+    }
+    color_map <- as.character(color_map)
+  }
+
+  # Validate metadata inputs
+  if (!is.null(group_curves_by) && !group_curves_by %in% colnames(meta)) {
+    stop("group_curves_by must be a column name in metadata")
+  }
+  if (!is.null(split_curves_by) && !split_curves_by %in% colnames(meta)) {
+    stop("split_curves_by must be a column name in metadata")
+  }
+
+  meta_scalar <- function(col_name, idx) {
+    if (is.na(idx)) return(NA_character_)
+    value <- meta[[col_name]][idx]
+    if (is.list(value)) {
+      value <- unlist(value, recursive = TRUE, use.names = FALSE)
+    }
+    if (length(value) == 0) return(NA_character_)
+    as.character(value[[1]])
+  }
+
+  # Collect data
+  df_list <- lapply(names(curves), function(name) {
+    df <- curves[[name]]
+    if (nrow(df) == 0) return(NULL)
+
+    idx <- match(name, rownames(meta))
+    segments <- list()
+
+    if (curve %in% c("both", "approach") && all(c("Calc_Ramp_Ex_nm", "Defl_V_Ex") %in% colnames(df))) {
+      # Retrieve number of data points from metadata
+      n_points_col <- "Number_of_datapoints_approach"
+      if (n_points_col %in% colnames(meta) && !is.na(idx)) {
+        n_points <- as.integer(meta[idx, n_points_col])
+        if (is.na(n_points) || n_points <= 0) {
+          n_points <- sum(!is.na(df$Calc_Ramp_Ex_nm))
+        }
+      } else {
+        n_points <- sum(!is.na(df$Calc_Ramp_Ex_nm))
+      }
+      
+      segments$approach <- data.frame(
+        row_index = seq_len(n_points),
+        deflection = df$Defl_V_Ex[seq_len(n_points)],
+        segment = "Approach"
+      )
+    }
+    
+    if (curve %in% c("both", "retract") && all(c("Calc_Ramp_Rt_nm", "Defl_V_Rt") %in% colnames(df))) {
+      # Retrieve number of data points from metadata
+      n_points_col <- "Number_of_datapoints_retract"
+      if (n_points_col %in% colnames(meta) && !is.na(idx)) {
+        n_points <- as.integer(meta[idx, n_points_col])
+        if (is.na(n_points) || n_points <= 0) {
+          n_points <- sum(!is.na(df$Calc_Ramp_Rt_nm))
+        }
+      } else {
+        n_points <- sum(!is.na(df$Calc_Ramp_Rt_nm))
+      }
+      
+      segments$retract <- data.frame(
+        row_index = seq_len(n_points),
+        deflection = df$Defl_V_Rt[seq_len(n_points)],
+        segment = "Retract"
+      )
+    }
+
+    if (length(segments) == 0) return(NULL)
+
+    df_combined <- do.call(rbind, segments)
+    df_combined$sample <- name
+
+    if (!is.null(group_curves_by)) {
+      df_combined[[group_curves_by]] <- meta_scalar(group_curves_by, idx)
+    }
+    if (!is.null(split_curves_by)) {
+      df_combined[[split_curves_by]] <- meta_scalar(split_curves_by, idx)
+    }
+
+    df_combined
+  })
+
+  plot_df <- do.call(rbind, df_list)
+  if (is.null(plot_df) || nrow(plot_df) == 0) return(NULL)
+
+  # Base plot
+  p <- ggplot(plot_df, aes(x = row_index, y = deflection)) +
+    labs(x = "Data Point Index (Row Number)", y = "Deflection (V)")
+
+  if (!is.null(group_curves_by)) {
+    p <- p + geom_path(aes(color = .data[[group_curves_by]], group = interaction(sample, segment)),
+                       alpha = line_alpha,
+                       linewidth = 0.35,
+                       show.legend = FALSE) +
+      geom_point(aes(color = .data[[group_curves_by]]),
+                        size = point_size, alpha = alpha) +
+      labs(color = group_curves_by)
+  } else {
+    p <- p + geom_path(aes(group = interaction(sample, segment)),
+                       alpha = line_alpha,
+                       linewidth = 0.35,
+                       color = "grey50") +
+      geom_point(size = point_size, alpha = alpha)
+  }
+
+  # Faceting
+  if (!is.null(split_curves_by)) {
+    if (curve == "both") {
+      p <- p + facet_grid(as.formula(paste(split_curves_by, "~segment")))
+    } else {
+      p <- p + facet_wrap(as.formula(paste("~", split_curves_by)))
+    }
+  } else if (curve == "both") {
+    p <- p + facet_wrap(~segment)
+  }
+
+  # Optional color map
+  if (!is.null(color_map)) {
+    p <- p + scale_color_manual(values = color_map)
+  }
+
+  # Theme
+  p <- p + theme_minimal(base_size = 14) +
+    theme(
+      panel.grid.minor = element_blank(),
+      strip.background = element_rect(fill = "#f0f0f0"),
+      strip.text = element_text(face = "bold")
+    )
+
+  n_samples <- length(fdobj@rawCurves)
+  n_approach <- length(unique(plot_df$sample[plot_df$segment == "Approach"]))
+  n_retract  <- length(unique(plot_df$sample[plot_df$segment == "Retract"]))
+
+  message(sprintf(
+    "%d samples in the input; %d approach and %d retract curves are plotted.",
+    n_samples, n_approach, n_retract
+  ))
+
+  return(p)
+}
+
+
 #' Plot Force-Distance Curves from an fdObj
 #'
 #' Generates force-distance plots from the calibrated approach or retract curves in an \code{fdObj}.
@@ -2065,4 +2248,274 @@ plot_raw_deflection_heatmap <- function(
 
   if (isTRUE(draw)) return(ComplexHeatmap::draw(ht))
   return(ht)
+}
+
+
+#' Read JPK format AFM force curve file
+#'
+#' @description
+#' Reads a JPK format text file exported from JPK AFM software. Automatically detects
+#' approach (extend) and retract segments, extracts sensitivity and spring constant,
+#' and handles unit conversion from Force (N) to Voltage (V) if needed.
+#'
+#' @param file_path Path to the JPK .txt file
+#' @param height_col Column name for height/distance data. Default is "height".
+#'   If not found, falls back to "strainGaugeHeight".
+#' @param deflection_col Column name for deflection data. Default is "vDeflection".
+#'
+#' @return A list with two elements:
+#' \itemize{
+#'   \item \code{raw_data}: Data frame in curvana format with columns:
+#'     \code{Calc_Ramp_Ex_nm}, \code{Calc_Ramp_Rt_nm}, \code{Defl_V_Ex}, \code{Defl_V_Rt}.
+#'     If segments have different lengths, the shorter is padded with NA.
+#'   \item \code{parameters}: Named vector with segment-specific sensitivity and spring constant values
+#'     extracted from the file, plus actual data point counts before padding:
+#'     \code{approach_sensitivity_imported}, \code{approach_springConstant_imported},
+#'     \code{retract_sensitivity_imported}, \code{retract_springConstant_imported},
+#'     \code{Number_of_datapoints_approach}, \code{Number_of_datapoints_retract}
+#' }
+#'
+#' @details
+#' The function:
+#' \itemize{
+#'   \item Detects segments by looking for "# segment: extend" or "# segment: retract"
+#'   \item Extracts sensitivity and spring constant separately for each segment
+#'   \item Determines if deflection data is in Voltage (V) or Force (N)
+#'   \item If Force (N), converts to Voltage using: V = F / (sensitivity * springConstant)
+#'   \item Returns data in curvana's expected format with segment-specific parameters
+#' }
+#'
+#' @keywords internal
+read_jpk_file <- function(file_path, height_col = "height", deflection_col = "vDeflection") {
+  
+  # Read all lines
+  lines <- readLines(file_path, warn = FALSE)
+  
+  # Initialize storage for segments
+  segments <- list()
+  current_segment <- NULL
+  
+  # Parse the file
+  i <- 1
+  while (i <= length(lines)) {
+    line <- lines[i]
+    
+    # Check for segment start
+    if (grepl("^# segment:", line)) {
+      segment_type <- sub("^# segment:\\s*", "", line)
+      
+      # Initialize new segment
+      current_segment <- list(
+        type = segment_type,
+        sensitivity = NA_real_,
+        spring_constant = NA_real_,
+        columns = NULL,
+        units = NULL,
+        data = NULL
+      )
+    }
+    
+    # Extract sensitivity
+    if (grepl("^# sensitivity:", line)) {
+      sens_val <- as.numeric(sub("^# sensitivity:\\s*", "", line))
+      if (!is.null(current_segment)) {
+        current_segment$sensitivity <- sens_val
+      }
+    }
+    
+    # Extract spring constant
+    if (grepl("^# springConstant:", line)) {
+      sc_val <- as.numeric(sub("^# springConstant:\\s*", "", line))
+      if (!is.null(current_segment)) {
+        current_segment$spring_constant <- sc_val
+      }
+    }
+    
+    # Extract column names
+    if (grepl("^# columns:", line)) {
+      cols <- sub("^# columns:\\s*", "", line)
+      if (!is.null(current_segment)) {
+        current_segment$columns <- strsplit(cols, "\\s+")[[1]]
+      }
+    }
+    
+    # Extract units
+    if (grepl("^# units:", line)) {
+      units_str <- sub("^# units:\\s*", "", line)
+      if (!is.null(current_segment)) {
+        current_segment$units <- strsplit(units_str, "\\s+")[[1]]
+      }
+    }
+    
+    # Check if we hit data (non-comment line after segment definition)
+    if (!grepl("^#", line) && !is.null(current_segment) && nzchar(trimws(line))) {
+      # Read data until next segment or end of file
+      data_lines <- character()
+      while (i <= length(lines) && !grepl("^# segment:", lines[i])) {
+        if (!grepl("^#", lines[i]) && nzchar(trimws(lines[i]))) {
+          data_lines <- c(data_lines, lines[i])
+        }
+        i <- i + 1
+      }
+      i <- i - 1  # Step back one since we'll increment at end of loop
+      
+      # Parse data
+      if (length(data_lines) > 0) {
+        # Read as table
+        data_text <- paste(data_lines, collapse = "\n")
+        current_segment$data <- read.table(text = data_text, 
+                                           header = FALSE, 
+                                           stringsAsFactors = FALSE,
+                                           col.names = current_segment$columns)
+        
+        # Store completed segment
+        segments <- append(segments, list(current_segment))
+        current_segment <- NULL
+      }
+    }
+    
+    i <- i + 1
+  }
+  
+  # Process segments into curvana format
+  approach_data <- NULL
+  retract_data <- NULL
+  
+  for (seg in segments) {
+    if (is.null(seg$data) || nrow(seg$data) == 0) next
+    
+    # Validate that specified columns exist in segment
+    if (!(height_col %in% seg$columns)) {
+      stop(sprintf("Height column '%s' not found in segment %s. Available columns: %s",
+                   height_col, seg$type, paste(seg$columns, collapse = ", ")))
+    }
+    
+    if (!(deflection_col %in% seg$columns)) {
+      stop(sprintf("Deflection column '%s' not found in segment %s. Available columns: %s",
+                   deflection_col, seg$type, paste(seg$columns, collapse = ", ")))
+    }
+    
+    seg_height_col <- height_col
+    seg_deflection_col <- deflection_col
+    
+    # Get the data
+    height <- seg$data[[seg_height_col]]
+    deflection <- seg$data[[seg_deflection_col]]
+    
+    # Check units and convert if necessary
+    deflection_col_idx <- which(seg$columns == seg_deflection_col)
+    deflection_unit <- seg$units[deflection_col_idx]
+    
+    if (deflection_unit == "N") {
+      # Convert from Force to Voltage: V = F / (sensitivity * springConstant)
+      # Note that ths sensitivity reported in JPK files is distance per voltage (nm/V)
+      # In our pipeline, sensitivity is voltage per distance
+      if (!is.na(seg$sensitivity) && !is.na(seg$spring_constant)) {
+        deflection <- deflection / (seg$sensitivity * seg$spring_constant)
+        message(sprintf("Converted deflection from Force (N) to Voltage (V) for %s segment using sensitivity and spring constant", seg$type))
+      } else {
+        stop(sprintf("Cannot convert Force to Voltage: missing sensitivity or spring constant for %s segment", seg$type))
+      }
+    }
+    
+    # Convert height to nm based on unit
+    height_col_idx <- which(seg$columns == seg_height_col)
+    height_unit <- seg$units[height_col_idx]
+    
+    height <- switch(height_unit,
+      "m"  = height * 1e9,   # meters to nm
+      "cm" = height * 1e7,   # centimeters to nm
+      "mm" = height * 1e6,   # millimeters to nm
+      "um" = height * 1e3,   # micrometers to nm
+      "nm" = height,         # already in nm
+      stop(sprintf("Unsupported height unit '%s' in segment %s. Expected: m, cm, mm, um, or nm",
+                   height_unit, seg$type))
+    )
+    
+    # Store based on segment type
+    if (seg$type == "extend") {
+      approach_data <- data.frame(
+        distance = height,
+        deflection = deflection
+      )
+    } else if (seg$type == "retract") {
+      retract_data <- data.frame(
+        distance = height,
+        deflection = deflection
+      )
+    }
+  }
+  
+  # Create curvana-format data frame
+  # Only include columns for segments that exist
+  if (is.null(approach_data) && is.null(retract_data)) {
+    stop("No valid data found in file - both segments are missing")
+  }
+  
+  # Record actual data point counts (before any padding)
+  n_approach <- if (!is.null(approach_data)) nrow(approach_data) else 0L
+  n_retract <- if (!is.null(retract_data)) nrow(retract_data) else 0L
+  
+  # Determine if we need to align lengths (both segments exist)
+  if (!is.null(approach_data) && !is.null(retract_data)) {
+    # Both segments exist - pad the shorter one
+    max_len <- max(nrow(approach_data), nrow(retract_data))
+    
+    pad_to_length <- function(x, target_len) {
+      if (length(x) < target_len) {
+        return(c(x, rep(NA_real_, target_len - length(x))))
+      }
+      return(x[1:target_len])
+    }
+    
+    raw_data <- data.frame(
+      Calc_Ramp_Ex_nm = pad_to_length(approach_data$distance, max_len),
+      Calc_Ramp_Rt_nm = pad_to_length(retract_data$distance, max_len),
+      Defl_V_Ex = pad_to_length(approach_data$deflection, max_len),
+      Defl_V_Rt = pad_to_length(retract_data$deflection, max_len)
+    )
+  } else if (!is.null(approach_data)) {
+    # Only approach exists
+    raw_data <- data.frame(
+      Calc_Ramp_Ex_nm = approach_data$distance,
+      Defl_V_Ex = approach_data$deflection
+    )
+  } else {
+    # Only retract exists
+    raw_data <- data.frame(
+      Calc_Ramp_Rt_nm = retract_data$distance,
+      Defl_V_Rt = retract_data$deflection
+    )
+  }
+  
+  # Extract segment-specific sensitivity and spring constant values
+  approach_sensitivity <- NA_real_
+  approach_spring_constant <- NA_real_
+  retract_sensitivity <- NA_real_
+  retract_spring_constant <- NA_real_
+  
+  for (seg in segments) {
+    if (seg$type == "extend") {
+      if (!is.na(seg$sensitivity)) approach_sensitivity <- seg$sensitivity
+      if (!is.na(seg$spring_constant)) approach_spring_constant <- seg$spring_constant
+    } else if (seg$type == "retract") {
+      if (!is.na(seg$sensitivity)) retract_sensitivity <- seg$sensitivity
+      if (!is.na(seg$spring_constant)) retract_spring_constant <- seg$spring_constant
+    }
+  }
+  
+  # Create parameters vector with segment-specific values and data point counts
+  parameters <- c(
+    approach_sensitivity_imported = approach_sensitivity,
+    approach_springConstant_imported = approach_spring_constant,
+    retract_sensitivity_imported = retract_sensitivity,
+    retract_springConstant_imported = retract_spring_constant,
+    Number_of_datapoints_approach = n_approach,
+    Number_of_datapoints_retract = n_retract
+  )
+  
+  return(list(
+    raw_data = raw_data,
+    parameters = parameters
+  ))
 }

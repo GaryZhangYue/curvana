@@ -21,7 +21,7 @@ analyze_curves_all_analytical_metrics(
   analyze_rupture_distance = TRUE,
   analyze_rupture_distance_baseline_span = "automatic",
   analyze_rupture_distance_x_direction = c("left", "right"),
-  analyze_rupture_distance_min_consecutive = 1,
+  analyze_rupture_distance_min_consecutive = 3,
   analyze_repulsive_distance = TRUE,
   analyze_repulsive_distance_baseline_span = "automatic",
   analyze_repulsive_distance_x_direction = c("right", "left"),

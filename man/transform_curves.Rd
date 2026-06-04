@@ -68,8 +68,10 @@ for a valid sensitivity result. If the segment is shorter, sensitivity is
 reported as \code{NA} in \code{analyze_sensitivity()}.}
 
 \item{least_length}{Either a single integer (minimum baseline span) or
-\code{"automatic"}. Passed to \code{analyze_baseline()} when baseline
-metadata is missing.}
+ \code{"automatic"}. Passed to \code{analyze_baseline()} when baseline
+ metadata is missing. when \code{"automatic"}, per-curve span values are read from
+ \code{fdObj@metadata$baseline_span_approach} or
+\code{fdObj@metadata$baseline_span_retract} depending on \code{useCurve}.}
 
 \item{slp_threshold}{Numeric. Maximum absolute baseline slope allowed in
 \code{analyze_baseline()}.}

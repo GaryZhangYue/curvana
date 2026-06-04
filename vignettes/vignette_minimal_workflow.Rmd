@@ -135,23 +135,23 @@ test_beforeTransform <- test
 
 # Preview the raw deflection curves
 
-It is important to inspect the raw curves before formal analysis. Here, we visualize them with a heatmap and a scatter plot to examine their overall patterns.
+It is important to inspect the raw curves before formal analysis. Here, we visualize them with scatter plots to examine their overall patterns.
 
-## Heatmap across sampling events
+## Deflection vs data point index
 
-Here we use `plot_raw_deflection_heatmap()` to plot a heatmap of min-max scaled deflection values across sampling events. Each column represents a curve, and each row represents a data point along that curve. We also annotate columns by `surface` and `region`, and set custom colors for each surface type.
+Here we use `plot_deflection_curves_by_index()` to plot raw deflection values against the row index (data point number) for each curve. This visualization helps us:
+- See how many data points are in each curve
+- Verify that the data is oriented in the correct direction (contact region at the beginning, non-interaction region at the end)
+- Help us with selecting the appropriate regions for baseline calibration and sensitivity calculation in the next step.
 
-This helps us visualize overall deflection patterns across curves and identify the baseline and sensitivity-calibration regions for each curve. 
+We split curves into subpanels by `surface` and color-code them by `region`.
 
-```{r plot deflection heatmap, fig.height=6,fig.width=10,eval=TRUE}
-plot_raw_deflection_heatmap(
-  fdobj             = test,
-  annotate_columns  = c("surface", "region"),
-  annotation_colors = list(
-    surface = c(Group_B = "#1b9e77", Group_C = "#d95f02",
-                Group_A = "#7570b3", Group_D = "#e7298a")
-  )
-)
+```{r plot deflection by index, fig.height=6,fig.width=10,eval=TRUE}
+plot_deflection_curves_by_index(test,split_curves_by = 'surface',group_curves_by = 'region',
+                       alpha = 0.5,point_size = 0.5,
+                       color_map = list(`1` = 'darkred',
+                                        `2` = 'orange',
+                                        `3` = 'steelblue'))
 
 
 

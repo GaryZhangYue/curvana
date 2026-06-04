@@ -8,7 +8,7 @@ analyze_curves_noise(
   fdObj,
   useCurve = c("retract", "approach"),
   threads = 1,
-  baseline_span,
+  baseline_span = "automatic",
   threshold_method = c("sd", "mad", "quantile", "fixed"),
   multiplier = 3,
   mad_constant = 1.4826,
