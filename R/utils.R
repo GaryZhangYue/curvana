@@ -538,7 +538,6 @@ plot_fd_curves <- function(fdobj,
 #' area_trapezoid(0, -2, 1, -4) # same absolute area = 3
 #'
 #' @seealso [area_triangle()], [crossing_x0()], [calculate_area()]
-#' @export
 area_trapezoid <- function(x1, y1, x2, y2) {
   0.5 * abs(x2 - x1) * abs(y1 + y2)
 }
@@ -560,7 +559,6 @@ area_trapezoid <- function(x1, y1, x2, y2) {
 #' area_triangle(0, 4, 1)  # 0.5 * |1 - 0| * |4| = 2
 #'
 #' @seealso [area_trapezoid()], [crossing_x0()], [calculate_area()]
-#' @export
 area_triangle <- function(x1, y1, x0) {
   0.5 * abs(x0 - x1) * abs(y1)
 }
@@ -585,7 +583,6 @@ area_triangle <- function(x1, y1, x0) {
 #' crossing_x0(0, 4, 2, 6)   # NA — no sign change
 #'
 #' @seealso [area_trapezoid()], [area_triangle()], [calculate_area()]
-#' @export
 crossing_x0 <- function(x1, y1, x2, y2) {
   if ((y1 > 0 && y2 < 0) || (y1 < 0 && y2 > 0)) {
     x1 + (-y1) * (x2 - x1) / (y2 - y1)
@@ -593,148 +590,6 @@ crossing_x0 <- function(x1, y1, x2, y2) {
     NA_real_
   }
 }
-
-#' Plot a transformed force curve with energy regions highlighted
-#'
-#' Creates a ggplot visualization of a force-distance curve with colored
-#' regions indicating adhesive (blue) and repulsive (coral) energy areas
-#' based on a noise cutoff threshold. Internally calls \code{analyze_a_curve_area()}
-#' to calculate the energy values displayed in the plot subtitle.
-#'
-#' @param curve_df A data frame containing the transformed force curve with
-#'   columns \code{separation_distance_nm} and \code{force_nN}.
-#' @param noiseBand_low Numeric lower noise-band threshold (nN).
-#'   Adhesive region is where \code{force_nN < noiseBand_low}.
-#' @param noiseBand_high Numeric upper noise-band threshold (nN).
-#'   Repulsive region is where \code{force_nN > noiseBand_high}.
-#' @param title Character. Title for the plot. Default is
-#'   "Interaction Energy Calculation with Noise Threshold".
-#' @param base_size Numeric. Base font size for the plot. Default is 14.
-#' @param point_size Numeric. Size of points on the curve. Default is 2.
-#' @param alpha_ribbon Numeric. Transparency of the colored ribbon areas (0-1).
-#'   Default is 0.3.
-#' @param show_legend Logical. Whether to show the legend. Default is TRUE.
-#'
-#' @return A ggplot2 object showing the force curve with colored regions
-#'   and energy values in the subtitle.
-#'
-#' @details
-#' The function:
-#' \enumerate{
-#'   \item Calls \code{analyze_a_curve_area()} with \code{noiseBand_low} and \code{noiseBand_high}
-#'   \item Creates a region classification (Baseline, Adhesive, Repulsive)
-#'   \item Visualizes the noise band as a grey region
-#'   \item Colors adhesive regions (force < noiseBand_low) in steelblue
-#'   \item Colors repulsive regions (force > noiseBand_high) in coral
-#'   \item Displays calculated energy values in the plot subtitle
-#' }
-#'
-#' @examples
-#' \dontrun{
-#' # Load example data
-#' data(curvana_sample)
-#' curve <- curvana_sample@retractCurves[[1]]
-#' curve_transformed <- transform_a_curve(curve)
-#' 
-#' # Plot with default noise cutoff (0.5 nN)
-#' plot_force_curve_energy(curve_transformed, noiseBand_low = -0.5, noiseBand_high = 0.5)
-#' 
-#' # Plot with larger noise band
-#' plot_force_curve_energy(curve_transformed, noiseBand_low = -5, noiseBand_high = 5)
-#' 
-#' # Customize appearance
-#' plot_force_curve_energy(curve_transformed, noiseBand_low = -1.0, noiseBand_high = 1.0,
-#'                        title = "My Custom Title", base_size = 12)
-#' }
-#'
-#' @seealso [analyze_a_curve_area()], [transform_a_curve()]
-#' @export
-#' @importFrom ggplot2 ggplot aes geom_ribbon geom_hline geom_point geom_path
-#' @importFrom ggplot2 scale_color_manual labs annotate theme_minimal theme element_blank element_rect element_text
-#'
-plot_force_curve_energy <- function(curve_df,
-                                     noiseBand_low = -0.5,
-                                     noiseBand_high = 0.5,
-                                     title = "Interaction Energy Calculation with Noise Threshold",
-                                     base_size = 14,
-                                     point_size = 2,
-                                     alpha_ribbon = 0.3,
-                                     show_legend = TRUE) {
-  if (!is.numeric(noiseBand_low) || length(noiseBand_low) != 1 || is.na(noiseBand_low) || !(noiseBand_low < 0)) {
-    stop("noiseBand_low must be a single numeric value < 0.")
-  }
-  if (!is.numeric(noiseBand_high) || length(noiseBand_high) != 1 || is.na(noiseBand_high) || !(noiseBand_high > 0)) {
-    stop("noiseBand_high must be a single numeric value > 0.")
-  }
-  
-  # Calculate energy using the internal function
-  energy_result <- analyze_a_curve_area(
-    curve_df,
-    noiseBand_low = noiseBand_low,
-    noiseBand_high = noiseBand_high
-  )
-  
-  plot_data <- curve_df
-  # Create region classifications
-  plot_data$region <- "Baseline"
-  plot_data$region[plot_data$force_nN > noiseBand_high] <- "Repulsive"
-  plot_data$region[plot_data$force_nN < noiseBand_low] <- "Adhesive"
-  
-  # Separate data for ribbon layers
-  repulsive_data <- plot_data[plot_data$force_nN > noiseBand_high, ]
-  adhesive_data <- plot_data[plot_data$force_nN < noiseBand_low, ]
-  
-  # Create the plot
-  p <- ggplot(plot_data, aes(x = separation_distance_nm, y = force_nN)) +
-    # Grey background for noise band
-    annotate("rect", xmin = -Inf, xmax = Inf, 
-             ymin = noiseBand_low, ymax = noiseBand_high,
-             alpha = 0.08, fill = "grey50") +
-    # Shaded regions for energy calculation
-    geom_ribbon(data = repulsive_data, 
-                aes(ymin = noiseBand_high, ymax = force_nN),
-                fill = "coral", alpha = alpha_ribbon, color = NA) +
-    geom_ribbon(data = adhesive_data, 
-                aes(ymin = force_nN, ymax = noiseBand_low),
-                fill = "steelblue", alpha = alpha_ribbon, color = NA) +
-    # Threshold lines
-    geom_hline(yintercept = noiseBand_high, color = "red", 
-               linetype = "dashed", linewidth = 0.7) +
-    geom_hline(yintercept = noiseBand_low, color = "red", 
-               linetype = "dashed", linewidth = 0.7) +
-    geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
-    # Curve rendering
-    geom_point(aes(color = region), size = point_size, alpha = 0.8) +
-    geom_path(aes(color = region), linewidth = 0.6, alpha = 0.8) +
-    # Color mapping
-    scale_color_manual(
-      values = c("Adhesive" = "steelblue", "Repulsive" = "coral", "Baseline" = "grey70"),
-      name = "Region"
-    ) +
-    # Labels and title
-    labs(
-      x = "Separation distance (nm)",
-      y = "Force (nN)",
-      title = title,
-      subtitle = sprintf("Adhesive energy = %.3g aJ\nRepulsive energy = %.3g aJ",
-             energy_result["adhesive_area"],
-             energy_result["repulsive_area"])
-    ) +
-    # Annotation for noise-band values
-    annotate("text", x = Inf, y = noiseBand_high,
-         label = sprintf("noiseBand_high = %.3g nN", noiseBand_high),
-             hjust = 1.1, vjust = -0.5, size = 3.5, color = "red") +
-    annotate("text", x = Inf, y = noiseBand_low,
-         label = sprintf("noiseBand_low = %.3g nN", noiseBand_low),
-         hjust = 1.1, vjust = 1.3, size = 3.5, color = "red") +
-    # Theme
-    ggplot2::theme_classic(base_size = base_size) +
-    theme(legend.position = if (show_legend) "bottom" else "none")
-  
-  return(p)
-}
-
-
 
 #' Plot one transformed curve with optional metadata annotations
 #'
