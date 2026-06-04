@@ -120,12 +120,10 @@ calc_sensitivity <- function(x, y, R_squared_min = 0.99, end, intv = 4, minimum_
 #'
 #' @return An updated \code{fdObj} with sensitivity values in metadata and segments in senscal_segment.
 #' @examples
-#' \dontrun{
 #' folder <- system.file("extdata", package = "curvana")
 #' fd_obj <- createFdObjFromFolder(folder)
 #' fd_obj <- analyze_sensitivity(fd_obj, end = 80, intv = 10, useCurve = "retract")
 #' head(fd_obj@metadata$sensitivity_V_nm_retract)
-#' }
 #' @export
 analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99, minimum_length = 4, useCurve = "approach", threads = 1) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
@@ -368,6 +366,12 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.01,
 #'   segments in \code{baseline_segment}. If \code{least_length} is numeric,
 #'   the corresponding \code{baseline_span_<dir>} column is updated; if
 #'   \code{least_length = "automatic"}, existing span columns are preserved.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- analyze_sensitivity(fd_obj, end = 80, intv = 10, useCurve = "retract")
+#' fd_obj <- analyze_baseline(fd_obj, least_length = 100, useCurve = "retract", slp_threshold = 0.02, std_threshold = 0.02)
+#' head(fd_obj@metadata$baseline_V_retract)
 #' @export
 analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
                              slp_threshold = 0.01, std_threshold = 0.05,
@@ -692,6 +696,11 @@ denoise_a_curve <- function(raw_curve,
 #' @param threads Integer. Number of parallel workers (default \code{1}).
 #'
 #' @return Updated \code{fdObj} with denoised curves in \code{rawCurves}.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- denoise_curves(fd_obj, p = 1, n = 5, m = 0, ts = 1, useCurve = "approach", threads = 1)
+#' head(fd_obj@rawCurves[[1]])
 #' @export
 denoise_curves <- function(fdObj,
                            p = 1,
@@ -867,10 +876,39 @@ transform_a_curve <- function(x, y,
 
 #' Transform All Curves in an fdObj into Separation Distance and Force
 #'
-#' Applies `transform_a_curve()` to all raw curves in an fdObj object.
-#' Automatically computes sensitivity and baseline values if they are missing
-#' by calling `analyze_sensitivity()` and `analyze_baseline()`, passing through
-#' any user-supplied arguments that match those functions' parameters.
+#' Applies \code{transform_a_curve()} to every raw curve stored in an
+#' \code{fdObj} and writes the transformed force-separation curves back into the
+#' object. The function operates on either the approach or retract branch,
+#' selects the corresponding raw piezo and deflection columns, optionally
+#' denoises those raw curves first, and then resolves all quantities required
+#' for transformation on a per-curve basis.
+#'
+#' Before transforming curves, the function ensures that spring constants,
+#' sensitivity values, baseline values, and sensitivity-calibration segments are
+#' available. A single numeric \code{spring_constant} is copied to all curves,
+#' whereas a character value is interpreted as the name of a metadata column
+#' containing per-curve spring constants. If the required
+#' \code{sensitivity_V_nm_<useCurve>} or \code{baseline_V_<useCurve>} metadata
+#' columns are missing, the function automatically calls
+#' \code{analyze_sensitivity()} and \code{analyze_baseline()} using the supplied
+#' transformation arguments.
+#'
+#' When \code{soft = TRUE}, the function also resolves probe sensitivity values
+#' from \code{probe_sensitivity_external}, stores them in
+#' \code{probe_true_sensitivity_V_nm_<useCurve>}, and passes that information to
+#' both baseline analysis and per-curve transformation. If metadata includes the
+#' imported number of valid approach or retract points, each raw curve is first
+#' truncated to that valid length before transformation so that trailing padding
+#' values are ignored.
+#'
+#' Curves are transformed independently. For each curve with complete required
+#' inputs, \code{transform_a_curve()} returns separation distance and force. If a
+#' curve is missing the required raw columns, has missing baseline,
+#' sensitivity, spring constant, or calibration segment, it is not dropped but
+#' stored as an empty transformed data frame. Successful results are written to
+#' \code{fdObj@approachCurves} or \code{fdObj@retractCurves}, depending on
+#' \code{useCurve}, and a summary message reports how many curves failed to
+#' transform.
 #'
 #' @param fdObj An object of class \code{fdObj}.
 #' @param spring_constant Numeric or character. If numeric, a constant spring
@@ -896,7 +934,7 @@ transform_a_curve <- function(x, y,
 #'   \code{analyze_sensitivity()}.
 #' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for accepting a
 #'   segment as sufficiently linear during sensitivity calculation in
-#'   \code{calc_sensitivity()}. Default is 0.99.
+#'   \code{calc_sensitivity()}. Default is 0.9.
 #' @param minimum_length Integer. Minimum number of accumulated points required
 #'   for a valid sensitivity result. If the segment is shorter, sensitivity is
 #'   reported as \code{NA} in \code{analyze_sensitivity()}.
@@ -920,6 +958,10 @@ transform_a_curve <- function(x, y,
 #'   The values are stored in \code{probe_true_sensitivity_V_nm_<useCurve>}.
 #'
 #' @return An updated \code{fdObj} with transformed curves stored in the corresponding slot.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj,spring_constant = 0.1, useCurve = "approach", threads = 1,denoise_first = TRUE, least_length= 300)
 #' @export
 transform_curves <- function(fdObj,
                              spring_constant,
@@ -932,11 +974,11 @@ transform_curves <- function(fdObj,
                              ts = 1,
                              end = 200,
                              intv = 4,
-                             R_squared_min = 0.99,
+                             R_squared_min = 0.9,
                              minimum_length = 4,
                              least_length = 150,
-                             slp_threshold = 0.001,
-                             std_threshold = 0.005,
+                             slp_threshold = 0.01,
+                             std_threshold = 0.05,
                              soft = FALSE,
                              probe_sensitivity_external = NULL) {
   # ---- Validation ----
@@ -1135,10 +1177,22 @@ transform_curves <- function(fdObj,
 
 #' Adhesive Force for a Single Transformed AFM Curve
 #'
-#' Computes the adhesive force as the most negative force value in a transformed curve
-#' and returns that value along with the separation distance at which it occurs. Note that
-#' the value will be negated. For example, if the most negative force is -2 nN,
-#' the function will return 2 nN as the adhesive force.
+#' Extracts the adhesion minimum from one transformed force-separation curve by
+#' locating the most negative value in \\code{force_nN} and reporting its
+#' magnitude together with the corresponding
+#' \\code{separation_distance_nm}. The function first validates that the input is
+#' a data frame containing the required transformed-curve columns, coerces both
+#' columns to numeric, and discards rows with non-finite values before
+#' searching for the minimum force.
+#'
+#' For valid transformed curves, adhesion is defined here as a negative force
+#' excursion. If the minimum force is below zero, its sign is flipped so the
+#' reported \\code{adhesive_force_nN} is a positive adhesion magnitude. If the
+#' curve contains no negative force values, the function records this as "no
+#' detectable adhesion" and returns \\code{adhesive_force_nN = 0} with
+#' \\code{separation_distance_nm = NA_real_}. If the input cannot be analyzed at
+#' all because required columns are missing or no finite x-y pairs remain after
+#' cleaning, both returned values are \\code{NA}.
 #' @param curve_df A data.frame with columns:
 #'   \itemize{
 #'     \item{\code{separation_distance_nm}}{Numeric tip-sample separation (nm).}
@@ -1147,18 +1201,65 @@ transform_curves <- function(fdObj,
 #'
 #' @return A named numeric vector of length 2:
 #' \describe{
-#'   \item{adhesive_force_nN}{The most negative (minimum) force value in nN.}
-#'   \item{separation_distance_nm}{The separation distance (nm) at which the adhesive force occurs.}
+#'   \item{adhesive_force_nN}{The negated most negative force
+#'   value in the curve. Returns \\code{0} when the curve is valid but contains
+#'   no negative force values, and \\code{NA_real_} when the curve cannot be
+#'   analyzed.}
+#'   \item{separation_distance_nm}{The separation distance (nm) at which the
+#'   adhesive-force minimum occurs. Returns \\code{NA_real_} when no adhesion is
+#'   detected or when the input is invalid.}
 #' }
-#' If no negative force exists (i.e., all forces are \eqn{\ge} 0) or inputs are invalid,
-#' returns \code{c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_)}.
+#' This makes the output distinguish between a valid "no adhesion" case
+#' (\\code{0}/\\code{NA}) and a failed analysis case (\\code{NA}/\\code{NA}).
 #'
 #' @examples
-#' df <- data.frame(
-#'   separation_distance_nm = seq(-50, 200, by = 1),
-#'   force_nN = 0.02 * seq(-50, 200, by = 1) + c(rep(0, 80), -3, rep(0, 170))
+#' transformed_df <- data.frame(
+#'   separation_distance_nm = c(
+#'     0.22196440, 0.19896440, 0.17496440, 0.23529773, 0.21129773,
+#'     0.18829773, 0.16429773, 0.14129773, 0.11729773, 0.17763107,
+#'     0.15463107, 0.13063107, 0.19096440, 0.08363107, -0.02270227,
+#'     -0.21336893, -0.31970227, -0.42603560, -0.53336893, -0.47303560,
+#'     -0.49703560, -0.43670227, -0.54403560, -0.65036893, -0.67336893,
+#'     -0.78070227, -0.72036893, -0.49436893, -0.18403560, 0.04196440,
+#'     0.18563107, 0.49496440, 1.13863107, 3.03229773, 5.09163107,
+#'     7.15196440, 8.21129773, 9.27163107, 10.58096440, 11.97463107,
+#'     13.28396440, 14.42763107, 15.48796440, 16.38063107, 17.44096440,
+#'     18.41696440, 19.39396440, 20.28663107, 21.26363107, 22.24063107,
+#'     23.13329773, 24.11029773, 25.08629773, 26.06329773, 27.12263107,
+#'     28.01629773, 28.99329773, 29.96929773, 30.94629773, 31.92229773,
+#'     32.89929773, 33.87529773, 34.85229773, 35.82829773, 36.72196440,
+#'     37.69896440, 38.75829773, 39.73529773, 40.79463107, 41.77163107,
+#'     42.74763107, 43.72463107, 44.70063107, 45.67763107, 46.57129773,
+#'     47.54729773, 48.52429773, 49.58363107, 50.47729773, 51.45329773,
+#'     52.43029773, 53.49063107, 54.38329773, 55.44363107, 56.33629773,
+#'     57.31329773, 58.28929773, 59.34963107, 60.32663107, 61.21929773,
+#'     62.19629773, 63.25563107, 64.23263107, 65.37529773, 66.26896440,
+#'     67.24496440, 68.13863107, 69.03229773, 70.00829773, 70.90196440
+#'   ),
+#'   force_nN = c(
+#'     2.588500000, 2.488500000, 2.388500000, 2.296833333, 2.196833333,
+#'     2.096833333, 1.996833333, 1.896833333, 1.796833333, 1.705166667,
+#'     1.605166667, 1.505166667, 1.413500000, 1.305166667, 1.196833333,
+#'     1.080166667, 0.971833333, 0.863500000, 0.755166667, 0.663500000,
+#'     0.563500000, 0.471833333, 0.363500000, 0.255166667, 0.155166667,
+#'     0.046833333, -0.044833333, -0.119833333, -0.186500000, -0.261500000,
+#'     -0.344833333, -0.411500000, -0.444833333, -0.353166667, -0.244833333,
+#'     -0.136500000, -0.128166667, -0.119833333, -0.086500000, -0.044833333,
+#'     -0.011500000, 0.005166667, 0.013500000, 0.005166667, 0.013500000,
+#'     0.013500000, 0.013500000, 0.005166667, 0.005166667, 0.005166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, 0.005166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.003166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.011500000,
+#'     -0.011500000, -0.003166667, -0.003166667, 0.005166667, 0.005166667,
+#'     0.005166667, 0.005166667, 0.005166667, 0.005166667, -0.003166667,
+#'     -0.003166667, -0.003166667, 0.005166667, -0.003166667, -0.003166667,
+#'     -0.003166667, 0.005166667, -0.003166667, 0.005166667, -0.003166667,
+#'     -0.003166667, -0.003166667, 0.005166667, 0.005166667, -0.003166667,
+#'     -0.003166667, 0.005166667, 0.005166667, 0.021833333, 0.013500000,
+#'     0.013500000, 0.005166667, -0.003166667, -0.003166667, -0.011500000
+#'   )
 #' )
-#' analyze_a_curve_adhesive_force(df)
+#' analyze_a_curve_adhesive_force(transformed_df)
 #'
 #' @export
 analyze_a_curve_adhesive_force <- function(curve_df) {
@@ -1215,6 +1316,12 @@ analyze_a_curve_adhesive_force <- function(curve_df) {
 #' @param threads Integer. Number of parallel workers (default 1).
 #'
 #' @return The updated \code{fdObj}.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj <- analyze_curves_adhesive_force(fd_obj, useCurve = "retract", threads = 1)
+#' print(fd_obj@metadata[, c("adhesive_force_nN_retract", "adhesive_sep_nm_retract")])
 #' @export
 analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads = 1) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
@@ -1282,8 +1389,31 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 
 #' Determine single-curve noise cutoff from baseline force noise
 #'
-#' Computes a positive noise cutoff (nN) from the baseline window of one transformed
-#' AFM curve.
+#' Estimates lower and upper force-noise bands from the baseline region of one
+#' transformed AFM force-separation curve. The function uses the last
+#' \code{baseline_span} rows of \code{force_nN} as the baseline window.
+#'  It then converts that baseline
+#' window into a negative and positive threshold pair,
+#' \code{noiseBand_low}/\code{noiseBand_high}, that can be used for downstream
+#' rupture, repulsion, or area analyses.
+#'
+#' Four thresholding strategies are supported. \code{"sd"} builds symmetric
+#' bands from the baseline standard deviation, \code{"mad"} builds symmetric
+#' bands from the median absolute deviation scaled by
+#' \code{mad_constant}, \code{"quantile"} uses empirical lower and upper
+#' quantiles of the baseline force distribution, and \code{"fixed"} uses
+#' user-supplied lower and upper force cutoffs directly. In all cases the final
+#' bands are multiplied by \code{multiplier}. For the symmetric methods, if the
+#' estimated spread is missing or non-positive, the function substitutes a very
+#' small positive value (\code{.Machine$double.eps}) so that downstream methods
+#' still receive non-zero thresholds instead of a degenerate zero-width band.
+#'
+#' Invalid inputs such as a non-data-frame \code{curve_df}, missing required
+#' columns, or an invalid \code{baseline_span} do not stop execution; they
+#' return \code{NA} noise bands with a warning. By contrast, invalid method-
+#' specific arguments such as an out-of-range quantile or missing
+#' \code{fixed_low}/\code{fixed_high} for \code{"fixed"} cause an error,
+#' because the requested thresholding rule itself cannot be evaluated.
 #'
 #' @param curve_df data.frame with columns:
 #'   - separation_distance_nm (numeric): x values (distance, nm)
@@ -1305,7 +1435,63 @@ analyze_curves_adhesive_force <- function(fdObj, useCurve = "retract", threads =
 #' @param fixed_low Numeric lower band (nN) for "fixed" method. Default NULL.
 #' @param fixed_high Numeric upper band (nN) for "fixed" method. Default NULL.
 #'
-#' @return Named numeric vector: c(noiseBand_low = value, noiseBand_high = value).
+#' @return A named numeric vector of length 2:
+#' \describe{
+#'   \item{noiseBand_low}{Lower force threshold in nN, typically negative for
+#'   symmetric methods. Returns \code{NA_real_} when the curve cannot be
+#'   analyzed.}
+#'   \item{noiseBand_high}{Upper force threshold in nN, typically positive for
+#'   symmetric methods. Returns \code{NA_real_} when the curve cannot be
+#'   analyzed.}
+#' }
+#' @examples
+#' transformed_df <- data.frame(
+#'   separation_distance_nm = c(
+#'     0.22196440, 0.19896440, 0.17496440, 0.23529773, 0.21129773,
+#'     0.18829773, 0.16429773, 0.14129773, 0.11729773, 0.17763107,
+#'     0.15463107, 0.13063107, 0.19096440, 0.08363107, -0.02270227,
+#'     -0.21336893, -0.31970227, -0.42603560, -0.53336893, -0.47303560,
+#'     -0.49703560, -0.43670227, -0.54403560, -0.65036893, -0.67336893,
+#'     -0.78070227, -0.72036893, -0.49436893, -0.18403560, 0.04196440,
+#'     0.18563107, 0.49496440, 1.13863107, 3.03229773, 5.09163107,
+#'     7.15196440, 8.21129773, 9.27163107, 10.58096440, 11.97463107,
+#'     13.28396440, 14.42763107, 15.48796440, 16.38063107, 17.44096440,
+#'     18.41696440, 19.39396440, 20.28663107, 21.26363107, 22.24063107,
+#'     23.13329773, 24.11029773, 25.08629773, 26.06329773, 27.12263107,
+#'     28.01629773, 28.99329773, 29.96929773, 30.94629773, 31.92229773,
+#'     32.89929773, 33.87529773, 34.85229773, 35.82829773, 36.72196440,
+#'     37.69896440, 38.75829773, 39.73529773, 40.79463107, 41.77163107,
+#'     42.74763107, 43.72463107, 44.70063107, 45.67763107, 46.57129773,
+#'     47.54729773, 48.52429773, 49.58363107, 50.47729773, 51.45329773,
+#'     52.43029773, 53.49063107, 54.38329773, 55.44363107, 56.33629773,
+#'     57.31329773, 58.28929773, 59.34963107, 60.32663107, 61.21929773,
+#'     62.19629773, 63.25563107, 64.23263107, 65.37529773, 66.26896440,
+#'     67.24496440, 68.13863107, 69.03229773, 70.00829773, 70.90196440
+#'   ),
+#'   force_nN = c(
+#'     2.588500000, 2.488500000, 2.388500000, 2.296833333, 2.196833333,
+#'     2.096833333, 1.996833333, 1.896833333, 1.796833333, 1.705166667,
+#'     1.605166667, 1.505166667, 1.413500000, 1.305166667, 1.196833333,
+#'     1.080166667, 0.971833333, 0.863500000, 0.755166667, 0.663500000,
+#'     0.563500000, 0.471833333, 0.363500000, 0.255166667, 0.155166667,
+#'     0.046833333, -0.044833333, -0.119833333, -0.186500000, -0.261500000,
+#'     -0.344833333, -0.411500000, -0.444833333, -0.353166667, -0.244833333,
+#'     -0.136500000, -0.128166667, -0.119833333, -0.086500000, -0.044833333,
+#'     -0.011500000, 0.005166667, 0.013500000, 0.005166667, 0.013500000,
+#'     0.013500000, 0.013500000, 0.005166667, 0.005166667, 0.005166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, 0.005166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.003166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.011500000,
+#'     -0.011500000, -0.003166667, -0.003166667, 0.005166667, 0.005166667,
+#'     0.005166667, 0.005166667, 0.005166667, 0.005166667, -0.003166667,
+#'     -0.003166667, -0.003166667, 0.005166667, -0.003166667, -0.003166667,
+#'     -0.003166667, 0.005166667, -0.003166667, 0.005166667, -0.003166667,
+#'     -0.003166667, -0.003166667, 0.005166667, 0.005166667, -0.003166667,
+#'     -0.003166667, 0.005166667, 0.005166667, 0.021833333, 0.013500000,
+#'     0.013500000, 0.005166667, -0.003166667, -0.003166667, -0.011500000
+#'   )
+#' )
+#' analyze_a_curve_noise(transformed_df, baseline_span = 50)
 #' @export
 analyze_a_curve_noise <- function(
     curve_df,
@@ -1410,6 +1596,11 @@ analyze_a_curve_noise <- function(
 #' @return The updated \code{fdObj} with two new metadata columns:
 #' \code{noiseBand_low_nN_<dir>} and \code{noiseBand_high_nN_<dir>}.
 #' @seealso analyze_a_curve_noise
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj <- analyze_curves_noise(fd_obj, useCurve = "retract", threads = 1)
 #' @export
 analyze_curves_noise <- function(
     fdObj,
@@ -1520,17 +1711,37 @@ analyze_curves_noise <- function(
   fdObj
 }
 
-#' Analyze interaction distance from a single AFM curve (flexible thresholding)
+#' Analyze interaction distance from a single AFM curve using noise-band thresholds
 #'
 #' @description
-#' Detects the first significant deviation in force relative to a baseline window,
-#' marking rupture length (negative excursion) or repulsive distance (positive excursion).
-#' This function uses user-provided noise-band thresholds directly.
-#' Scanning can proceed from right-to-left (default) or left-to-right.
-#' A detection is accepted only when at least \\code{min_consecutive}
-#' consecutive points satisfy the excursion criterion.
-#' When y-direction is negative, the function scans the curve to look for the first point where force <  lower bound of noise band (i.e., the curve enters the adhesive region).
-#' When y-direction is positive, the function scans the curve to look for the last point where force >  upper bound of noise band (i.e., the curve exits the repulsive region).
+#' Detects a single interaction distance from one transformed AFM curve by
+#' searching for the first sustained excursion of \code{force_nN} outside a
+#' user-supplied noise band. The function never scans the final
+#' \code{baseline_span} points, treating that tail region as baseline-only, and
+#' instead searches only the portion of the curve before that baseline window.
+#' This lets the same function be used for either rupture-type events
+#' (negative-force excursions) or repulsive-contact events (positive-force
+#' excursions) once appropriate threshold values have already been estimated.
+#'
+#' Scan direction is controlled by \code{x_direction}. With
+#' \code{x_direction = "left"}, the search proceeds right-to-left, starting just
+#' before the excluded baseline region and moving toward the origin. With
+#' \code{x_direction = "right"}, the search proceeds left-to-right, starting at
+#' the origin-side of the curve and stopping just before the baseline region.
+#' After thresholding the scanned force values, the function uses run-length
+#' encoding to identify contiguous stretches of points that satisfy the event
+#' condition and accepts only runs of length at least
+#' \code{min_consecutive}.
+#'
+#' The reported interaction distance depends on the event type. For
+#' \code{y_direction = "negative"}, the function looks for the first accepted
+#' run where \code{force_nN < noiseBand_low} and reports the first point of that
+#' run, corresponding to entry into the adhesive or rupture region. For
+#' \code{y_direction = "positive"}, it looks for the first accepted run where
+#' \code{force_nN > noiseBand_high} and reports the last point of that run,
+#' corresponding to exit from the repulsive excursion. If no qualifying run is
+#' found, or if there is no scannable region before baseline, the function
+#' returns \code{NA} for distance and echoes back the threshold used.
 #'
 #' @param curve_df data.frame with columns:
 #'   - separation_distance_nm (numeric): x values (distance, nm)
@@ -1550,7 +1761,87 @@ analyze_curves_noise <- function(
 #' @param noiseBand_high Numeric scalar threshold for positive-direction detection.
 #'   Required when \code{y_direction = "positive"}.
 #'
-#' @return c(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
+#' @return A named numeric vector of length 2:
+#' \describe{
+#'   \item{distance}{Interaction distance in nm for the detected event. Returns
+#'   \code{NA_real_} when no qualifying excursion is found or when the input is
+#'   invalid. Negative distances are clamped to \code{0}.}
+#'   \item{threshold}{The numeric threshold actually used for detection:
+#'   \code{noiseBand_low} for negative-direction searches or
+#'   \code{noiseBand_high} for positive-direction searches. Returns
+#'   \code{NA_real_} only when validation fails before threshold selection.}
+#' }
+#' @examples
+#' transformed_df <- data.frame(
+#'   separation_distance_nm = c(
+#'     0.22196440, 0.19896440, 0.17496440, 0.23529773, 0.21129773,
+#'     0.18829773, 0.16429773, 0.14129773, 0.11729773, 0.17763107,
+#'     0.15463107, 0.13063107, 0.19096440, 0.08363107, -0.02270227,
+#'     -0.21336893, -0.31970227, -0.42603560, -0.53336893, -0.47303560,
+#'     -0.49703560, -0.43670227, -0.54403560, -0.65036893, -0.67336893,
+#'     -0.78070227, -0.72036893, -0.49436893, -0.18403560, 0.04196440,
+#'     0.18563107, 0.49496440, 1.13863107, 3.03229773, 5.09163107,
+#'     7.15196440, 8.21129773, 9.27163107, 10.58096440, 11.97463107,
+#'     13.28396440, 14.42763107, 15.48796440, 16.38063107, 17.44096440,
+#'     18.41696440, 19.39396440, 20.28663107, 21.26363107, 22.24063107,
+#'     23.13329773, 24.11029773, 25.08629773, 26.06329773, 27.12263107,
+#'     28.01629773, 28.99329773, 29.96929773, 30.94629773, 31.92229773,
+#'     32.89929773, 33.87529773, 34.85229773, 35.82829773, 36.72196440,
+#'     37.69896440, 38.75829773, 39.73529773, 40.79463107, 41.77163107,
+#'     42.74763107, 43.72463107, 44.70063107, 45.67763107, 46.57129773,
+#'     47.54729773, 48.52429773, 49.58363107, 50.47729773, 51.45329773,
+#'     52.43029773, 53.49063107, 54.38329773, 55.44363107, 56.33629773,
+#'     57.31329773, 58.28929773, 59.34963107, 60.32663107, 61.21929773,
+#'     62.19629773, 63.25563107, 64.23263107, 65.37529773, 66.26896440,
+#'     67.24496440, 68.13863107, 69.03229773, 70.00829773, 70.90196440
+#'   ),
+#'   force_nN = c(
+#'     2.588500000, 2.488500000, 2.388500000, 2.296833333, 2.196833333,
+#'     2.096833333, 1.996833333, 1.896833333, 1.796833333, 1.705166667,
+#'     1.605166667, 1.505166667, 1.413500000, 1.305166667, 1.196833333,
+#'     1.080166667, 0.971833333, 0.863500000, 0.755166667, 0.663500000,
+#'     0.563500000, 0.471833333, 0.363500000, 0.255166667, 0.155166667,
+#'     0.046833333, -0.044833333, -0.119833333, -0.186500000, -0.261500000,
+#'     -0.344833333, -0.411500000, -0.444833333, -0.353166667, -0.244833333,
+#'     -0.136500000, -0.128166667, -0.119833333, -0.086500000, -0.044833333,
+#'     -0.011500000, 0.005166667, 0.013500000, 0.005166667, 0.013500000,
+#'     0.013500000, 0.013500000, 0.005166667, 0.005166667, 0.005166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, 0.005166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.003166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.011500000,
+#'     -0.011500000, -0.003166667, -0.003166667, 0.005166667, 0.005166667,
+#'     0.005166667, 0.005166667, 0.005166667, 0.005166667, -0.003166667,
+#'     -0.003166667, -0.003166667, 0.005166667, -0.003166667, -0.003166667,
+#'     -0.003166667, 0.005166667, -0.003166667, 0.005166667, -0.003166667,
+#'     -0.003166667, -0.003166667, 0.005166667, 0.005166667, -0.003166667,
+#'     -0.003166667, 0.005166667, 0.005166667, 0.021833333, 0.013500000,
+#'     0.013500000, 0.005166667, -0.003166667, -0.003166667, -0.011500000
+#'   )
+#' )
+#' rupdis = analyze_a_curve_interaction_distance(transformed_df,
+#'                                                       y_direction = "negative", 
+#'                                                       x_direction = "left",
+#'                                                       baseline_span = 50,
+#'                                                       noiseBand_low = -0.1,
+#'                                                       noiseBand_high = 0.1,
+#'                                                       min_consecutive = 3
+#'                                                       )
+#' plot(transformed_df$separation_distance_nm, transformed_df$force_nN, type = "l")
+#' abline(v = rupdis['distance'], col= "red", lwd = 2)
+#'
+#' repdis = analyze_a_curve_interaction_distance(transformed_df,
+#'                                                       y_direction = "positive",
+#'                                                       x_direction = "right",
+#'                                                       baseline_span = 50,
+#'                                                       noiseBand_low = -0.1,
+#'                                                       noiseBand_high = 0.1,
+#'                                                       min_consecutive = 3
+#'                                                       )
+#' plot(transformed_df$separation_distance_nm, transformed_df$force_nN, type = "l")
+#' abline(v = repdis['distance'], col= "blue", lwd = 2)
+
+
+
 #' @export
 analyze_a_curve_interaction_distance <- function(
     curve_df,
