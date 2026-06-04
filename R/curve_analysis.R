@@ -23,8 +23,31 @@
 #' }
 #'
 #' @examples
-#' x <- seq(0, 100, by = 1)
-#' y <- 0.02 * x + rnorm(length(x), sd = 0.01)
+#' x <- c(
+#'   0.000, 0.977, 1.953, 2.930, 3.906, 4.883, 5.859, 6.836, 7.812, 8.789,
+#'   9.766, 10.742, 11.719, 12.695, 13.672, 14.648, 15.625, 16.602, 17.578, 18.555,
+#'   19.531, 20.508, 21.484, 22.461, 23.438, 24.414, 25.391, 26.367, 27.344, 28.320,
+#'   29.297, 30.273, 31.250, 32.227, 33.203, 34.180, 35.156, 36.133, 37.109, 38.086,
+#'   39.062, 40.039, 41.016, 41.992, 42.969, 43.945, 44.922, 45.898, 46.875, 47.852,
+#'   48.828, 49.805, 50.781, 51.758, 52.734, 53.711, 54.688, 55.664, 56.641, 57.617,
+#'   58.594, 59.570, 60.547, 61.523, 62.500, 63.477, 64.453, 65.430, 66.406, 67.383,
+#'   68.359, 69.336, 70.312, 71.289, 72.266, 73.242, 74.219, 75.195, 76.172, 77.148,
+#'   78.125, 79.102, 80.078, 81.055, 82.031, 83.008, 83.984, 84.961, 85.938, 86.914,
+#'   87.891, 88.867, 89.844, 90.820, 91.797, 92.773, 93.750, 94.727, 95.703, 96.680
+#' )
+#'
+#' y <- c(
+#'   0.255, 0.243, 0.231, 0.220, 0.208, 0.196, 0.184, 0.172, 0.160, 0.149,
+#'   0.137, 0.125, 0.114, 0.101, 0.088, 0.074, 0.061, 0.048, 0.035, 0.024,
+#'   0.012, 0.001, -0.012, -0.025, -0.037, -0.050, -0.061, -0.070, -0.078, -0.087,
+#'   -0.097, -0.105, -0.109, -0.098, -0.085, -0.072, -0.071, -0.070, -0.066, -0.061,
+#'   -0.057, -0.055, -0.054, -0.055, -0.054, -0.054, -0.054, -0.055, -0.055, -0.055,
+#'   -0.056, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056, -0.056, -0.056, -0.056,
+#'   -0.056, -0.056, -0.056, -0.056, -0.057, -0.057, -0.056, -0.056, -0.055, -0.055,
+#'   -0.055, -0.055, -0.055, -0.055, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056,
+#'   -0.056, -0.055, -0.056, -0.055, -0.056, -0.056, -0.056, -0.055, -0.055, -0.056,
+#'   -0.056, -0.055, -0.055, -0.053, -0.054, -0.054, -0.055, -0.056, -0.056, -0.057
+#' )
 #' calc_sensitivity(x = x, y = y, end = 80, intv = 10)
 #'
 #' @export
@@ -83,7 +106,7 @@ calc_sensitivity <- function(x, y, R_squared_min = 0.99, end, intv = 4, minimum_
 #' in the metadata and the segment used in the senscal_segment slot.
 #'
 #' @param fdObj An object of class \code{fdObj}.
-#' @param end Integer. The maximum index in raw curves to consider (e.g., 200).
+#' @param end Integer. The maximum index in raw curves to consider (e.g., 200) in \code{calc_sensitivity()}.
 #' @param intv Integer. Number of data points added per iteration when
 #'   building the linear sensitivity segment in \code{calc_sensitivity()}.
 #' @param R_squared_min Numeric. Minimum \eqn{R^2} threshold for accepting a
@@ -96,6 +119,13 @@ calc_sensitivity <- function(x, y, R_squared_min = 0.99, end, intv = 4, minimum_
 #' @param threads Number of parallel threads to use (default = 1).
 #'
 #' @return An updated \code{fdObj} with sensitivity values in metadata and segments in senscal_segment.
+#' @examples
+#' \dontrun{
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- analyze_sensitivity(fd_obj, end = 80, intv = 10, useCurve = "retract")
+#' head(fd_obj@metadata$sensitivity_V_nm_retract)
+#' }
 #' @export
 analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99, minimum_length = 4, useCurve = "approach", threads = 1) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
@@ -198,14 +228,23 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
 
 #' Identify Baseline Segment in AFM Raw Force-Distance Curve
 #'
-#' This function identifies a flat, noise-stable baseline segment at the end of an AFM (Atomic Force Microscopy)
-#' raw force-distance curve. It applies a linear regression on a trailing window to determine if the segment is
-#' sufficiently flat and stable to be considered a baseline.
+#' This function tests the trailing part of an AFM (Atomic Force Microscopy)
+#' raw force-distance curve for a baseline segment. It takes the last
+#' \code{least_length} points after scaling \code{y} by \code{sensitivity}, fits a
+#' linear model of scaled deflection against \code{x}, and accepts that trailing
+#' window as baseline only when two criteria are met: the absolute fitted slope
+#' is smaller than \code{slp_threshold} and the standard error of that slope is
+#' smaller than \code{std_threshold}. If both criteria are satisfied, the
+#' function returns the mean baseline value in the original \code{y} units and
+#' the accepted segment. If either criterion fails, or if the inputs are too
+#' short or mismatched, no baseline is reported and \code{NULL} values are
+#' returned.
 #'
 #' @param x Numeric vector. Distance values (e.g., piezo positions or z-sensor values).
 #' @param y Numeric vector. Deflection values (e.g., in volts).
-#' @param least_length Integer. Minimum number of points in the baseline segment.
-#' @param sensitivity Numeric. Scaling factor for the deflection signal (e.g., detector sensitivity in V/nm or V/nN).
+#' @param least_length Integer. Minimum number of points in the baseline segment. The function will
+#' take the last \code{least_length} points of the curve for testing.
+#' @param sensitivity Numeric. Scaling factor for the deflection signal (e.g., probe sensitivity)).
 #' @param slp_threshold Numeric. Maximum absolute slope for the segment to be considered flat (default: 0.001).
 #' @param std_threshold Numeric. Maximum standard error of the slope (default: 0.005).
 #'
@@ -216,19 +255,44 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
 #' }
 #'
 #' @details
-#' The function assumes the baseline occurs toward the tail end of the curve (typically during the retract phase).
-#' It is often used prior to baseline correction or contact point determination in AFM force curve analysis.
+#' The function assumes the baseline occurs toward the tail end of the curve
+#' It does not search the full curve for
+#' candidate windows; it evaluates only the final trailing window defined by
+#' \code{least_length}. 
 #'
 #' @examples
 #' # Simulated flat tail data
-#' x <- 1:1000
-#' y <- c(rnorm(980, 0.1, 0.05), rnorm(20, 0, 0.002))  # flat tail
-#' result <- find_baseline(least_length = 15, sensitivity = 1, x = x, y = y)
+#' x <- c(
+#'   0.000, 0.977, 1.953, 2.930, 3.906, 4.883, 5.859, 6.836, 7.812, 8.789,
+#'   9.766, 10.742, 11.719, 12.695, 13.672, 14.648, 15.625, 16.602, 17.578, 18.555,
+#'   19.531, 20.508, 21.484, 22.461, 23.438, 24.414, 25.391, 26.367, 27.344, 28.320,
+#'   29.297, 30.273, 31.250, 32.227, 33.203, 34.180, 35.156, 36.133, 37.109, 38.086,
+#'   39.062, 40.039, 41.016, 41.992, 42.969, 43.945, 44.922, 45.898, 46.875, 47.852,
+#'   48.828, 49.805, 50.781, 51.758, 52.734, 53.711, 54.688, 55.664, 56.641, 57.617,
+#'   58.594, 59.570, 60.547, 61.523, 62.500, 63.477, 64.453, 65.430, 66.406, 67.383,
+#'   68.359, 69.336, 70.312, 71.289, 72.266, 73.242, 74.219, 75.195, 76.172, 77.148,
+#'   78.125, 79.102, 80.078, 81.055, 82.031, 83.008, 83.984, 84.961, 85.938, 86.914,
+#'   87.891, 88.867, 89.844, 90.820, 91.797, 92.773, 93.750, 94.727, 95.703, 96.680
+#' )
+#'
+#' y <- c(
+#'   0.255, 0.243, 0.231, 0.220, 0.208, 0.196, 0.184, 0.172, 0.160, 0.149,
+#'   0.137, 0.125, 0.114, 0.101, 0.088, 0.074, 0.061, 0.048, 0.035, 0.024,
+#'   0.012, 0.001, -0.012, -0.025, -0.037, -0.050, -0.061, -0.070, -0.078, -0.087,
+#'   -0.097, -0.105, -0.109, -0.098, -0.085, -0.072, -0.071, -0.070, -0.066, -0.061,
+#'   -0.057, -0.055, -0.054, -0.055, -0.054, -0.054, -0.054, -0.055, -0.055, -0.055,
+#'   -0.056, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056, -0.056, -0.056, -0.056,
+#'   -0.056, -0.056, -0.056, -0.056, -0.057, -0.057, -0.056, -0.056, -0.055, -0.055,
+#'   -0.055, -0.055, -0.055, -0.055, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056,
+#'   -0.056, -0.055, -0.056, -0.055, -0.056, -0.056, -0.056, -0.055, -0.055, -0.056,
+#'   -0.056, -0.055, -0.055, -0.053, -0.054, -0.054, -0.055, -0.056, -0.056, -0.057
+#' )
+#' result <- find_baseline(x,y, least_length = 50,sensitivity = 0.012,slp_threshold = 0.02, std_threshold = 0.02)
 #' print(result$baseline)
 #' plot(x, y, type = "l"); lines(result$segment, col = "red", lwd = 2)
 #'
 #' @export
-find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001, std_threshold = 0.005) {
+find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.01, std_threshold = 0.05) {
   if (length(x) < least_length + 1 || length(y) != length(x)) {
     warning("Insufficient data or mismatched x and y lengths.")
     return(list(baseline = NULL, segment = NULL))
@@ -258,9 +322,29 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001
 
 #' Analyze Baseline from AFM Raw Curves in an fdObj
 #'
-#' Identifies baseline segments in AFM raw force-distance curves using pre-calculated sensitivity values,
-#' and stores baseline values and segments in the fdObj. As the undulating baseline is defined by forces, 
-#' the sensitivity is used to convert the deflection signal into force units for accurate baseline filtering.
+#' Applies baseline detection to each raw curve stored in an \code{fdObj} and
+#' writes the resulting baseline values and accepted baseline segments back into
+#' the object. For each curve, the function, finds the associated sensitivity value in metadata, and then calls
+#' \code{find_baseline()} on the trailing part of that curve.
+#'
+#' Baseline detection is therefore based on the same criteria implemented in
+#' \code{find_baseline()}: the last \code{least_length} points are tested after
+#' scaling the deflection signal by sensitivity, and the window is accepted only
+#' if the fitted slope magnitude is below \code{slp_threshold} and the slope
+#' standard error is below \code{std_threshold}. When \code{least_length} is a
+#' single number, that same trailing-window size is used for all curves; when it
+#' is \code{"automatic"}, per-curve window sizes are taken from the
+#' corresponding \code{baseline_span_<dir>} metadata column.
+#'
+#' Curves with missing required columns, missing sensitivity values, invalid
+#' per-curve baseline spans, or failed baseline detection are not dropped; they
+#' are recorded with \code{NA} baseline values and empty baseline-segment data
+#' frames. Successful results are stored in
+#' \code{fdObj@metadata$baseline_V_approach} or
+#' \code{fdObj@metadata$baseline_V_retract}, and in
+#' \code{fdObj@baseline_segment[[useCurve]]}. If \code{least_length} is fixed,
+#' the matching \code{baseline_span_<dir>} metadata column is updated to that
+#' value for all curves.
 #'
 #' @param fdObj An object of class \code{fdObj}.
 #' @param least_length Either a single integer (minimum number of points in
@@ -269,8 +353,8 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001
 #'   \code{fdObj@metadata$baseline_span_approach} or
 #'   \code{fdObj@metadata$baseline_span_retract} depending on \code{useCurve}.
 #' @param useCurve Character. Either "approach" or "retract" to specify which raw curve to use.
-#' @param slp_threshold Numeric. Maximum absolute slope allowed for baseline detection (default = 0.001).
-#' @param std_threshold Numeric. Maximum standard error of the slope (default = 0.005).
+#' @param slp_threshold Numeric. Maximum absolute slope allowed for baseline detection (default = 0.01).
+#' @param std_threshold Numeric. Maximum standard error of the slope (default = 0.05).
 #' @param threads Integer. Number of parallel threads to use (default = 1).
 #' @param soft Logical. If \code{TRUE}, use the sensitivity column specified by
 #'   \code{external_sensitivity_column} instead of the default
@@ -286,7 +370,7 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.001
 #'   \code{least_length = "automatic"}, existing span columns are preserved.
 #' @export
 analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
-                             slp_threshold = 0.001, std_threshold = 0.005,
+                             slp_threshold = 0.01, std_threshold = 0.05,
                              threads = 1, soft = FALSE,
                              external_sensitivity_column = NULL) {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
@@ -457,7 +541,7 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 #' only the valid (non-NA) portion of each segment is denoised, and the result is
 #' padded back to the original length with NA.
 #'
-#' @param raw_curve A raw curve data frame containing deflection columns.
+#' @param raw_curve A raw curve data frame. 
 #' @param p Filter polynomial order.
 #' @param n Filter length (must be odd).
 #' @param m Order of the derivative to compute.
@@ -468,8 +552,37 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 #' @param n_retract Optional. Number of valid data points in retract segment.
 #'   If provided, only the first \code{n_retract} rows of retract columns are denoised.
 #'
-#' @return A data frame with original columns preserved and additional
-#' \code{*_original} backup column(s) for the smoothed deflection column(s).
+#' @return A data frame with original columns showing for the smoothed deflection values 
+#' and additional \code{*_original} as backup column(s) for the raw deflection values (before denoising).
+#' 
+#' @examples
+#' x <- c(
+#'   0.000, 0.977, 1.953, 2.930, 3.906, 4.883, 5.859, 6.836, 7.812, 8.789,
+#'   9.766, 10.742, 11.719, 12.695, 13.672, 14.648, 15.625, 16.602, 17.578, 18.555,
+#'   19.531, 20.508, 21.484, 22.461, 23.438, 24.414, 25.391, 26.367, 27.344, 28.320,
+#'   29.297, 30.273, 31.250, 32.227, 33.203, 34.180, 35.156, 36.133, 37.109, 38.086,
+#'   39.062, 40.039, 41.016, 41.992, 42.969, 43.945, 44.922, 45.898, 46.875, 47.852,
+#'   48.828, 49.805, 50.781, 51.758, 52.734, 53.711, 54.688, 55.664, 56.641, 57.617,
+#'   58.594, 59.570, 60.547, 61.523, 62.500, 63.477, 64.453, 65.430, 66.406, 67.383,
+#'   68.359, 69.336, 70.312, 71.289, 72.266, 73.242, 74.219, 75.195, 76.172, 77.148,
+#'   78.125, 79.102, 80.078, 81.055, 82.031, 83.008, 83.984, 84.961, 85.938, 86.914,
+#'   87.891, 88.867, 89.844, 90.820, 91.797, 92.773, 93.750, 94.727, 95.703, 96.680
+#' )
+#'
+#' y <- c(
+#'   0.255, 0.243, 0.231, 0.220, 0.208, 0.196, 0.184, 0.172, 0.160, 0.149,
+#'   0.137, 0.125, 0.114, 0.101, 0.088, 0.074, 0.061, 0.048, 0.035, 0.024,
+#'   0.012, 0.001, -0.012, -0.025, -0.037, -0.050, -0.061, -0.070, -0.078, -0.087,
+#'   -0.097, -0.105, -0.109, -0.098, -0.085, -0.072, -0.071, -0.070, -0.066, -0.061,
+#'   -0.057, -0.055, -0.054, -0.055, -0.054, -0.054, -0.054, -0.055, -0.055, -0.055,
+#'   -0.056, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056, -0.056, -0.056, -0.056,
+#'   -0.056, -0.056, -0.056, -0.056, -0.057, -0.057, -0.056, -0.056, -0.055, -0.055,
+#'   -0.055, -0.055, -0.055, -0.055, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056,
+#'   -0.056, -0.055, -0.056, -0.055, -0.056, -0.056, -0.056, -0.055, -0.055, -0.056,
+#'   -0.056, -0.055, -0.055, -0.053, -0.054, -0.054, -0.055, -0.056, -0.056, -0.057
+#' )
+#' denoised_df <- denoise_a_curve(data.frame(Calc_Ramp_Ex_nm = x, Defl_V_Ex = y), p = 1, n = 5, m = 0, ts = 1, useCurve = "approach", n_approach = length(x))
+#' head(denoised_df)
 #' @export
 denoise_a_curve <- function(raw_curve,
                     p = 1,
@@ -634,17 +747,33 @@ denoise_curves <- function(fdObj,
 
 #' Transform a Single AFM Curve into Separation Distance and Force
 #'
-#' Converts raw AFM deflection and piezo data into calibrated separation distance and force.
-#' If the measurement is performed on a soft sample rather than a hard reference,
-#' the \code{soft} argument can be set to \code{TRUE} and a \code{probe_sensitivity}
-#' value, which should be acquired by measurements on a hard surface,
-#'  needs to be provided to convert deflection to force.
+#' Converts one raw AFM force-distance trace from piezo position and deflection
+#' signal into a transformed curve containing separation distance and force.
+#' The function first subtracts the supplied baseline from the raw deflection
+#' signal, converts the corrected deflection from volts to deflection length,
+#' multiplies by the spring constant to obtain force in nN, and then estimates a
+#' contact-position offset from the supplied sensitivity-calibration segment.
+#' That offset is used to shift the piezo axis and compute separation distance.
+#'
+#' In the default hard-reference workflow, deflection is converted to length
+#' using \code{sensitivity}. When \code{soft = TRUE}, force conversion instead
+#' uses \code{probe_sensitivity}, which should come from a hard reference
+#' measurement of the same probe. The contact-point estimate and separation-axis
+#' calculation still use \code{sensitivity} together with the supplied
+#' sensitivity-calibration segment.
+#'
+#' The contact position is estimated by fitting a linear model to
+#' \code{senscal_seg_x} against baseline-corrected, sensitivity-normalized
+#' calibration deflection, and using the fitted intercept as the piezo position
+#' corresponding to zero deflection. If baseline, sensitivity, or the
+#' calibration segment is missing, the function returns an empty result rather
+#' than a partially transformed curve.
 #'
 #' @param x Numeric vector. Piezo position (distance) in nm.
 #' @param y Numeric vector. Deflection signal in volts.
 #' @param baseline Numeric. The deflection baseline (in volts).
 #' @param sensitivity Numeric. Sensitivity in V/nm.
-#' @param spring_constant Numeric. Spring constant in nN/nm.
+#' @param spring_constant Numeric. Spring constant in N/m.
 #' @param senscal_seg_x Numeric vector. X-values of the sensitivity calibration segment.
 #' @param senscal_seg_y Numeric vector. Y-values of the sensitivity calibration segment (in volts).
 #' @param soft Logical. If \code{TRUE}, use \code{probe_sensitivity} for
@@ -658,6 +787,40 @@ denoise_curves <- function(fdObj,
 #'   \item{force_nN}{Force (nN).}
 #' }
 #' If required inputs are missing, an empty data frame is returned.
+#' @examples
+#' #' @examples
+#' x <- c(
+#'   0.000, 0.977, 1.953, 2.930, 3.906, 4.883, 5.859, 6.836, 7.812, 8.789,
+#'   9.766, 10.742, 11.719, 12.695, 13.672, 14.648, 15.625, 16.602, 17.578, 18.555,
+#'   19.531, 20.508, 21.484, 22.461, 23.438, 24.414, 25.391, 26.367, 27.344, 28.320,
+#'   29.297, 30.273, 31.250, 32.227, 33.203, 34.180, 35.156, 36.133, 37.109, 38.086,
+#'   39.062, 40.039, 41.016, 41.992, 42.969, 43.945, 44.922, 45.898, 46.875, 47.852,
+#'   48.828, 49.805, 50.781, 51.758, 52.734, 53.711, 54.688, 55.664, 56.641, 57.617,
+#'   58.594, 59.570, 60.547, 61.523, 62.500, 63.477, 64.453, 65.430, 66.406, 67.383,
+#'   68.359, 69.336, 70.312, 71.289, 72.266, 73.242, 74.219, 75.195, 76.172, 77.148,
+#'   78.125, 79.102, 80.078, 81.055, 82.031, 83.008, 83.984, 84.961, 85.938, 86.914,
+#'   87.891, 88.867, 89.844, 90.820, 91.797, 92.773, 93.750, 94.727, 95.703, 96.680
+#' )
+#'
+#' y <- c(
+#'   0.255, 0.243, 0.231, 0.220, 0.208, 0.196, 0.184, 0.172, 0.160, 0.149,
+#'   0.137, 0.125, 0.114, 0.101, 0.088, 0.074, 0.061, 0.048, 0.035, 0.024,
+#'   0.012, 0.001, -0.012, -0.025, -0.037, -0.050, -0.061, -0.070, -0.078, -0.087,
+#'   -0.097, -0.105, -0.109, -0.098, -0.085, -0.072, -0.071, -0.070, -0.066, -0.061,
+#'   -0.057, -0.055, -0.054, -0.055, -0.054, -0.054, -0.054, -0.055, -0.055, -0.055,
+#'   -0.056, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056, -0.056, -0.056, -0.056,
+#'   -0.056, -0.056, -0.056, -0.056, -0.057, -0.057, -0.056, -0.056, -0.055, -0.055,
+#'   -0.055, -0.055, -0.055, -0.055, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056,
+#'   -0.056, -0.055, -0.056, -0.055, -0.056, -0.056, -0.056, -0.055, -0.055, -0.056,
+#'   -0.056, -0.055, -0.055, -0.053, -0.054, -0.054, -0.055, -0.056, -0.056, -0.057
+#' )
+#' transformed_df <- transform_a_curve(x, y,
+#'   baseline = -0.05,
+#'   sensitivity = 0.012,
+#'   spring_constant = 0.1,
+#'   senscal_seg_x = x[1:10],
+#'   senscal_seg_y = y[1:10]
+#' )
 #' @export
 transform_a_curve <- function(x, y,
                               baseline, sensitivity, spring_constant,
