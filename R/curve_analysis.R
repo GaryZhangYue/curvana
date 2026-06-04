@@ -1839,9 +1839,6 @@ analyze_curves_noise <- function(
 #'                                                       )
 #' plot(transformed_df$separation_distance_nm, transformed_df$force_nN, type = "l")
 #' abline(v = repdis['distance'], col= "blue", lwd = 2)
-
-
-
 #' @export
 analyze_a_curve_interaction_distance <- function(
     curve_df,
@@ -1932,10 +1929,33 @@ analyze_a_curve_interaction_distance <- function(
 
 #' Interaction Distance (nm) for All Transformed Curves in an fdObj
 #'
-#' Applies \code{analyze_a_curve_interaction_distance()} to each transformed curve
-#' in an \code{fdObj} and stores the resulting interaction distances and thresholds
-#' in the metadata. These measure the first significant excursion in force relative
-#' to a baseline, either repulsive (positive force deviation) or rupture (negative).
+#' Applies \code{analyze_a_curve_interaction_distance()} across all transformed
+#' curves stored in an \code{fdObj} and writes the detected interaction
+#' distances and thresholds back into the metadata. Depending on
+#' \code{y_direction}, the function measures either rupture-like interaction
+#' distances from negative force excursions or repulsive interaction distances
+#' from positive force excursions. The selected transformed-curve branch is
+#' controlled by \code{useCurve}, so the analysis operates on either
+#' \code{fdObj@approachCurves} or \code{fdObj@retractCurves}.
+#'
+#' This wrapper does not estimate thresholds itself. Instead, it expects the
+#' relevant per-curve noise-band metadata column to already exist and then uses
+#' those stored values as direct inputs to
+#' \code{analyze_a_curve_interaction_distance()}. For negative-direction
+#' searches it reads \code{noiseBand_low_nN_<useCurve>}; for positive-direction
+#' searches it reads \code{noiseBand_high_nN_<useCurve>}. Baseline spans can be
+#' supplied as one fixed value for all curves or read per curve from
+#' \code{baseline_span_<useCurve>} when \code{baseline_span = "automatic"}.
+#'
+#' Curves are processed independently. For each curve, the function verifies
+#' that transformed force-separation data are present, resolves the appropriate
+#' baseline span and threshold value, and then forwards the curve together with
+#' \code{x_direction}, \code{y_direction}, and \code{min_consecutive} to the
+#' single-curve detector. Curves with missing transformed data, missing
+#' threshold metadata, or invalid per-curve baseline spans are not dropped but
+#' recorded as \code{NA} results. After processing, the per-curve outputs are
+#' aligned to metadata row order and stored in direction-specific
+#' columns.
 #'
 #' @param fdObj An object of class \code{fdObj}.
 #' @param useCurve Character; must be one of \code{c("retract", "approach")}.
@@ -1968,11 +1988,20 @@ analyze_a_curve_interaction_distance <- function(
 #' Example for \code{useCurve = "retract"}:
 #' \code{noiseBand_low_nN_retract} or \code{noiseBand_high_nN_retract}.
 #'
-#' @return The updated \code{fdObj} with two new metadata columns:
+#' @return The updated \code{fdObj} with two metadata columns added or updated:
 #' \code{<type>_distance_nm_<dir>} and \code{<type>_threshold_nN_<dir>},
-#' where <type> is "repulsive" or "rupture", depending on \code{y_direction},
-#' and <dir> is "approach" or "retract".
+#' where \code{<type>} is \code{"repulsive"} or \code{"rupture"}, depending on
+#' \code{y_direction}, and \code{<dir>} is \code{"approach"} or
+#' \code{"retract"}. Curves that cannot be analyzed are retained with
+#' \code{NA} values in those output columns.
 #' @seealso analyze_a_curve_interaction_distance
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj <- analyze_curves_noise(fd_obj, useCurve = "retract", threads = 1)
+#' fd_obj <- analyze_curves_interaction_distance(fd_obj, useCurve = "retract", baseline_span = 'automatic', x_direction = "left")
+#'
 #' @export
 analyze_curves_interaction_distance <- function(
     fdObj,
@@ -2120,26 +2149,40 @@ analyze_curves_interaction_distance <- function(
   fdObj
 }
 
-
-
-
-
-
-
-#' Analyze the adhesive and repulsive areas of a single AFM curve (data.frame input)
+#' Analyze the adhesive and repulsive areas of a single AFM curve relative to noise-band thresholds
 #'
-#' Calculates the total areas above (\emph{repulsive}) and below (\emph{adhesive})
-#' the noise threshold for one curve supplied as a data.frame with columns
-#' \code{separation_distance_nm} (x) and \code{force_nN} (y).
+#' Calculates the total area of a transformed force-separation curve that lies
+#' outside a user-defined noise band. Positive force contributions above
+#' \code{noiseBand_high} are reported as \emph{repulsive_area}, whereas
+#' negative force contributions below \code{noiseBand_low} are reported as
+#' \emph{adhesive_area}. The function expects one curve in tabular form with
+#' \code{separation_distance_nm} as the x-axis and \code{force_nN} as the
+#' y-axis, and it returns the two areas separately rather than combining them
+#' into a signed net integral.
 #'
-#' The computation proceeds in the given point order (no sorting). Segments entirely
-#' above the positive noise threshold or below the negative noise threshold are integrated
-#' as trapezoids, and segments that cross the noise thresholds are split at the interpolated
-#' crossing point and integrated as triangles. Areas within the noise band (-noise_cutoff to +noise_cutoff) are ignored.
+#' Integration is performed in the original row order, so the function respects
+#' the incoming trace geometry and does not sort or otherwise reorder points.
+#' For each adjacent pair of points, the function checks
+#' whether the segment lies fully above the upper threshold, fully below the
+#' lower threshold, entirely inside the noise band, or crosses one or both
+#' thresholds. Fully above-threshold and fully below-threshold segments are
+#' integrated as trapezoids after subtracting the relevant threshold, while
+#' partial excursions are split at linearly interpolated crossing points and the
+#' out-of-band portion is integrated as one or two triangles. Signal within the
+#' interval \code{[noiseBand_low, noiseBand_high]} is treated as baseline-like
+#' noise and contributes zero area.
 #'
-#' As a practical fix for small transformation offsets near the origin, any
-#' \code{separation_distance_nm < 0} are clamped to 0 before integration.
-#' This works for both approach (x may run high→low) and retract (low→high) traces.
+#' Before integration, both required columns are coerced to numeric and only
+#' finite x-y pairs are retained. If the input is not a data frame with the
+#' required columns, or if no finite pairs remain after cleaning, the function
+#' returns \code{NA} for both outputs to indicate that the curve could not be
+#' analyzed. If fewer than two valid points remain, the function returns
+#' zero area for both outputs because no segment exists to integrate.
+#'
+#' As a practical correction for small transformation offsets near contact, any
+#' negative \code{separation_distance_nm} values are clamped to 0 before
+#' integration. This avoids assigning artificial area to small negative-distance
+#' tails.
 #'
 #' @param curve_df A data frame with at least two columns:
 #'   \describe{
@@ -2160,13 +2203,53 @@ analyze_curves_interaction_distance <- function(
 #' }
 #'
 #' @examples
-#' df <- data.frame(
-#'   separation_distance_nm = c(-0.02, 0, 0.10, 0.05, 0.20),  # includes clamp and backtrack
-#'   force_nN               = c( 0.50 , 0, 0.30, -0.20, 0.10)
+#' transformed_df <- data.frame(
+#'   separation_distance_nm = c(
+#'     0.22196440, 0.19896440, 0.17496440, 0.23529773, 0.21129773,
+#'     0.18829773, 0.16429773, 0.14129773, 0.11729773, 0.17763107,
+#'     0.15463107, 0.13063107, 0.19096440, 0.08363107, -0.02270227,
+#'     -0.21336893, -0.31970227, -0.42603560, -0.53336893, -0.47303560,
+#'     -0.49703560, -0.43670227, -0.54403560, -0.65036893, -0.67336893,
+#'     -0.78070227, -0.72036893, -0.49436893, -0.18403560, 0.04196440,
+#'     0.18563107, 0.49496440, 1.13863107, 3.03229773, 5.09163107,
+#'     7.15196440, 8.21129773, 9.27163107, 10.58096440, 11.97463107,
+#'     13.28396440, 14.42763107, 15.48796440, 16.38063107, 17.44096440,
+#'     18.41696440, 19.39396440, 20.28663107, 21.26363107, 22.24063107,
+#'     23.13329773, 24.11029773, 25.08629773, 26.06329773, 27.12263107,
+#'     28.01629773, 28.99329773, 29.96929773, 30.94629773, 31.92229773,
+#'     32.89929773, 33.87529773, 34.85229773, 35.82829773, 36.72196440,
+#'     37.69896440, 38.75829773, 39.73529773, 40.79463107, 41.77163107,
+#'     42.74763107, 43.72463107, 44.70063107, 45.67763107, 46.57129773,
+#'     47.54729773, 48.52429773, 49.58363107, 50.47729773, 51.45329773,
+#'     52.43029773, 53.49063107, 54.38329773, 55.44363107, 56.33629773,
+#'     57.31329773, 58.28929773, 59.34963107, 60.32663107, 61.21929773,
+#'     62.19629773, 63.25563107, 64.23263107, 65.37529773, 66.26896440,
+#'     67.24496440, 68.13863107, 69.03229773, 70.00829773, 70.90196440
+#'   ),
+#'   force_nN = c(
+#'     2.588500000, 2.488500000, 2.388500000, 2.296833333, 2.196833333,
+#'     2.096833333, 1.996833333, 1.896833333, 1.796833333, 1.705166667,
+#'     1.605166667, 1.505166667, 1.413500000, 1.305166667, 1.196833333,
+#'     1.080166667, 0.971833333, 0.863500000, 0.755166667, 0.663500000,
+#'     0.563500000, 0.471833333, 0.363500000, 0.255166667, 0.155166667,
+#'     0.046833333, -0.044833333, -0.119833333, -0.186500000, -0.261500000,
+#'     -0.344833333, -0.411500000, -0.444833333, -0.353166667, -0.244833333,
+#'     -0.136500000, -0.128166667, -0.119833333, -0.086500000, -0.044833333,
+#'     -0.011500000, 0.005166667, 0.013500000, 0.005166667, 0.013500000,
+#'     0.013500000, 0.013500000, 0.005166667, 0.005166667, 0.005166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, 0.005166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.003166667,
+#'     -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.011500000,
+#'     -0.011500000, -0.003166667, -0.003166667, 0.005166667, 0.005166667,
+#'     0.005166667, 0.005166667, 0.005166667, 0.005166667, -0.003166667,
+#'     -0.003166667, -0.003166667, 0.005166667, -0.003166667, -0.003166667,
+#'     -0.003166667, 0.005166667, -0.003166667, 0.005166667, -0.003166667,
+#'     -0.003166667, -0.003166667, 0.005166667, 0.005166667, -0.003166667,
+#'     -0.003166667, 0.005166667, 0.005166667, 0.021833333, 0.013500000,
+#'     0.013500000, 0.005166667, -0.003166667, -0.003166667, -0.011500000
+#'   )
 #' )
-#' analyze_a_curve_area(df)
-#' analyze_a_curve_area(df, noiseBand_low = -0.1, noiseBand_high = 0.1)
-#'
+#' analyze_a_curve_area(transformed_df, noiseBand_low = -0.1, noiseBand_high = 0.1)
 #' @seealso area_trapezoid, area_triangle, crossing_x0
 #' @export
 analyze_a_curve_area <- function(curve_df, noiseBand_low = -.Machine$double.eps, noiseBand_high = .Machine$double.eps) {
@@ -2301,9 +2384,18 @@ analyze_a_curve_area <- function(curve_df, noiseBand_low = -.Machine$double.eps,
 
 #' Adhesive and Repulsive Energy (aJ) for All Transformed Curves in an fdObj
 #'
-#' Applies \code{analyze_a_curve_area()} to each transformed curve in an \code{fdObj}
-#' and stores the resulting energies (areas under the force–distance curve) in
-#' the metadata as:
+#' Applies \code{analyze_a_curve_area()} to every transformed curve stored in
+#' an \code{fdObj} and writes the resulting out-of-band force-distance areas
+#' back into metadata as per-curve energy metrics. For each selected curve, the
+#' function reads the corresponding lower and upper noise-band thresholds from
+#' metadata, forwards those thresholds together with the transformed
+#' force-separation data to \code{analyze_a_curve_area()}, and stores the two
+#' returned areas separately rather than collapsing them into a single net
+#' value. Negative-force area below the lower threshold is recorded as adhesive
+#' energy, while positive-force area above the upper threshold is recorded as
+#' repulsive energy.
+#'
+#' Results are written to the metadata as:
 #' \itemize{
 #'   \item \code{adhesive_energy_aJ_<dir>} — total area where \code{y < noiseBand_low}
 #'   \item \code{repulsive_energy_aJ_<dir>} — total area where \code{y > noiseBand_high}
@@ -2313,13 +2405,20 @@ analyze_a_curve_area <- function(curve_df, noiseBand_low = -.Machine$double.eps,
 #' Energies are reported in \strong{attojoules (aJ)}, since
 #' \eqn{1~\mathrm{nN·nm} = 10^{-18}~\mathrm{J} = 1~\mathrm{aJ}}.
 #'
-#' The function preserves the point order (no sorting), tolerates backtracking in \code{x},
-#' and inherits clamping of \code{x<0} to 0 from \code{analyze_a_curve_area()}.
+#' The wrapper does not recompute thresholds or modify curve geometry itself.
+#' It relies on the transformed curves already stored in either
+#' \code{fdObj@approachCurves} or \code{fdObj@retractCurves} and on existing
+#' metadata columns \code{noiseBand_low_nN_<useCurve>} and
+#' \code{noiseBand_high_nN_<useCurve>}. The underlying single-curve routine
+#' preserves point order, and clamps
+#' negative separation distances to zero before integration, so those same
+#' rules apply here on a curve-by-curve basis.
 #'
 #' Behavior:
 #' \itemize{
-#'   \item If a curve is present/valid but yields no finite result, both energies are \code{NA}.
-#'   \item If no transformed curves exist for the selected direction, both metadata columns are created and filled with \code{NA}.
+#'   \item If transformed curves are missing entirely for the selected direction, the function creates the output metadata columns and fills them with \code{NA}.
+#'   \item If an individual curve is missing required transformed columns, is empty, or has missing noise-band thresholds, that curve is retained but both output energies are recorded as \code{NA}.
+#'   \item If an individual curve is valid and simply contains no area outside the noise band, the returned adhesive and/or repulsive energy is \code{0} rather than \code{NA}.
 #' }
 #'
 #' @param fdObj An object of class \code{fdObj}.
@@ -2340,6 +2439,12 @@ analyze_a_curve_area <- function(curve_df, noiseBand_low = -.Machine$double.eps,
 #' @return The updated \code{fdObj} with two new metadata columns:
 #' \code{adhesive_energy_aJ_<dir>} and \code{repulsive_energy_aJ_<dir>}.
 #' @seealso analyze_a_curve_area, analyze_curves_adhesive_force
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj <- analyze_curves_noise(fd_obj, useCurve = "retract", threads = 1)
+#' fd_obj = analyze_curves_energy(fd_obj, useCurve = "retract")
 #' @export
 analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), threads = 1) {
   if (!inherits(fdObj, "fdObj"))
@@ -2444,8 +2549,26 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
 #'   \item \code{analyze_curves_interaction_distance()} (optional negative and/or positive runs)
 #' }
 #'
-#' This function executes the "Analytical metrics calculation" steps in one call.
-#' Users can run for approach curves, retract curves, or both.
+#' This function runs the analytical-metrics stage of the workflow as one
+#' coordinated wrapper. For each requested curve direction, it first estimates
+#' per-curve noise bands, then optionally computes adhesive-force metrics,
+#' energy metrics, rupture distances, and repulsive distances using those
+#' stored thresholds and any required baseline-span settings. The goal is to
+#' let users execute the standard downstream analysis sequence with a single
+#' call instead of invoking each metric-specific helper manually.
+#'
+#' Processing is performed direction by direction. If \code{useCurve = "both"},
+#' the function runs the full selected pipeline for approach curves and then
+#' repeats it for retract curves, updating \code{fdObj@metadata} after each
+#' stage. Each wrapped function is still responsible for its own validation and
+#' for creating or updating its corresponding metadata columns, so this wrapper
+#' mainly coordinates argument routing, optional execution, and call order.
+#'
+#' This means the returned object may contain a combination of noise-band,
+#' adhesive-force, adhesive and repulsive energy, rupture-distance, and repulsive-distance columns,
+#' depending on which optional analyses were enabled. Any curves that cannot be
+#' analyzed by a downstream step are retained in the object, with that step's
+#' output columns typically populated with \code{NA} for the affected rows.
 #'
 #' @param fdObj An object of class \code{fdObj}.
 #' @param useCurve Character; one of \code{c("retract", "approach", "both")}. Default \code{"both"}.
@@ -2487,6 +2610,41 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
 #'   consecutive points above threshold required to call a repulsive event.
 #'
 #' @return Updated \code{fdObj} with analytical metrics written to metadata.
+#' @seealso analyze_curves_noise, analyze_curves_adhesive_force, analyze_curves_energy, analyze_curves_interaction_distance
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj = analyze_curves_all_analytical_metrics(
+#'   fd_obj, # the object
+#'   useCurve = "retract", # run analysis for both approach and retract 
+#'   threads = 1, 
+#'
+#'   # noise band parameters
+#'   noise_baseline_span = "automatic", # use quantile method to define the noise band
+#'   noise_threshold_method = "quantile", # use quantile method to define the noise band
+#'   noise_quantile_low = 0.00, # define the lower end of noise band as minimum y value of the baseline section
+#'   noise_quantile_high = 1, # define the upper end of noise band as maximum y value of the baseline section
+#'   noise_multiplier = 1, # multiply the noise band by 1 to directly use the min-max range of the force in baseline region without further scaling.
+#'
+#'   # adhesive force
+#'   analyze_adhesive_force = TRUE, # whether to analyze adhesive force
+#'
+#'   # adhesive energy and repulsive energy
+#'   analyze_energy = TRUE, # whether to analyze interaction energy (repulsive and adhesive)
+#'
+#'   # rupture (adhesive) distance
+#'   analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
+#'   analyze_rupture_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for rupture distance analysis
+#'   analyze_rupture_distance_x_direction = "left", # scan from right to left to find the first data point at which a curve enters the adhesive region from the noise band region
+#'   analyze_rupture_distance_min_consecutive = 3, # to reduce false positives from random fluctuations, require at least 3 consecutive points below the lower noise-band threshold for classifying the curve as entering the adhesive region.
+#'
+#'   # repulsive distance
+#'   analyze_repulsive_distance = TRUE, # whether to analyze repulsive distance
+#'   analyze_repulsive_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for repulsive distance analysis
+#'   analyze_repulsive_distance_x_direction = "right", # scan from left to right to find the last data point before a curve first enters the noise band region from the repulsive region
+#'   analyze_repulsive_distance_min_consecutive = 1 # because the curve is expected to start from the repulsive region, we set min_consecutive to 1, meaning that a single point above the positive noise threshold is sufficient to mark the start of the repulsive region.
+#' )
 #' @export
 analyze_curves_all_analytical_metrics <- function(
     fdObj,
