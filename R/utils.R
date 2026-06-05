@@ -1,5 +1,12 @@
 #' Plot raw deflection vs piezo distance from rawCurves slot of fdObj
 #'
+#' Takes an \code{fdObj} containing raw AFM curves in \code{fdobj@rawCurves},
+#' extracts the requested approach branch, retract branch, or both, and builds
+#' a plotting data frame from raw piezo-distance values and raw deflection
+#' signals. Optional metadata columns can be used to color curves or split the
+#' display into facets. The output is a \code{ggplot2} object showing raw
+#' deflection against distance for all included curves.
+#'
 #' @param fdobj A `fdObj` object
 #' @param curve Which segment(s) to plot: "approach", "retract", or "both"
 #' @param group_curves_by Metadata column to color by (optional)
@@ -10,6 +17,10 @@
 #' @param line_alpha Transparency of connecting paths (default = 0.5)
 #'
 #' @return A ggplot2 object of the scatter plots showing raw deflection signal.
+#' @examples 
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' plot_deflection_curves(fd_obj, curve = "retract")
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
 
@@ -153,8 +164,16 @@ plot_deflection_curves <- function(fdobj,
 
 #' Plot raw deflection vs row index from rawCurves slot of fdObj
 #'
-#' Similar to \code{plot_deflection_curves} but uses row numbers (data point index) 
-#' on the x-axis instead of distance values. This is useful for visualizing:
+#' Takes an \code{fdObj} with raw curves as input and returns a \code{ggplot2}
+#' object showing raw deflection values against data-point index rather than
+#' against distance. The function is similar to
+#' \code{plot_deflection_curves()}, but it uses row number on the x-axis and,
+#' when available, respects metadata columns that record the imported number of
+#' valid approach or retract points. This makes it useful for checking curve
+#' length, signal orientation, and general raw-data shape before downstream
+#' transformation.
+#'
+#' This is useful for visualizing:
 #' \itemize{
 #'   \item How many data points are in each curve
 #'   \item Whether the data is oriented in the correct direction
@@ -171,6 +190,10 @@ plot_deflection_curves <- function(fdobj,
 #' @param line_alpha Transparency of connecting paths (default = 0.5)
 #'
 #' @return A ggplot2 object showing raw deflection signal vs data point index.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' plot_deflection_curves_by_index(fd_obj, curve = "retract")
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
 plot_deflection_curves_by_index <- function(fdobj,
@@ -336,7 +359,13 @@ plot_deflection_curves_by_index <- function(fdobj,
 
 #' Plot Force-Distance Curves from an fdObj
 #'
-#' Generates force-distance plots from the calibrated approach or retract curves in an \code{fdObj}.
+#' Takes an \code{fdObj} with transformed approach and/or retract curves as
+#' input, extracts the selected transformed curves, and combines them into one
+#' plotting table with separation distance on the x-axis and force on the
+#' y-axis. Optional metadata columns can be used to color curves or split them
+#' across facets, and optional axis limits or extra \code{ggplot2} layers can
+#' be applied. The output is a \code{ggplot2} object showing force-distance
+#' relationships for the requested curves.
 #'
 #' @param fdobj An object of class \code{fdObj}.
 #' @param curve Character. Either "approach", "retract", or "both" (default = "both").
@@ -352,6 +381,11 @@ plot_deflection_curves_by_index <- function(fdobj,
 #'   (e.g., \code{theme(...)}, \code{scale_*()}, \code{labs(...)}).
 #'
 #' @return A ggplot2 object showing the force-distance relationships from AFM curves.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' plot_fd_curves(fd_obj, curve = "retract")
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_point facet_wrap facet_grid labs theme_minimal scale_color_manual guides
 plot_fd_curves <- function(fdobj,
@@ -593,9 +627,15 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 
 #' Plot one transformed curve with optional metadata annotations
 #'
-#' High-level visualization helper that takes an \code{fdObj} and one curve name,
-#' plots the transformed force-distance curve, and optionally overlays selected
-#' annotations from predefined metadata columns for the selected \code{useCurve}.
+#' Takes an \code{fdObj}, the name of one curve, and the selected transformed
+#' branch (approach or retract) as input, then builds a detailed visualization
+#' of that single transformed force-distance curve. The function can annotate
+#' noise-band bounds, adhesive force, adhesive and repulsive energies, rupture
+#' distance, repulsive distance, and region labels derived from stored metadata.
+#' When \code{plot_raw = TRUE}, it also plots the matching raw curve and returns
+#' a two-panel display. The output is therefore either one annotated
+#' \code{ggplot2} object or a combined cowplot panel containing both raw and
+#' transformed views.
 #'
 #' @param fdobj An object of class \code{fdObj}.
 #' @param curve_name Character. Name of one curve to plot. Must match
@@ -608,8 +648,8 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #'   and add "Noise band" labels above and below the band boundaries.
 #' @param annotate_repulsive_energy Logical. If \code{TRUE}, add repulsive
 #'   energy value to subtitle when available.
-#' @param annotate_adhesive_energy Logical. If \code{TRUE}, add adhesive force
-#'   and adhesive energy values to subtitle when available.
+#' @param annotate_adhesive_energy Logical. If \code{TRUE}, add adhesive 
+#'   energy value to subtitle when available.
 #' @param annotate_adhesive_force Logical. If \code{TRUE}, annotate adhesive force
 #'   point and separation using arrow + label.
 #' @param annotate_rupture_distance Logical. If \code{TRUE}, annotate rupture
@@ -1045,9 +1085,13 @@ plot_a_curve_metrics <- function(
 
 #' Plot and save curve metrics for all curves in an fdObj
 #'
-#' Iteratively runs \code{plot_a_curve_metrics()} over all entries in the
-#' selected transformed-curve slot (approach or retract) of an \code{fdObj}, and
-#' saves each plot to disk.
+#' Takes an \code{fdObj} plus plotting and file-output settings as input,
+#' iteratively calls \code{plot_a_curve_metrics()} for every curve in the
+#' selected transformed-curve slot, and saves each generated plot to disk in the
+#' requested format. This function is a batch-export wrapper for per-curve
+#' metric plots rather than a plotting function for a single curve. Its output
+#' is a data frame summarizing which curves were saved successfully, where each
+#' file was written, and any error messages for failed plots.
 #'
 #' @param fdobj An object of class \code{fdObj}.
 #' @param useCurve Character. Either \code{"retract"} or \code{"approach"}.
@@ -1272,13 +1316,15 @@ plot_all_curve_metrics <- function(
 
 #' Plot one metric as a violin plot
 #'
-#' Visualizes one metric column from a data frame using violin plots, optional
-#' jittered points, and an optional linear trend line. Faceting supports up to
-#' two columns. Supports one global test (ANOVA or Kruskal-Wallis) shown in
-#' subtitle, and pairwise tests (t-test or Wilcoxon) shown as significance
-#' asterisks.
+#' Takes a regular data frame as input together with the name of one numeric
+#' metric column and one grouping column, then constructs a violin plot for that
+#' metric across groups. Optional inputs can add color grouping, faceting,
+#' jittered points, boxplots, a linear trend line, and statistical summaries
+#' such as a global ANOVA/Kruskal-Wallis test or pairwise t-test/Wilcoxon
+#' comparisons. The output is a \code{ggplot} object that summarizes the
+#' distribution of one metric across user-defined groups.
 #'
-#' @param df A data.frame containing grouping and metric columns.
+#' @param df A data.frame containing grouping and metric columns. Typically the metadata slot of fdobj.
 #' @param metric_name Character scalar. One column name in \code{df} to plot
 #'   on the y-axis.
 #' @param group_by Character scalar. Column name in \code{df} used for the
@@ -1572,12 +1618,15 @@ plot_metric_violin <- function(
 
 #' PCA biplot for selected feature columns
 #'
-#' Runs principal component analysis (PCA) on selected feature columns after
-#' numeric coercion and z-score normalization (
-#' \\code{center = TRUE, scale. = TRUE}), then draws a biplot with samples as
-#' points and feature-loading arrows showing trend directions.
+#' Takes a data frame as input together with a set of feature columns and one
+#' grouping column used for point color, coerces the selected features to
+#' numeric, filters incomplete rows, and runs principal component analysis on
+#' the resulting matrix. It then returns a \code{ggplot} biplot in which rows of
+#' the input data appear as points in PC space and selected feature loadings are
+#' drawn as arrows. In addition to the plotted object, the fitted PCA model and
+#' the score/loading tables are attached as attributes to the returned plot.
 #'
-#' @param df A data.frame containing features and metadata columns.
+#' @param df A data.frame containing features and metadata columns. Typically the metadata slot of fdobj.
 #' @param include_columns Character vector of column names to include as PCA
 #'   features.
 #' @param color_by Character scalar column name used to color sample points.
@@ -1749,13 +1798,16 @@ plot_pca_biplot <- function(
 
 #' Plot a scaled feature heatmap using ComplexHeatmap
 #'
-#' Creates a heatmap where selected feature columns are shown as rows and
-#' samples are shown as columns. Feature values are z-score scaled by row
-#' (feature) before plotting. Optionally annotates sample columns with up to
-#' two metadata columns.
+#' Takes a data frame as input together with a set of feature columns to display
+#' and optional metadata columns to use as annotations, converts the selected
+#' features to numeric, removes incomplete rows, scales each feature by row, and
+#' arranges the result as a heatmap matrix with features as rows and samples as
+#' columns. Optional annotation columns are added above the heatmap when
+#' supplied. The output is a \code{ComplexHeatmap} object, or the drawn version
+#' of that object when \code{draw = TRUE}.
 #'
 #' @param df A data.frame containing feature and metadata columns. Each row is
-#'   one sample.
+#'   one sample. Typically the metadata slot of fdobj.
 #' @param include_columns Character vector of feature column names to include as
 #'   heatmap rows.
 #' @param annotate_columns Optional character vector (length 0 to 2) of metadata
@@ -1930,20 +1982,20 @@ plot_complex_heatmap <- function(
 
 #' Heatmap of raw deflection values across all curves in an fdObj
 #'
-#' Rows are measurement indices (position steps along the curve); columns are
-#' individual (sample, segment) pairs — one column per approach curve and one
-#' per retract curve.  A column annotation bar shows the segment
-#' (Approach / Retract) and up to two categorical metadata fields for each
-#' sample.  Curves shorter than the longest one are bottom-padded with
-#' \code{NA} so unequal lengths are visible.  Only \code{Defl_V_Ex} and
-#' \code{Defl_V_Rt} are used (never \code{_original} backups).
+#' Takes an \code{fdObj} containing raw AFM curves as input and converts all raw
+#' approach and retract deflection traces into one heatmap-ready matrix. In the
+#' resulting matrix, rows correspond to measurement index, columns correspond to
+#' individual sample-segment pairs, and raw deflection values are padded and
+#' normalized so curves of unequal length can still be displayed together.
+#' Optional metadata annotations can be shown above the columns. The output is a
+#' \code{ComplexHeatmap} object, or a drawn heatmap when \code{draw = TRUE}.
 #'
 #' @param fdobj An object of class \code{fdObj}.
 #' @param annotate_columns Character vector of up to 2 metadata column names to
 #'   display as column annotations alongside the Segment bar.  Defaults to
 #'   \code{NULL}.
 #' @param annotation_colors Named list of colour vectors for annotations,
-#'   e.g. \code{list(surface = c(PEG = "green", silicon = "orange"))}.
+#'   e.g. \code{list(surface = c(groupA = "green", groupB = "orange"))}.
 #' @param approach_color Colour for the Approach segment annotation bar.
 #'   Default \code{"steelblue"}.
 #' @param retract_color Colour for the Retract segment annotation bar.
