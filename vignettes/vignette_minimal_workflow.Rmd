@@ -86,7 +86,9 @@ All examples below use the demo dataset provided in `extdata/` within the packag
 
 In this step, we initialize an fdObj by importing the demo data directory `extdata/` with `createFdObjFromFolder()`. An fdObj is the core data container in curvana. It stores atomic force microscopy (AFM) force-distance curve data, including raw curves, transformed data, associated metadata for downstream analysis, and the analytical metrics generated.
 
-By default, `createFdObjFromFolder()` reads all files in the designated folder with the `.txt` suffix and expects each file to contain at least one pair of piezo displacement and cantilever deflection values for the approach or retract segment. Column names can be specified by the user, but by default the function looks for the standard Bruker AFM output columns: `Calc_Ramp_Ex_nm`, `Defl_V_Ex`, `Calc_Ramp_Rt_nm`, and `Defl_V_Rt`. Users working with non-Bruker input files can specify custom column headers. __Each curve should have the contact region at the beginning and the non-interaction region at the end. If any column needs to be reversed, set `reverse = TRUE` for that column.__
+Use `createFdObjFromFolder()` for generic Bruker/Veeco-style column-separated files. By default, the function reads all `.txt` files (or `.csv` if `suffix = ".csv"`) and removes lines starting with `#` or `"` before import. It expects at least one valid segment (approach or retract) with displacement and deflection columns. The default Bruker column names are `Calc_Ramp_Ex_nm`, `Defl_V_Ex`, `Calc_Ramp_Rt_nm`, and `Defl_V_Rt`, but these can be replaced with custom headers for other exports. __Each curve should have the contact region at the beginning and the non-interaction region at the end. If any column needs to be reversed, use the `reverse_*` arguments.__
+
+For JPK ASCII exports, use the dedicated importer `createFdObjFromJPKFolder()` instead of `createFdObjFromFolder()`. The JPK importer automatically detects approach/retract segments, parses spring constant and sensitivity, and converts force data back to Voltage when needed.
 
 If users have only approach or retract data, they can still use this function to create an fdObj by specifying column names only for the available segment and leaving the arguments for the missing segment unchanged. The function will automatically ignore the missing segment and create an fdObj containing only the available data.
 
@@ -104,6 +106,18 @@ test.input = createFdObjFromFolder(folder = folder, threads = t,
                                   reverse_Deflection_Retract = FALSE # set to FALSE to keep the cantilever deflection column for the retract curve as is
                                   )
 
+```
+
+```{r load data jpk example, eval=FALSE}
+# For JPK ASCII data, use the JPK-specific importer:
+jpk_folder <- system.file("extdata_jpk", package = "curvana")
+
+test.input.jpk <- createFdObjFromJPKFolder(
+  folder = jpk_folder,
+  threads = 1,
+  height_col = "height",
+  deflection_col = "vDeflection"
+)
 ```
 
 Let's take a quick look at the fdObj we created. We can see that 101 raw curves were imported. None of them have been transformed yet, and `filename` is the only column in the metadata slot.
