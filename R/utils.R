@@ -677,6 +677,12 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #'   or extra \code{geom_*()} layers).
 #'
 #' @return A ggplot2 object, or a cowplot grid object when \code{plot_raw = TRUE}.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+#' plot_a_curve_metrics(fd_obj, curve_name = 'F_1.spm-F4E1_ForceCurveIndex_1.spm', useCurve = "retract", plot_raw = TRUE)
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_hline geom_line geom_point
 #' @importFrom ggplot2 geom_segment geom_vline annotate labs theme_minimal scale_color_manual
@@ -1132,6 +1138,12 @@ plot_a_curve_metrics <- function(
 #' @return A data.frame with one row per curve and columns:
 #'   \code{curve_name}, \code{file_path}, \code{status}, and \code{error_message}.
 #'   The output folder is attached as \code{attr(result, "destination_folder")}.
+#' @examples
+#'  folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+#' plot_all_curve_metrics(fdobj = fd_obj, useCurve = "retract",plot_raw = T, destination_folder = '../test_plot_metrics_denoised', format = 'png', width = 18, height = 9, threads = 1 )
 #' @export
 #' @importFrom ggplot2 ggsave
 plot_all_curve_metrics <- function(
@@ -1364,6 +1376,21 @@ plot_all_curve_metrics <- function(
 #' @param base_size Numeric base font size for theme.
 #'
 #' @return A ggplot object.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+#' md <- fd_obj@metadata
+#' surface <- sub("_.*", "", md$filename)
+#' surface[surface == "F"] <- "Group_A"
+#' surface[surface == "P"] <- "Group_B"
+#' surface[surface == "silicon"] <- "Group_C"
+#' surface[surface == "Z"] <- "Group_D"
+#' md$surface <- surface
+#' fd_obj@metadata <- md
+#' plot_metric_violin(df = fd_obj@metadata, metric_name = "adhesive_force_nN_retract",group_by = "surface",global_test = 'kruskal', pairwise_test = 'wilcox', p_adjust_method = 'BH')
+#'
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_violin geom_point geom_smooth
 #' @importFrom ggplot2 facet_wrap facet_grid labs position_jitter theme_classic
@@ -1643,6 +1670,21 @@ plot_metric_violin <- function(
 #' @return A ggplot object. The fitted PCA model is attached as
 #'   \\code{attr(plot, "pca_model")}, plus score/loading tables in
 #'   \\code{attr(plot, "pca_scores")} and \\code{attr(plot, "pca_loadings")}.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+#' md <- fd_obj@metadata
+#' surface <- sub("_.*", "", md$filename)
+#' surface[surface == "F"] <- "Group_A"
+#' surface[surface == "P"] <- "Group_B"
+#' surface[surface == "silicon"] <- "Group_C"
+#' surface[surface == "Z"] <- "Group_D"
+#' md$surface <- surface
+#' fd_obj@metadata <- md
+#' plot_pca_biplot(fd_obj@metadata,include_columns = c("adhesive_force_nN_retract", "repulsive_energy_aJ_retract","adhesive_energy_aJ_retract","rupture_threshold_nN_retract"), color_by = "surface")
+#'
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_point geom_segment geom_text geom_hline
 #' @importFrom ggplot2 geom_vline labs coord_equal theme_classic scale_color_manual
@@ -1827,6 +1869,21 @@ plot_pca_biplot <- function(
 #'
 #' @return A \code{ComplexHeatmap} object. When \code{draw = TRUE}, returns the
 #'   object produced by \code{ComplexHeatmap::draw()}.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+#' fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+#' md <- fd_obj@metadata
+#' surface <- sub("_.*", "", md$filename)
+#' surface[surface == "F"] <- "Group_A"
+#' surface[surface == "P"] <- "Group_B"
+#' surface[surface == "silicon"] <- "Group_C"
+#' surface[surface == "Z"] <- "Group_D"
+#' md$surface <- surface
+#' fd_obj@metadata <- md
+#' plot_complex_heatmap(fd_obj@metadata,include_columns = c("adhesive_force_nN_retract", "repulsive_energy_aJ_retract","adhesive_energy_aJ_retract","rupture_threshold_nN_retract"), annotate_columns = "surface")
+#'
 #' @export
 plot_complex_heatmap <- function(
     df,
@@ -2013,6 +2070,19 @@ plot_complex_heatmap <- function(
 #' @param ... Additional arguments forwarded to \code{ComplexHeatmap::Heatmap()}.
 #'
 #' @return A \code{ComplexHeatmap} object (drawn when \code{draw = TRUE}).
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' md <- fd_obj@metadata
+#' surface <- sub("_.*", "", md$filename)
+#' surface[surface == "F"] <- "Group_A"
+#' surface[surface == "P"] <- "Group_B"
+#' surface[surface == "silicon"] <- "Group_C"
+#' surface[surface == "Z"] <- "Group_D"
+#' md$surface <- surface
+#' fd_obj@metadata <- md
+#' plot_raw_deflection_heatmap(fd_obj,annotate_columns = "surface")
+#'
 #' @export
 plot_raw_deflection_heatmap <- function(
   fdobj,
@@ -2191,7 +2261,8 @@ plot_raw_deflection_heatmap <- function(
 #'   \item If Force (N), converts to Voltage using: V = F / (sensitivity * springConstant)
 #'   \item Returns data in curvana's expected format with segment-specific parameters
 #' }
-#'
+#' @examples
+#' read_jpk_file(system.file("extdata_jpk", "jpk1.txt", package = "curvana"))
 #' @keywords internal
 read_jpk_file <- function(file_path, height_col = "height", deflection_col = "vDeflection") {
   
