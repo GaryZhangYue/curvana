@@ -15,7 +15,9 @@
     }
 
     # Fall back to loading vsc helpers from the newest installed vscode-R extension.
-    ext_dirs <- Sys.glob(file.path(path.expand("~/.vscode/extensions"), "reditorsupport.r-*"))
+    # Match only the vscode-R extension folders (e.g. reditorsupport.r-2.8.8),
+    # and exclude reditorsupport.r-syntax-* which has no R/session/vsc.R.
+    ext_dirs <- Sys.glob(file.path(path.expand("~/.vscode/extensions"), "reditorsupport.r-[0-9]*"))
     if (!length(ext_dirs)) {
         message("No vscode-R extension found under ~/.vscode/extensions")
         return(invisible(FALSE))
@@ -28,7 +30,8 @@
         return(invisible(FALSE))
     }
 
-    vsc_env <- new.env(parent = baseenv())
+    vsc_env <- new.env(parent = globalenv())
+    assign("dir_init", dirname(vsc_file), envir = vsc_env)
     source(vsc_file, local = vsc_env)
 
     if (!exists("attach", envir = vsc_env, inherits = FALSE)) {
