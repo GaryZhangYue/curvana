@@ -31,7 +31,8 @@ This tutorial demonstrates the full analytical workflow of the **curvana** R pac
 ## Initializing the work environment
 
 ```{r Initiate, results='hide',warning='False'}
-required_packages = c('curvana', 'ggplot2', 'DT', 'dplyr', 'cowplot')
+#required_packages = c('curvana', 'ggplot2', 'DT', 'dplyr', 'cowplot')
+required_packages = c('ggplot2', 'DT', 'dplyr', 'cowplot')
 optional_packages = c('ggpubr')
 
 missing_required <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
@@ -52,8 +53,9 @@ if (length(available_optional) > 0) {
   message("Optional package 'ggpubr' is not installed; statistical annotation examples will be skipped.")
 }
 
-source(system.file("tutorial_helpers.R", package = "curvana"))
 devtools::load_all()
+source(system.file("tutorial_helpers.R", package = "curvana"))
+
 ```
 
 ## Example of raw curve data file

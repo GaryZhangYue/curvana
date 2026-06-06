@@ -31,8 +31,10 @@ This vignette presents a minimal workflow for analyzing data, from loading raw c
 ## Initializing the work environment
 
 ```{r Initiate, results='hide',warning='False'}
-required_packages = c('curvana', 'ggplot2', 'DT', 'dplyr', 'cowplot')
+#required_packages = c('curvana', 'ggplot2', 'DT', 'dplyr', 'cowplot')
+required_packages = c('ggplot2', 'DT', 'dplyr', 'cowplot')
 optional_packages = c('ggpubr')
+
 
 missing_required <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
 if (length(missing_required) > 0) {
@@ -52,8 +54,9 @@ if (length(available_optional) > 0) {
   message("Optional package 'ggpubr' is not installed; statistical annotation examples will be skipped.")
 }
 
-source(system.file("tutorial_helpers.R", package = "curvana"))
 devtools::load_all() 
+source(system.file("tutorial_helpers.R", package = "curvana"))
+
 ```
 
 # Load data
@@ -82,15 +85,14 @@ print(ggplot(curve_df) +
 
 ## Load demo data
 
-All examples below use the demo dataset provided in `extdata/` within the package. To use your own dataset, pass the path to the directory containing the data to the `folder` argument. Users can increase `threads` to enable parallel processing when loading a large folder (for example, more than 5000 curves), which can substantially reduce computation time.
+All examples below use the demo dataset provided in `extdata/` within the package. This folder contains approximately 100 raw curve files exported from Bruker NanoScope Analysis with both approach and retract segments included. To use your own dataset, pass the path to the directory containing the data to the `folder` argument. Users can increase `threads` to enable parallel processing when loading a large folder, for example, more than 5000 curves, which can substantially reduce computation time.
 
 In this step, we initialize an fdObj by importing the demo data directory `extdata/` with `createFdObjFromFolder()`. An fdObj is the core data container in curvana. It stores atomic force microscopy (AFM) force-distance curve data, including raw curves, transformed data, associated metadata for downstream analysis, and the analytical metrics generated.
 
-Use `createFdObjFromFolder()` for generic Bruker/Veeco-style column-separated files. By default, the function reads all `.txt` files (or `.csv` if `suffix = ".csv"`) and removes lines starting with `#` or `"` before import. It expects at least one valid segment (approach or retract) with displacement and deflection columns. The default Bruker column names are `Calc_Ramp_Ex_nm`, `Defl_V_Ex`, `Calc_Ramp_Rt_nm`, and `Defl_V_Rt`, but these can be replaced with custom headers for other exports. __Each curve should have the contact region at the beginning and the non-interaction region at the end. If any column needs to be reversed, use the `reverse_*` arguments.__
+### Bruker/Veeco-style ASCII
 
-For JPK ASCII exports, use the dedicated importer `createFdObjFromJPKFolder()` instead of `createFdObjFromFolder()`. The JPK importer automatically detects approach/retract segments, parses spring constant and sensitivity, and converts force data back to Voltage when needed.
+Use `createFdObjFromFolder()` for generic Bruker/Veeco-style column-separated files. By default, the function reads all `.txt` files (or `.csv` if `suffix = ".csv"`) and removes lines starting with `#` or `"` before import. It expects at least one valid segment (approach or retract) with displacement and deflection columns. The default Bruker column names are `Calc_Ramp_Ex_nm`, `Defl_V_Ex`, `Calc_Ramp_Rt_nm`, and `Defl_V_Rt`, but these can be replaced with custom headers for other exports. If contact and non-interaction regions are in the opposite orientation, use the `reverse_*` arguments to correct direction. If users have only approach or retract data, they can still use this function to create an fdObj by specifying column names only for the available segment and leaving the arguments for the missing segment unchanged. The function will automatically ignore the missing segment and create an fdObj containing only the available data.
 
-If users have only approach or retract data, they can still use this function to create an fdObj by specifying column names only for the available segment and leaving the arguments for the missing segment unchanged. The function will automatically ignore the missing segment and create an fdObj containing only the available data.
 
 ```{r load data}
 folder = system.file("extdata", package = "curvana")
@@ -107,6 +109,16 @@ test.input = createFdObjFromFolder(folder = folder, threads = t,
                                   )
 
 ```
+
+### JPK-style ASCII
+
+For JPK ASCII exports, use the dedicated importer `createFdObjFromJPKFolder()` instead of `createFdObjFromFolder()`. The JPK importer automatically detects approach/retract segments, parses spring constant and sensitivity, and converts force data back to Voltage when needed. Users are encouraged to directly import raw deflection voltage in analysis.
+
+Specifically, `createFdObjFromJPKFolder()`:
+
+- Detects approach and retract segments automatically
+- Parses sensitivity and spring constant for each segment; if deflection is in force units (N), converts it back to voltage
+- Converts distance to nm, applies optional segment reversal, and records imported parameters plus datapoint counts in metadata
 
 ```{r load data jpk example, eval=FALSE}
 # For JPK ASCII data, use the JPK-specific importer:
