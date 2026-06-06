@@ -1,4 +1,5 @@
 .vscode/*
+.Rprofile
 .Rproj
 .Rproj.user
 .Rhistory
