@@ -13,7 +13,7 @@
 #' @param split_curves_by Metadata column to facet by (optional)
 #' @param color_map Named vector of colors (optional)
 #' @param point_size Size of points (default = 0.5)
-#' @param alpha Transparency of points (default = 0.6)
+#' @param alpha Transparency of points (default = 0.5)
 #' @param line_alpha Transparency of connecting paths (default = 0.5)
 #'
 #' @return A ggplot2 object of the scatter plots showing raw deflection signal.
@@ -186,7 +186,7 @@ plot_deflection_curves <- function(fdobj,
 #' @param split_curves_by Metadata column to facet by (optional)
 #' @param color_map Named vector of colors (optional)
 #' @param point_size Size of points (default = 0.5)
-#' @param alpha Transparency of points (default = 0.6)
+#' @param alpha Transparency of points (default = 0.5)
 #' @param line_alpha Transparency of connecting paths (default = 0.5)
 #'
 #' @return A ggplot2 object showing raw deflection signal vs data point index.

@@ -14,14 +14,14 @@
 #' @param folder Path to a folder containing the raw AFM curve files
 #' @param suffix File extension to look for (e.g., ".txt")
 #' @param pattern Optional string pattern to filter files (e.g., "experiment"); default is "" (no filtering)
-#' @param Calc_Ramp_Ex_nm Column name for approach distance (default: "Calc_Ramp_Ex_nm")
-#' @param Calc_Ramp_Rt_nm Column name for retract distance (default: "Calc_Ramp_Rt_nm")
-#' @param Defl_V_Ex Column name for approach deflection (default: "Defl_V_Ex")
-#' @param Defl_V_Rt Column name for retract deflection (default: "Defl_V_Rt")
-#' @param reverse_Calc_Ramp_Ex_nm Logical; reverse approach distance column if TRUE. Default = FALSE.
-#' @param reverse_Calc_Ramp_Rt_nm Logical; reverse retract distance column if TRUE. Default = TRUE.
-#' @param reverse_Defl_V_Ex Logical; reverse approach deflection column if TRUE. Default = TRUE.
-#' @param reverse_Defl_V_Rt Logical; reverse retract deflection column if TRUE. Default = FALSE.
+#' @param Displacement_Approach Column name for approach distance (default: "Calc_Ramp_Ex_nm")
+#' @param Displacement_Retract Column name for retract distance (default: "Calc_Ramp_Rt_nm")
+#' @param Deflection_Approach Column name for approach deflection (default: "Defl_V_Ex")
+#' @param Deflection_Retract Column name for retract deflection (default: "Defl_V_Rt")
+#' @param reverse_Displacement_Approach Logical; reverse approach distance column if TRUE. Default = FALSE.
+#' @param reverse_Displacement_Retract Logical; reverse retract distance column if TRUE. Default = TRUE.
+#' @param reverse_Deflection_Approach Logical; reverse approach deflection column if TRUE. Default = TRUE.
+#' @param reverse_Deflection_Retract Logical; reverse retract deflection column if TRUE. Default = FALSE.
 #' @param metadata Optional data.frame. If provided, file names (excluding the suffix) matched to rownames(metadata) will be read in. Returns error if any files not found.
 #' @param threads Number of parallel threads to use for file reading. Default = 1 (sequential).
 #'
@@ -186,7 +186,7 @@ createFdObjFromFolder <- function(folder,
 #' Constructor for fdObj from a folder of JPK format AFM force–distance curve files
 #'
 #' @description
-#' This function reads JPK format force-distance curve files exported from JPK AFM software.
+#' This function reads JPK ASCII format force-distance curve files exported from JPK AFM software.
 #' The function automatically detects and separates approach and retract segments, and extracts
 #' sensitivity and spring constant. Users are encouraged to export deflection data directly in Voltage.
 #' However, if force data is provided (indicated by "N" as the column unit), it will be converted back
@@ -199,9 +199,9 @@ createFdObjFromFolder <- function(folder,
 #' @param threads Number of parallel threads to use for file reading. Default = 1 (sequential).
 #' @param height_col Column name for height/distance data in JPK files. Default is "height".
 #' @param deflection_col Column name for deflection data in JPK files. Default is "vDeflection".
-#' @param reverse_Displacement_Approach Logical; reverse approach distance column if TRUE. Default = FALSE.
+#' @param reverse_Displacement_Approach Logical; reverse approach distance column if TRUE. Default = TRUE
 #' @param reverse_Displacement_Retract Logical; reverse retract distance column if TRUE. Default = FALSE.
-#' @param reverse_Deflection_Approach Logical; reverse approach deflection column if TRUE. Default = FALSE.
+#' @param reverse_Deflection_Approach Logical; reverse approach deflection column if TRUE. Default = TRUE
 #' @param reverse_Deflection_Retract Logical; reverse retract deflection column if TRUE. Default = FALSE.
 #'
 #' @return An object of class \code{fdObj}

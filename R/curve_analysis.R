@@ -243,8 +243,8 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
 #' @param least_length Integer. Minimum number of points in the baseline segment. The function will
 #' take the last \code{least_length} points of the curve for testing.
 #' @param sensitivity Numeric. Scaling factor for the deflection signal (e.g., probe sensitivity)).
-#' @param slp_threshold Numeric. Maximum absolute slope for the segment to be considered flat (default: 0.001).
-#' @param std_threshold Numeric. Maximum standard error of the slope (default: 0.005).
+#' @param slp_threshold Numeric. Maximum absolute slope for the segment to be considered flat (default: 0.01).
+#' @param std_threshold Numeric. Maximum standard error of the slope (default: 0.05).
 #'
 #' @return A list with two elements:
 #' \describe{
