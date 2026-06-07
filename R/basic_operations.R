@@ -5,6 +5,19 @@
 #' @param by_col A named list like list(colname = value) to filter metadata (e.g., list(type = "control"))
 #'
 #' @return A subsetted \code{fdObj} object
+#' @examples 
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' md <- fd_obj@metadata
+#' surface <- sub("_.*", "", md$filename)
+#' surface[surface == "F"] <- "Group_A"
+#' surface[surface == "P"] <- "Group_B"
+#' surface[surface == "silicon"] <- "Group_C"
+#' surface[surface == "Z"] <- "Group_D"
+#' md$surface <- surface
+#' fd_obj@metadata <- md
+#' fd_obj2 = extract(fd_obj,by_col = list(surface = 'Group_A'))
+#' fd_obj3 = extract(fd_obj,by_sample = 'F_1.spm-F4E1_ForceCurveIndex_0.spm')
 #' @export
 extract <- function(fdObj, by_sample = NULL, by_col = NULL) {
   if (!inherits(fdObj, "fdObj")) {
@@ -73,6 +86,20 @@ extract <- function(fdObj, by_sample = NULL, by_col = NULL) {
 #' @param y A `fdObj` object. This object cannot have any overlapping sample names with the first fdObj.
 #'
 #' @return A new combined `fdObj` object. metadata matrix will be concatenated using bind_rows (dplyr). All slots will be concatenated.
+#' @examples
+#' folder <- system.file("extdata", package = "curvana")
+#' fd_obj <- createFdObjFromFolder(folder)
+#' md <- fd_obj@metadata
+#' surface <- sub("_.*", "", md$filename)
+#' surface[surface == "F"] <- "Group_A"
+#' surface[surface == "P"] <- "Group_B"
+#' surface[surface == "silicon"] <- "Group_C"
+#' surface[surface == "Z"] <- "Group_D"
+#' md$surface <- surface
+#' fd_obj@metadata <- md
+#' fd_obj2 = extract(fd_obj,by_col = list(surface = 'Group_B'))
+#' fd_obj3 = extract(fd_obj,by_sample = 'F_1.spm-F4E1_ForceCurveIndex_0.spm')
+#' fd_obj4 = combineFdObj(fd_obj2, fd_obj3)
 #' @export
 
 combineFdObj <- function(x, y) {

@@ -5,6 +5,8 @@
 #' @param ... Additional arguments passed to \code{shiny::runApp()}.
 #'
 #' @return Invisibly returns the value from \code{shiny::runApp()}.
+#' @examples 
+#' run_curvana_app()
 #' @export
 run_curvana_app <- function(...) {
   if (!requireNamespace("shiny", quietly = TRUE)) {
