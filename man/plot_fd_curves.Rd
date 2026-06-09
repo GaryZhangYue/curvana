@@ -46,5 +46,17 @@ plot_fd_curves(
 A ggplot2 object showing the force-distance relationships from AFM curves.
 }
 \description{
-Generates force-distance plots from the calibrated approach or retract curves in an \code{fdObj}.
+Takes an \code{fdObj} with transformed approach and/or retract curves as
+input, extracts the selected transformed curves, and combines them into one
+plotting table with separation distance on the x-axis and force on the
+y-axis. Optional metadata columns can be used to color curves or split them
+across facets, and optional axis limits or extra \code{ggplot2} layers can
+be applied. The output is a \code{ggplot2} object showing force-distance
+relationships for the requested curves.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+plot_fd_curves(fd_obj, curve = "retract")
 }

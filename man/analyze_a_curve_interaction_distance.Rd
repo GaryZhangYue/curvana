@@ -2,7 +2,7 @@
 % Please edit documentation in R/curve_analysis.R
 \name{analyze_a_curve_interaction_distance}
 \alias{analyze_a_curve_interaction_distance}
-\title{Analyze interaction distance from a single AFM curve (flexible thresholding)}
+\title{Analyze interaction distance from a single AFM curve using noise-band thresholds}
 \usage{
 analyze_a_curve_interaction_distance(
   curve_df,
@@ -40,15 +40,113 @@ Required when \code{y_direction = "negative"}.}
 Required when \code{y_direction = "positive"}.}
 }
 \value{
-c(distance = x_at_first_excursion_or_NA, threshold = numeric_threshold_used)
+A named numeric vector of length 2:
+\describe{
+  \item{distance}{Interaction distance in nm for the detected event. Returns
+  \code{NA_real_} when no qualifying excursion is found or when the input is
+  invalid. Negative distances are clamped to \code{0}.}
+  \item{threshold}{The numeric threshold actually used for detection:
+  \code{noiseBand_low} for negative-direction searches or
+  \code{noiseBand_high} for positive-direction searches. Returns
+  \code{NA_real_} only when validation fails before threshold selection.}
+}
 }
 \description{
-Detects the first significant deviation in force relative to a baseline window,
-marking rupture length (negative excursion) or repulsive distance (positive excursion).
-This function uses user-provided noise-band thresholds directly.
-Scanning can proceed from right-to-left (default) or left-to-right.
-A detection is accepted only when at least \\code{min_consecutive}
-consecutive points satisfy the excursion criterion.
-When y-direction is negative, the function scans the curve to look for the first point where force <  lower bound of noise band (i.e., the curve enters the adhesive region).
-When y-direction is positive, the function scans the curve to look for the last point where force >  upper bound of noise band (i.e., the curve exits the repulsive region).
+Detects a single interaction distance from one transformed AFM curve by
+searching for the first sustained excursion of \code{force_nN} outside a
+user-supplied noise band. The function never scans the final
+\code{baseline_span} points, treating that tail region as baseline-only, and
+instead searches only the portion of the curve before that baseline window.
+This lets the same function be used for either rupture-type events
+(negative-force excursions) or repulsive-contact events (positive-force
+excursions) once appropriate threshold values have already been estimated.
+
+Scan direction is controlled by \code{x_direction}. With
+\code{x_direction = "left"}, the search proceeds right-to-left, starting just
+before the excluded baseline region and moving toward the origin. With
+\code{x_direction = "right"}, the search proceeds left-to-right, starting at
+the origin-side of the curve and stopping just before the baseline region.
+After thresholding the scanned force values, the function uses run-length
+encoding to identify contiguous stretches of points that satisfy the event
+condition and accepts only runs of length at least
+\code{min_consecutive}.
+
+The reported interaction distance depends on the event type. For
+\code{y_direction = "negative"}, the function looks for the first accepted
+run where \code{force_nN < noiseBand_low} and reports the first point of that
+run, corresponding to entry into the adhesive or rupture region. For
+\code{y_direction = "positive"}, it looks for the first accepted run where
+\code{force_nN > noiseBand_high} and reports the last point of that run,
+corresponding to exit from the repulsive excursion. If no qualifying run is
+found, or if there is no scannable region before baseline, the function
+returns \code{NA} for distance and echoes back the threshold used.
+}
+\examples{
+transformed_df <- data.frame(
+  separation_distance_nm = c(
+    0.22196440, 0.19896440, 0.17496440, 0.23529773, 0.21129773,
+    0.18829773, 0.16429773, 0.14129773, 0.11729773, 0.17763107,
+    0.15463107, 0.13063107, 0.19096440, 0.08363107, -0.02270227,
+    -0.21336893, -0.31970227, -0.42603560, -0.53336893, -0.47303560,
+    -0.49703560, -0.43670227, -0.54403560, -0.65036893, -0.67336893,
+    -0.78070227, -0.72036893, -0.49436893, -0.18403560, 0.04196440,
+    0.18563107, 0.49496440, 1.13863107, 3.03229773, 5.09163107,
+    7.15196440, 8.21129773, 9.27163107, 10.58096440, 11.97463107,
+    13.28396440, 14.42763107, 15.48796440, 16.38063107, 17.44096440,
+    18.41696440, 19.39396440, 20.28663107, 21.26363107, 22.24063107,
+    23.13329773, 24.11029773, 25.08629773, 26.06329773, 27.12263107,
+    28.01629773, 28.99329773, 29.96929773, 30.94629773, 31.92229773,
+    32.89929773, 33.87529773, 34.85229773, 35.82829773, 36.72196440,
+    37.69896440, 38.75829773, 39.73529773, 40.79463107, 41.77163107,
+    42.74763107, 43.72463107, 44.70063107, 45.67763107, 46.57129773,
+    47.54729773, 48.52429773, 49.58363107, 50.47729773, 51.45329773,
+    52.43029773, 53.49063107, 54.38329773, 55.44363107, 56.33629773,
+    57.31329773, 58.28929773, 59.34963107, 60.32663107, 61.21929773,
+    62.19629773, 63.25563107, 64.23263107, 65.37529773, 66.26896440,
+    67.24496440, 68.13863107, 69.03229773, 70.00829773, 70.90196440
+  ),
+  force_nN = c(
+    2.588500000, 2.488500000, 2.388500000, 2.296833333, 2.196833333,
+    2.096833333, 1.996833333, 1.896833333, 1.796833333, 1.705166667,
+    1.605166667, 1.505166667, 1.413500000, 1.305166667, 1.196833333,
+    1.080166667, 0.971833333, 0.863500000, 0.755166667, 0.663500000,
+    0.563500000, 0.471833333, 0.363500000, 0.255166667, 0.155166667,
+    0.046833333, -0.044833333, -0.119833333, -0.186500000, -0.261500000,
+    -0.344833333, -0.411500000, -0.444833333, -0.353166667, -0.244833333,
+    -0.136500000, -0.128166667, -0.119833333, -0.086500000, -0.044833333,
+    -0.011500000, 0.005166667, 0.013500000, 0.005166667, 0.013500000,
+    0.013500000, 0.013500000, 0.005166667, 0.005166667, 0.005166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, 0.005166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.003166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.011500000,
+    -0.011500000, -0.003166667, -0.003166667, 0.005166667, 0.005166667,
+    0.005166667, 0.005166667, 0.005166667, 0.005166667, -0.003166667,
+    -0.003166667, -0.003166667, 0.005166667, -0.003166667, -0.003166667,
+    -0.003166667, 0.005166667, -0.003166667, 0.005166667, -0.003166667,
+    -0.003166667, -0.003166667, 0.005166667, 0.005166667, -0.003166667,
+    -0.003166667, 0.005166667, 0.005166667, 0.021833333, 0.013500000,
+    0.013500000, 0.005166667, -0.003166667, -0.003166667, -0.011500000
+  )
+)
+rupdis = analyze_a_curve_interaction_distance(transformed_df,
+                                                      y_direction = "negative", 
+                                                      x_direction = "left",
+                                                      baseline_span = 50,
+                                                      noiseBand_low = -0.1,
+                                                      noiseBand_high = 0.1,
+                                                      min_consecutive = 3
+                                                      )
+plot(transformed_df$separation_distance_nm, transformed_df$force_nN, type = "l")
+abline(v = rupdis['distance'], col= "red", lwd = 2)
+
+repdis = analyze_a_curve_interaction_distance(transformed_df,
+                                                      y_direction = "positive",
+                                                      x_direction = "right",
+                                                      baseline_span = 50,
+                                                      noiseBand_low = -0.1,
+                                                      noiseBand_high = 0.1,
+                                                      min_consecutive = 3
+                                                      )
+plot(transformed_df$separation_distance_nm, transformed_df$force_nN, type = "l")
+abline(v = repdis['distance'], col= "blue", lwd = 2)
 }

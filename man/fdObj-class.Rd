@@ -5,7 +5,26 @@
 \alias{fdObj-class}
 \title{An S4 class to hold AFM force-distance raw and processed curves with metadata}
 \description{
-An S4 class to hold AFM force-distance raw and processed curves with metadata
+`fdObj` is the main container class used throughout the package to keep a set
+of AFM curves and their derived results together in one validated object.
+Rather than passing raw curves, transformed curves, calibration segments, and
+metadata as separate objects, `fdObj` stores them in aligned slots so that
+every sample keeps the same identity across import, transformation,
+visualization, and analysis steps.
+
+In a typical workflow, an `fdObj` is first created from a folder of raw curve
+files. At that stage, the object mainly contains imported raw curves and a
+metadata table. Downstream functions then populate additional slots with
+transformed approach and retract curves, curve regions used for sensitivity
+and baseline estimation, and analytical results written back into the
+metadata. This makes `fdObj` the central analysis object for the package and
+allows most functions to take an `fdObj`, update its contents, and return the
+modified object.
+
+The class also enforces consistency between its parts. Curve lists must stay
+named consistently, transformed curves must have the expected structure, and
+metadata rows must match the registered curve names. This validity checking
+helps prevent analyses from being run on mismatched or incomplete datasets.
 }
 \section{Slots}{
 

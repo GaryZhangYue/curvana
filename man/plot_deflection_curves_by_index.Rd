@@ -26,22 +26,35 @@ plot_deflection_curves_by_index(
 
 \item{point_size}{Size of points (default = 0.5)}
 
-\item{alpha}{Transparency of points (default = 0.6)}
+\item{alpha}{Transparency of points (default = 0.5)}
 
 \item{line_alpha}{Transparency of connecting paths (default = 0.5)}
 
 \item{color_map}{Named vector of colors (optional)}
 }
 \value{
-A ggplot2 object showing raw deflection signal vs data point index,
-  with regions colored by their role in calibration (sensitivity region, baseline region, other).
+A ggplot2 object showing raw deflection signal vs data point index.
 }
 \description{
-Similar to \code{plot_deflection_curves} but uses row numbers (data point index) 
-on the x-axis instead of distance values. This is useful for visualizing:
-\itemize{
-  \item How many data points are used for baseline calibration
-  \item How many data points are used for sensitivity calibration
-  \item Whether the data is oriented in the correct direction
+Takes an \code{fdObj} with raw curves as input and returns a \code{ggplot2}
+object showing raw deflection values against data-point index rather than
+against distance. The function is similar to
+\code{plot_deflection_curves()}, but it uses row number on the x-axis and,
+when available, respects metadata columns that record the imported number of
+valid approach or retract points. This makes it useful for checking curve
+length, signal orientation, and general raw-data shape before downstream
+transformation.
 }
+\details{
+This is useful for visualizing:
+\itemize{
+  \item How many data points are in each curve
+  \item Whether the data is oriented in the correct direction
+  \item The general shape and quality of raw deflection data
+}
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+plot_deflection_curves_by_index(fd_obj, curve = "retract")
 }

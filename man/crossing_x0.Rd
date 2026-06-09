@@ -26,8 +26,8 @@ crosses the x-axis (\code{y = 0}). Only valid when \code{y1} and \code{y2}
 have opposite signs.
 }
 \examples{
-crossing_x0(0, 4, 2, -2)  # 1.333 — line crosses y=0 between x=0 and x=2
-crossing_x0(0, 4, 2, 6)   # NA — no sign change
+curvana:::crossing_x0(0, 4, 2, -2)  # 1.333 — line crosses y=0 between x=0 and x=2
+curvana:::crossing_x0(0, 4, 2, 6)   # NA — no sign change
 
 }
 \seealso{

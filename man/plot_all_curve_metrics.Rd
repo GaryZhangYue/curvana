@@ -111,7 +111,18 @@ A data.frame with one row per curve and columns:
   The output folder is attached as \code{attr(result, "destination_folder")}.
 }
 \description{
-Iteratively runs \code{plot_a_curve_metrics()} over all entries in the
-selected transformed-curve slot (approach or retract) of an \code{fdObj}, and
-saves each plot to disk.
+Takes an \code{fdObj} plus plotting and file-output settings as input,
+iteratively calls \code{plot_a_curve_metrics()} for every curve in the
+selected transformed-curve slot, and saves each generated plot to disk in the
+requested format. This function is a batch-export wrapper for per-curve
+metric plots rather than a plotting function for a single curve. Its output
+is a data frame summarizing which curves were saved successfully, where each
+file was written, and any error messages for failed plots.
+}
+\examples{
+ folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+plot_all_curve_metrics(fdobj = fd_obj, useCurve = "retract",plot_raw = T, destination_folder = '../test_plot_metrics_denoised', format = 'png', width = 18, height = 9, threads = 1 )
 }

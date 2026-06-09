@@ -170,7 +170,7 @@ ui <- bs4Dash::dashboardPage(
                 ),
                 shiny::tags$li(
                   shiny::tags$strong("Figures"), " \u2014 Compare results across samples and conditions",
-                  " using PCA biplots and violin plots."
+                  " using PCA biplots, heatmaps, and violin plots."
                 ),
                 shiny::tags$li(
                   shiny::tags$strong("Download"), " \u2014 Download all raw curves, transformed curves, or the full fdobj object."
@@ -1161,9 +1161,9 @@ ui <- bs4Dash::dashboardPage(
       
       shiny::h5("Links"),
       shiny::tags$ul(
-        shiny::tags$li(shiny::tags$a("Tutorial", href = "https://github.com/GaryZhangYue/fdafmR", target = "_blank")),
-        shiny::tags$li(shiny::tags$a("GitHub Repository", href = "https://github.com/GaryZhangYue/fdafmR", target = "_blank")),
-        shiny::tags$li(shiny::tags$a("Report Issues", href = "https://github.com/GaryZhangYue/fdafmR/issues", target = "_blank"))
+        shiny::tags$li(shiny::tags$a("Tutorial", href = "https://github.com/GaryZhangYue/curvana/tree/main/vignettes", target = "_blank")),
+        shiny::tags$li(shiny::tags$a("GitHub Repository", href = "https://github.com/GaryZhangYue/curvana", target = "_blank")),
+        shiny::tags$li(shiny::tags$a("Report Issues", href = "https://github.com/GaryZhangYue/curvana/issues", target = "_blank"))
       )
     )
   )

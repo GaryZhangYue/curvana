@@ -33,11 +33,11 @@ createFdObjFromJPKFolder(
 
 \item{deflection_col}{Column name for deflection data in JPK files. Default is "vDeflection".}
 
-\item{reverse_Displacement_Approach}{Logical; reverse approach distance column if TRUE. Default = FALSE.}
+\item{reverse_Displacement_Approach}{Logical; reverse approach distance column if TRUE. Default = TRUE}
 
 \item{reverse_Displacement_Retract}{Logical; reverse retract distance column if TRUE. Default = FALSE.}
 
-\item{reverse_Deflection_Approach}{Logical; reverse approach deflection column if TRUE. Default = FALSE.}
+\item{reverse_Deflection_Approach}{Logical; reverse approach deflection column if TRUE. Default = TRUE}
 
 \item{reverse_Deflection_Retract}{Logical; reverse retract deflection column if TRUE. Default = FALSE.}
 }
@@ -45,7 +45,7 @@ createFdObjFromJPKFolder(
 An object of class \code{fdObj}
 }
 \description{
-This function reads JPK format force-distance curve files exported from JPK AFM software.
+This function reads JPK ASCII format force-distance curve files exported from JPK AFM software.
 The function automatically detects and separates approach and retract segments, and extracts
 sensitivity and spring constant. Users are encouraged to export deflection data directly in Voltage.
 However, if force data is provided (indicated by "N" as the column unit), it will be converted back

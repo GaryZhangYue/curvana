@@ -23,7 +23,7 @@ plot_complex_heatmap(
 }
 \arguments{
 \item{df}{A data.frame containing feature and metadata columns. Each row is
-one sample.}
+one sample. Typically the metadata slot of fdobj.}
 
 \item{include_columns}{Character vector of feature column names to include as
 heatmap rows.}
@@ -59,8 +59,27 @@ A \code{ComplexHeatmap} object. When \code{draw = TRUE}, returns the
   object produced by \code{ComplexHeatmap::draw()}.
 }
 \description{
-Creates a heatmap where selected feature columns are shown as rows and
-samples are shown as columns. Feature values are z-score scaled by row
-(feature) before plotting. Optionally annotates sample columns with up to
-two metadata columns.
+Takes a data frame as input together with a set of feature columns to display
+and optional metadata columns to use as annotations, converts the selected
+features to numeric, removes incomplete rows, scales each feature by row, and
+arranges the result as a heatmap matrix with features as rows and samples as
+columns. Optional annotation columns are added above the heatmap when
+supplied. The output is a \code{ComplexHeatmap} object, or the drawn version
+of that object when \code{draw = TRUE}.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+md <- fd_obj@metadata
+surface <- sub("_.*", "", md$filename)
+surface[surface == "F"] <- "Group_A"
+surface[surface == "P"] <- "Group_B"
+surface[surface == "silicon"] <- "Group_C"
+surface[surface == "Z"] <- "Group_D"
+md$surface <- surface
+fd_obj@metadata <- md
+plot_complex_heatmap(fd_obj@metadata,include_columns = c("adhesive_force_nN_retract", "repulsive_energy_aJ_retract","adhesive_energy_aJ_retract","rupture_threshold_nN_retract"), annotate_columns = "surface")
+
 }

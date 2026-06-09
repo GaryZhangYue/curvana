@@ -17,7 +17,7 @@ analyze_sensitivity(
 \arguments{
 \item{fdObj}{An object of class \code{fdObj}.}
 
-\item{end}{Integer. The maximum index in raw curves to consider (e.g., 200).}
+\item{end}{Integer. The maximum index in raw curves to consider (e.g., 200) in \code{calc_sensitivity()}.}
 
 \item{intv}{Integer. Number of data points added per iteration when
 building the linear sensitivity segment in \code{calc_sensitivity()}.}
@@ -40,4 +40,10 @@ An updated \code{fdObj} with sensitivity values in metadata and segments in sens
 \description{
 Applies sensitivity estimation to each rawCurve in an fdObj and stores the sensitivity values
 in the metadata and the segment used in the senscal_segment slot.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- analyze_sensitivity(fd_obj, end = 80, intv = 10, useCurve = "retract")
+head(fd_obj@metadata$sensitivity_V_nm_retract)
 }

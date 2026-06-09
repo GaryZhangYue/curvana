@@ -6,7 +6,9 @@
 #'
 #' @return Invisibly returns the value from \code{shiny::runApp()}.
 #' @examples 
+#' \dontrun{
 #' run_curvana_app()
+#' }
 #' @export
 run_curvana_app <- function(...) {
   if (!requireNamespace("shiny", quietly = TRUE)) {

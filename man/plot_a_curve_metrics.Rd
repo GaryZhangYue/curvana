@@ -50,8 +50,8 @@ and add "Noise band" labels above and below the band boundaries.}
 \item{annotate_repulsive_energy}{Logical. If \code{TRUE}, add repulsive
 energy value to subtitle when available.}
 
-\item{annotate_adhesive_energy}{Logical. If \code{TRUE}, add adhesive force
-and adhesive energy values to subtitle when available.}
+\item{annotate_adhesive_energy}{Logical. If \code{TRUE}, add adhesive 
+energy value to subtitle when available.}
 
 \item{annotate_adhesive_force}{Logical. If \code{TRUE}, annotate adhesive force
 point and separation using arrow + label.}
@@ -100,7 +100,20 @@ or extra \code{geom_*()} layers).}
 A ggplot2 object, or a cowplot grid object when \code{plot_raw = TRUE}.
 }
 \description{
-High-level visualization helper that takes an \code{fdObj} and one curve name,
-plots the transformed force-distance curve, and optionally overlays selected
-annotations from predefined metadata columns for the selected \code{useCurve}.
+Takes an \code{fdObj}, the name of one curve, and the selected transformed
+branch (approach or retract) as input, then builds a detailed visualization
+of that single transformed force-distance curve. The function can annotate
+noise-band bounds, adhesive force, adhesive and repulsive energies, rupture
+distance, repulsive distance, and region labels derived from stored metadata.
+When \code{plot_raw = TRUE}, it also plots the matching raw curve and returns
+a two-panel display. The output is therefore either one annotated
+\code{ggplot2} object or a combined cowplot panel containing both raw and
+transformed views.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+plot_a_curve_metrics(fd_obj, curve_name = 'F_1.spm-F4E1_ForceCurveIndex_1.spm', useCurve = "retract", plot_raw = TRUE)
 }

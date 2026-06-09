@@ -19,3 +19,17 @@ A subsetted \code{fdObj} object
 \description{
 Extract subset of fdObj by sample or metadata column
 }
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+md <- fd_obj@metadata
+surface <- sub("_.*", "", md$filename)
+surface[surface == "F"] <- "Group_A"
+surface[surface == "P"] <- "Group_B"
+surface[surface == "silicon"] <- "Group_C"
+surface[surface == "Z"] <- "Group_D"
+md$surface <- surface
+fd_obj@metadata <- md
+fd_obj2 = extract(fd_obj,by_col = list(surface = 'Group_A'))
+fd_obj3 = extract(fd_obj,by_sample = 'F_1.spm-F4E1_ForceCurveIndex_0.spm')
+}

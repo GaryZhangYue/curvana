@@ -36,3 +36,9 @@ Updated \code{fdObj} with denoised curves in \code{rawCurves}.
 Applies \code{denoise_a_curve()} to every data frame in \code{fdObj@rawCurves}
 and writes the denoised results back to the \code{rawCurves} slot.
 }
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- denoise_curves(fd_obj, p = 1, n = 5, m = 0, ts = 1, useCurve = "approach", threads = 1)
+head(fd_obj@rawCurves[[1]])
+}

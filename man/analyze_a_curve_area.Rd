@@ -2,7 +2,7 @@
 % Please edit documentation in R/curve_analysis.R
 \name{analyze_a_curve_area}
 \alias{analyze_a_curve_area}
-\title{Analyze the adhesive and repulsive areas of a single AFM curve (data.frame input)}
+\title{Analyze the adhesive and repulsive areas of a single AFM curve relative to noise-band thresholds}
 \usage{
 analyze_a_curve_area(
   curve_df,
@@ -33,28 +33,88 @@ A named numeric vector of length 2:
 }
 }
 \description{
-Calculates the total areas above (\emph{repulsive}) and below (\emph{adhesive})
-the noise threshold for one curve supplied as a data.frame with columns
-\code{separation_distance_nm} (x) and \code{force_nN} (y).
+Calculates the total area of a transformed force-separation curve that lies
+outside a user-defined noise band. Positive force contributions above
+\code{noiseBand_high} are reported as \emph{repulsive_area}, whereas
+negative force contributions below \code{noiseBand_low} are reported as
+\emph{adhesive_area}. The function expects one curve in tabular form with
+\code{separation_distance_nm} as the x-axis and \code{force_nN} as the
+y-axis, and it returns the two areas separately rather than combining them
+into a signed net integral.
 }
 \details{
-The computation proceeds in the given point order (no sorting). Segments entirely
-above the positive noise threshold or below the negative noise threshold are integrated
-as trapezoids, and segments that cross the noise thresholds are split at the interpolated
-crossing point and integrated as triangles. Areas within the noise band (-noise_cutoff to +noise_cutoff) are ignored.
+Integration is performed in the original row order, so the function respects
+the incoming trace geometry and does not sort or otherwise reorder points.
+For each adjacent pair of points, the function checks
+whether the segment lies fully above the upper threshold, fully below the
+lower threshold, entirely inside the noise band, or crosses one or both
+thresholds. Fully above-threshold and fully below-threshold segments are
+integrated as trapezoids after subtracting the relevant threshold, while
+partial excursions are split at linearly interpolated crossing points and the
+out-of-band portion is integrated as one or two triangles. Signal within the
+interval \code{[noiseBand_low, noiseBand_high]} is treated as baseline-like
+noise and contributes zero area.
 
-As a practical fix for small transformation offsets near the origin, any
-\code{separation_distance_nm < 0} are clamped to 0 before integration.
-This works for both approach (x may run high→low) and retract (low→high) traces.
+Before integration, both required columns are coerced to numeric and only
+finite x-y pairs are retained. If the input is not a data frame with the
+required columns, or if no finite pairs remain after cleaning, the function
+returns \code{NA} for both outputs to indicate that the curve could not be
+analyzed. If fewer than two valid points remain, the function returns
+zero area for both outputs because no segment exists to integrate.
+
+As a practical correction for small transformation offsets near contact, any
+negative \code{separation_distance_nm} values are clamped to 0 before
+integration. This avoids assigning artificial area to small negative-distance
+tails.
 }
 \examples{
-df <- data.frame(
-  separation_distance_nm = c(-0.02, 0, 0.10, 0.05, 0.20),  # includes clamp and backtrack
-  force_nN               = c( 0.50 , 0, 0.30, -0.20, 0.10)
+transformed_df <- data.frame(
+  separation_distance_nm = c(
+    0.22196440, 0.19896440, 0.17496440, 0.23529773, 0.21129773,
+    0.18829773, 0.16429773, 0.14129773, 0.11729773, 0.17763107,
+    0.15463107, 0.13063107, 0.19096440, 0.08363107, -0.02270227,
+    -0.21336893, -0.31970227, -0.42603560, -0.53336893, -0.47303560,
+    -0.49703560, -0.43670227, -0.54403560, -0.65036893, -0.67336893,
+    -0.78070227, -0.72036893, -0.49436893, -0.18403560, 0.04196440,
+    0.18563107, 0.49496440, 1.13863107, 3.03229773, 5.09163107,
+    7.15196440, 8.21129773, 9.27163107, 10.58096440, 11.97463107,
+    13.28396440, 14.42763107, 15.48796440, 16.38063107, 17.44096440,
+    18.41696440, 19.39396440, 20.28663107, 21.26363107, 22.24063107,
+    23.13329773, 24.11029773, 25.08629773, 26.06329773, 27.12263107,
+    28.01629773, 28.99329773, 29.96929773, 30.94629773, 31.92229773,
+    32.89929773, 33.87529773, 34.85229773, 35.82829773, 36.72196440,
+    37.69896440, 38.75829773, 39.73529773, 40.79463107, 41.77163107,
+    42.74763107, 43.72463107, 44.70063107, 45.67763107, 46.57129773,
+    47.54729773, 48.52429773, 49.58363107, 50.47729773, 51.45329773,
+    52.43029773, 53.49063107, 54.38329773, 55.44363107, 56.33629773,
+    57.31329773, 58.28929773, 59.34963107, 60.32663107, 61.21929773,
+    62.19629773, 63.25563107, 64.23263107, 65.37529773, 66.26896440,
+    67.24496440, 68.13863107, 69.03229773, 70.00829773, 70.90196440
+  ),
+  force_nN = c(
+    2.588500000, 2.488500000, 2.388500000, 2.296833333, 2.196833333,
+    2.096833333, 1.996833333, 1.896833333, 1.796833333, 1.705166667,
+    1.605166667, 1.505166667, 1.413500000, 1.305166667, 1.196833333,
+    1.080166667, 0.971833333, 0.863500000, 0.755166667, 0.663500000,
+    0.563500000, 0.471833333, 0.363500000, 0.255166667, 0.155166667,
+    0.046833333, -0.044833333, -0.119833333, -0.186500000, -0.261500000,
+    -0.344833333, -0.411500000, -0.444833333, -0.353166667, -0.244833333,
+    -0.136500000, -0.128166667, -0.119833333, -0.086500000, -0.044833333,
+    -0.011500000, 0.005166667, 0.013500000, 0.005166667, 0.013500000,
+    0.013500000, 0.013500000, 0.005166667, 0.005166667, 0.005166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, 0.005166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.003166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.011500000,
+    -0.011500000, -0.003166667, -0.003166667, 0.005166667, 0.005166667,
+    0.005166667, 0.005166667, 0.005166667, 0.005166667, -0.003166667,
+    -0.003166667, -0.003166667, 0.005166667, -0.003166667, -0.003166667,
+    -0.003166667, 0.005166667, -0.003166667, 0.005166667, -0.003166667,
+    -0.003166667, -0.003166667, 0.005166667, 0.005166667, -0.003166667,
+    -0.003166667, 0.005166667, 0.005166667, 0.021833333, 0.013500000,
+    0.013500000, 0.005166667, -0.003166667, -0.003166667, -0.011500000
+  )
 )
-analyze_a_curve_area(df)
-analyze_a_curve_area(df, noiseBand_low = -0.1, noiseBand_high = 0.1)
-
+analyze_a_curve_area(transformed_df, noiseBand_low = -0.1, noiseBand_high = 0.1)
 }
 \seealso{
 area_trapezoid, area_triangle, crossing_x0

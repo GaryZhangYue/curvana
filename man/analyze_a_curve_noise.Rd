@@ -46,9 +46,90 @@ One of
 \item{fixed_high}{Numeric upper band (nN) for "fixed" method. Default NULL.}
 }
 \value{
-Named numeric vector: c(noiseBand_low = value, noiseBand_high = value).
+A named numeric vector of length 2:
+\describe{
+  \item{noiseBand_low}{Lower force threshold in nN, typically negative for
+  symmetric methods. Returns \code{NA_real_} when the curve cannot be
+  analyzed.}
+  \item{noiseBand_high}{Upper force threshold in nN, typically positive for
+  symmetric methods. Returns \code{NA_real_} when the curve cannot be
+  analyzed.}
+}
 }
 \description{
-Computes a positive noise cutoff (nN) from the baseline window of one transformed
-AFM curve.
+Estimates lower and upper force-noise bands from the baseline region of one
+transformed AFM force-separation curve. The function uses the last
+\code{baseline_span} rows of \code{force_nN} as the baseline window.
+ It then converts that baseline
+window into a negative and positive threshold pair,
+\code{noiseBand_low}/\code{noiseBand_high}, that can be used for downstream
+rupture, repulsion, or area analyses.
+}
+\details{
+Four thresholding strategies are supported. \code{"sd"} builds symmetric
+bands from the baseline standard deviation, \code{"mad"} builds symmetric
+bands from the median absolute deviation scaled by
+\code{mad_constant}, \code{"quantile"} uses empirical lower and upper
+quantiles of the baseline force distribution, and \code{"fixed"} uses
+user-supplied lower and upper force cutoffs directly. In all cases the final
+bands are multiplied by \code{multiplier}. For the symmetric methods, if the
+estimated spread is missing or non-positive, the function substitutes a very
+small positive value (\code{.Machine$double.eps}) so that downstream methods
+still receive non-zero thresholds instead of a degenerate zero-width band.
+
+Invalid inputs such as a non-data-frame \code{curve_df}, missing required
+columns, or an invalid \code{baseline_span} do not stop execution; they
+return \code{NA} noise bands with a warning. By contrast, invalid method-
+specific arguments such as an out-of-range quantile or missing
+\code{fixed_low}/\code{fixed_high} for \code{"fixed"} cause an error,
+because the requested thresholding rule itself cannot be evaluated.
+}
+\examples{
+transformed_df <- data.frame(
+  separation_distance_nm = c(
+    0.22196440, 0.19896440, 0.17496440, 0.23529773, 0.21129773,
+    0.18829773, 0.16429773, 0.14129773, 0.11729773, 0.17763107,
+    0.15463107, 0.13063107, 0.19096440, 0.08363107, -0.02270227,
+    -0.21336893, -0.31970227, -0.42603560, -0.53336893, -0.47303560,
+    -0.49703560, -0.43670227, -0.54403560, -0.65036893, -0.67336893,
+    -0.78070227, -0.72036893, -0.49436893, -0.18403560, 0.04196440,
+    0.18563107, 0.49496440, 1.13863107, 3.03229773, 5.09163107,
+    7.15196440, 8.21129773, 9.27163107, 10.58096440, 11.97463107,
+    13.28396440, 14.42763107, 15.48796440, 16.38063107, 17.44096440,
+    18.41696440, 19.39396440, 20.28663107, 21.26363107, 22.24063107,
+    23.13329773, 24.11029773, 25.08629773, 26.06329773, 27.12263107,
+    28.01629773, 28.99329773, 29.96929773, 30.94629773, 31.92229773,
+    32.89929773, 33.87529773, 34.85229773, 35.82829773, 36.72196440,
+    37.69896440, 38.75829773, 39.73529773, 40.79463107, 41.77163107,
+    42.74763107, 43.72463107, 44.70063107, 45.67763107, 46.57129773,
+    47.54729773, 48.52429773, 49.58363107, 50.47729773, 51.45329773,
+    52.43029773, 53.49063107, 54.38329773, 55.44363107, 56.33629773,
+    57.31329773, 58.28929773, 59.34963107, 60.32663107, 61.21929773,
+    62.19629773, 63.25563107, 64.23263107, 65.37529773, 66.26896440,
+    67.24496440, 68.13863107, 69.03229773, 70.00829773, 70.90196440
+  ),
+  force_nN = c(
+    2.588500000, 2.488500000, 2.388500000, 2.296833333, 2.196833333,
+    2.096833333, 1.996833333, 1.896833333, 1.796833333, 1.705166667,
+    1.605166667, 1.505166667, 1.413500000, 1.305166667, 1.196833333,
+    1.080166667, 0.971833333, 0.863500000, 0.755166667, 0.663500000,
+    0.563500000, 0.471833333, 0.363500000, 0.255166667, 0.155166667,
+    0.046833333, -0.044833333, -0.119833333, -0.186500000, -0.261500000,
+    -0.344833333, -0.411500000, -0.444833333, -0.353166667, -0.244833333,
+    -0.136500000, -0.128166667, -0.119833333, -0.086500000, -0.044833333,
+    -0.011500000, 0.005166667, 0.013500000, 0.005166667, 0.013500000,
+    0.013500000, 0.013500000, 0.005166667, 0.005166667, 0.005166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, 0.005166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.003166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.011500000,
+    -0.011500000, -0.003166667, -0.003166667, 0.005166667, 0.005166667,
+    0.005166667, 0.005166667, 0.005166667, 0.005166667, -0.003166667,
+    -0.003166667, -0.003166667, 0.005166667, -0.003166667, -0.003166667,
+    -0.003166667, 0.005166667, -0.003166667, 0.005166667, -0.003166667,
+    -0.003166667, -0.003166667, 0.005166667, 0.005166667, -0.003166667,
+    -0.003166667, 0.005166667, 0.005166667, 0.021833333, 0.013500000,
+    0.013500000, 0.005166667, -0.003166667, -0.003166667, -0.011500000
+  )
+)
+analyze_a_curve_noise(transformed_df, baseline_span = 50)
 }

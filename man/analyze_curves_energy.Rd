@@ -19,26 +19,42 @@ The updated \code{fdObj} with two new metadata columns:
 \code{adhesive_energy_aJ_<dir>} and \code{repulsive_energy_aJ_<dir>}.
 }
 \description{
-Applies \code{analyze_a_curve_area()} to each transformed curve in an \code{fdObj}
-and stores the resulting energies (areas under the force–distance curve) in
-the metadata as:
+Applies \code{analyze_a_curve_area()} to every transformed curve stored in
+an \code{fdObj} and writes the resulting out-of-band force-distance areas
+back into metadata as per-curve energy metrics. For each selected curve, the
+function reads the corresponding lower and upper noise-band thresholds from
+metadata, forwards those thresholds together with the transformed
+force-separation data to \code{analyze_a_curve_area()}, and stores the two
+returned areas separately rather than collapsing them into a single net
+value. Negative-force area below the lower threshold is recorded as adhesive
+energy, while positive-force area above the upper threshold is recorded as
+repulsive energy.
+}
+\details{
+Results are written to the metadata as:
 \itemize{
   \item \code{adhesive_energy_aJ_<dir>} — total area where \code{y < noiseBand_low}
   \item \code{repulsive_energy_aJ_<dir>} — total area where \code{y > noiseBand_high}
 }
 where \code{<dir>} is \code{"approach"} or \code{"retract"}.
-}
-\details{
+
 Energies are reported in \strong{attojoules (aJ)}, since
 \eqn{1~\mathrm{nN·nm} = 10^{-18}~\mathrm{J} = 1~\mathrm{aJ}}.
 
-The function preserves the point order (no sorting), tolerates backtracking in \code{x},
-and inherits clamping of \code{x<0} to 0 from \code{analyze_a_curve_area()}.
+The wrapper does not recompute thresholds or modify curve geometry itself.
+It relies on the transformed curves already stored in either
+\code{fdObj@approachCurves} or \code{fdObj@retractCurves} and on existing
+metadata columns \code{noiseBand_low_nN_<useCurve>} and
+\code{noiseBand_high_nN_<useCurve>}. The underlying single-curve routine
+preserves point order, and clamps
+negative separation distances to zero before integration, so those same
+rules apply here on a curve-by-curve basis.
 
 Behavior:
 \itemize{
-  \item If a curve is present/valid but yields no finite result, both energies are \code{NA}.
-  \item If no transformed curves exist for the selected direction, both metadata columns are created and filled with \code{NA}.
+  \item If transformed curves are missing entirely for the selected direction, the function creates the output metadata columns and fills them with \code{NA}.
+  \item If an individual curve is missing required transformed columns, is empty, or has missing noise-band thresholds, that curve is retained but both output energies are recorded as \code{NA}.
+  \item If an individual curve is valid and simply contains no area outside the noise band, the returned adhesive and/or repulsive energy is \code{0} rather than \code{NA}.
 }
 
 
@@ -50,6 +66,13 @@ This function assumes precomputed noise-band columns already exist in
 }
 Example for \code{useCurve = "retract"}:
 \code{noiseBand_low_nN_retract} and \code{noiseBand_high_nN_retract}.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj <- analyze_curves_noise(fd_obj, useCurve = "retract", threads = 1)
+fd_obj = analyze_curves_energy(fd_obj, useCurve = "retract")
 }
 \seealso{
 analyze_a_curve_area, analyze_curves_adhesive_force

@@ -16,7 +16,7 @@ denoise_a_curve(
 )
 }
 \arguments{
-\item{raw_curve}{A raw curve data frame containing deflection columns.}
+\item{raw_curve}{A raw curve data frame.}
 
 \item{p}{Filter polynomial order.}
 
@@ -35,8 +35,8 @@ If provided, only the first \code{n_approach} rows of approach columns are denoi
 If provided, only the first \code{n_retract} rows of retract columns are denoised.}
 }
 \value{
-A data frame with original columns preserved and additional
-\code{*_original} backup column(s) for the smoothed deflection column(s).
+A data frame with original columns showing for the smoothed deflection values 
+and additional \code{*_original} as backup column(s) for the raw deflection values (before denoising).
 }
 \description{
 Applies Savitzky-Golay smoothing to deflection columns in a raw curve data frame.
@@ -45,4 +45,33 @@ The original values are first copied to new columns with suffix
 If segment length information is provided via \code{n_approach} and \code{n_retract},
 only the valid (non-NA) portion of each segment is denoised, and the result is
 padded back to the original length with NA.
+}
+\examples{
+x <- c(
+  0.000, 0.977, 1.953, 2.930, 3.906, 4.883, 5.859, 6.836, 7.812, 8.789,
+  9.766, 10.742, 11.719, 12.695, 13.672, 14.648, 15.625, 16.602, 17.578, 18.555,
+  19.531, 20.508, 21.484, 22.461, 23.438, 24.414, 25.391, 26.367, 27.344, 28.320,
+  29.297, 30.273, 31.250, 32.227, 33.203, 34.180, 35.156, 36.133, 37.109, 38.086,
+  39.062, 40.039, 41.016, 41.992, 42.969, 43.945, 44.922, 45.898, 46.875, 47.852,
+  48.828, 49.805, 50.781, 51.758, 52.734, 53.711, 54.688, 55.664, 56.641, 57.617,
+  58.594, 59.570, 60.547, 61.523, 62.500, 63.477, 64.453, 65.430, 66.406, 67.383,
+  68.359, 69.336, 70.312, 71.289, 72.266, 73.242, 74.219, 75.195, 76.172, 77.148,
+  78.125, 79.102, 80.078, 81.055, 82.031, 83.008, 83.984, 84.961, 85.938, 86.914,
+  87.891, 88.867, 89.844, 90.820, 91.797, 92.773, 93.750, 94.727, 95.703, 96.680
+)
+
+y <- c(
+  0.255, 0.243, 0.231, 0.220, 0.208, 0.196, 0.184, 0.172, 0.160, 0.149,
+  0.137, 0.125, 0.114, 0.101, 0.088, 0.074, 0.061, 0.048, 0.035, 0.024,
+  0.012, 0.001, -0.012, -0.025, -0.037, -0.050, -0.061, -0.070, -0.078, -0.087,
+  -0.097, -0.105, -0.109, -0.098, -0.085, -0.072, -0.071, -0.070, -0.066, -0.061,
+  -0.057, -0.055, -0.054, -0.055, -0.054, -0.054, -0.054, -0.055, -0.055, -0.055,
+  -0.056, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056, -0.056, -0.056, -0.056,
+  -0.056, -0.056, -0.056, -0.056, -0.057, -0.057, -0.056, -0.056, -0.055, -0.055,
+  -0.055, -0.055, -0.055, -0.055, -0.056, -0.056, -0.056, -0.055, -0.056, -0.056,
+  -0.056, -0.055, -0.056, -0.055, -0.056, -0.056, -0.056, -0.055, -0.055, -0.056,
+  -0.056, -0.055, -0.055, -0.053, -0.054, -0.054, -0.055, -0.056, -0.056, -0.057
+)
+denoised_df <- denoise_a_curve(data.frame(Calc_Ramp_Ex_nm = x, Defl_V_Ex = y), p = 1, n = 5, m = 0, ts = 1, useCurve = "approach", n_approach = length(x))
+head(denoised_df)
 }

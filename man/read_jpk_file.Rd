@@ -42,4 +42,7 @@ The function:
   \item Returns data in curvana's expected format with segment-specific parameters
 }
 }
+\examples{
+curvana:::read_jpk_file(system.file("extdata_jpk", "jpk1.txt", package = "curvana"))
+}
 \keyword{internal}

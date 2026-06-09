@@ -43,18 +43,44 @@ When "automatic", per-curve baseline spans are read from
 must satisfy the excursion criterion to call an interaction event.}
 }
 \value{
-The updated \code{fdObj} with two new metadata columns:
+The updated \code{fdObj} with two metadata columns added or updated:
 \code{<type>_distance_nm_<dir>} and \code{<type>_threshold_nN_<dir>},
-where <type> is "repulsive" or "rupture", depending on \code{y_direction},
-and <dir> is "approach" or "retract".
+where \code{<type>} is \code{"repulsive"} or \code{"rupture"}, depending on
+\code{y_direction}, and \code{<dir>} is \code{"approach"} or
+\code{"retract"}. Curves that cannot be analyzed are retained with
+\code{NA} values in those output columns.
 }
 \description{
-Applies \code{analyze_a_curve_interaction_distance()} to each transformed curve
-in an \code{fdObj} and stores the resulting interaction distances and thresholds
-in the metadata. These measure the first significant excursion in force relative
-to a baseline, either repulsive (positive force deviation) or rupture (negative).
+Applies \code{analyze_a_curve_interaction_distance()} across all transformed
+curves stored in an \code{fdObj} and writes the detected interaction
+distances and thresholds back into the metadata. Depending on
+\code{y_direction}, the function measures either rupture-like interaction
+distances from negative force excursions or repulsive interaction distances
+from positive force excursions. The selected transformed-curve branch is
+controlled by \code{useCurve}, so the analysis operates on either
+\code{fdObj@approachCurves} or \code{fdObj@retractCurves}.
 }
 \details{
+This wrapper does not estimate thresholds itself. Instead, it expects the
+relevant per-curve noise-band metadata column to already exist and then uses
+those stored values as direct inputs to
+\code{analyze_a_curve_interaction_distance()}. For negative-direction
+searches it reads \code{noiseBand_low_nN_<useCurve>}; for positive-direction
+searches it reads \code{noiseBand_high_nN_<useCurve>}. Baseline spans can be
+supplied as one fixed value for all curves or read per curve from
+\code{baseline_span_<useCurve>} when \code{baseline_span = "automatic"}.
+
+Curves are processed independently. For each curve, the function verifies
+that transformed force-separation data are present, resolves the appropriate
+baseline span and threshold value, and then forwards the curve together with
+\code{x_direction}, \code{y_direction}, and \code{min_consecutive} to the
+single-curve detector. Curves with missing transformed data, missing
+threshold metadata, or invalid per-curve baseline spans are not dropped but
+recorded as \code{NA} results. After processing, the per-curve outputs are
+aligned to metadata row order and stored in direction-specific
+columns.
+
+
 This function assumes precomputed noise-band columns already exist in
 \code{fdObj@metadata} and uses them directly:
 \itemize{
@@ -63,6 +89,14 @@ This function assumes precomputed noise-band columns already exist in
 }
 Example for \code{useCurve = "retract"}:
 \code{noiseBand_low_nN_retract} or \code{noiseBand_high_nN_retract}.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj <- analyze_curves_noise(fd_obj, useCurve = "retract", threads = 1)
+fd_obj <- analyze_curves_interaction_distance(fd_obj, useCurve = "retract", baseline_span = 'automatic', x_direction = "left")
+
 }
 \seealso{
 analyze_a_curve_interaction_distance

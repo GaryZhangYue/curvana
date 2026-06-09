@@ -98,6 +98,62 @@ Wrapper around:
 }
 }
 \details{
-This function executes the "Analytical metrics calculation" steps in one call.
-Users can run for approach curves, retract curves, or both.
+This function runs the analytical-metrics stage of the workflow as one
+coordinated wrapper. For each requested curve direction, it first estimates
+per-curve noise bands, then optionally computes adhesive-force metrics,
+energy metrics, rupture distances, and repulsive distances using those
+stored thresholds and any required baseline-span settings. The goal is to
+let users execute the standard downstream analysis sequence with a single
+call instead of invoking each metric-specific helper manually.
+
+Processing is performed direction by direction. If \code{useCurve = "both"},
+the function runs the full selected pipeline for approach curves and then
+repeats it for retract curves, updating \code{fdObj@metadata} after each
+stage. Each wrapped function is still responsible for its own validation and
+for creating or updating its corresponding metadata columns, so this wrapper
+mainly coordinates argument routing, optional execution, and call order.
+
+This means the returned object may contain a combination of noise-band,
+adhesive-force, adhesive and repulsive energy, rupture-distance, and repulsive-distance columns,
+depending on which optional analyses were enabled. Any curves that cannot be
+analyzed by a downstream step are retained in the object, with that step's
+output columns typically populated with \code{NA} for the affected rows.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj = analyze_curves_all_analytical_metrics(
+  fd_obj, # the object
+  useCurve = "retract", # run analysis for both approach and retract 
+  threads = 1, 
+
+  # noise band parameters
+  noise_baseline_span = "automatic", # use quantile method to define the noise band
+  noise_threshold_method = "quantile", # use quantile method to define the noise band
+  noise_quantile_low = 0.00, # define the lower end of noise band as minimum y value of the baseline section
+  noise_quantile_high = 1, # define the upper end of noise band as maximum y value of the baseline section
+  noise_multiplier = 1, # multiply the noise band by 1 to directly use the min-max range of the force in baseline region without further scaling.
+
+  # adhesive force
+  analyze_adhesive_force = TRUE, # whether to analyze adhesive force
+
+  # adhesive energy and repulsive energy
+  analyze_energy = TRUE, # whether to analyze interaction energy (repulsive and adhesive)
+
+  # rupture (adhesive) distance
+  analyze_rupture_distance = TRUE, # whether to analyze adhesive/rupture distance
+  analyze_rupture_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for rupture distance analysis
+  analyze_rupture_distance_x_direction = "left", # scan from right to left to find the first data point at which a curve enters the adhesive region from the noise band region
+  analyze_rupture_distance_min_consecutive = 3, # to reduce false positives from random fluctuations, require at least 3 consecutive points below the lower noise-band threshold for classifying the curve as entering the adhesive region.
+
+  # repulsive distance
+  analyze_repulsive_distance = TRUE, # whether to analyze repulsive distance
+  analyze_repulsive_distance_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for repulsive distance analysis
+  analyze_repulsive_distance_x_direction = "right", # scan from left to right to find the last data point before a curve first enters the noise band region from the repulsive region
+  analyze_repulsive_distance_min_consecutive = 1 # because the curve is expected to start from the repulsive region, we set min_consecutive to 1, meaning that a single point above the positive noise threshold is sufficient to mark the start of the repulsive region.
+)
+}
+\seealso{
+analyze_curves_noise, analyze_curves_adhesive_force, analyze_curves_energy, analyze_curves_interaction_distance
 }

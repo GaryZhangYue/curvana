@@ -16,11 +16,11 @@ transform_curves(
   ts = 1,
   end = 200,
   intv = 4,
-  R_squared_min = 0.99,
+  R_squared_min = 0.9,
   minimum_length = 4,
   least_length = 150,
-  slp_threshold = 0.001,
-  std_threshold = 0.005,
+  slp_threshold = 0.01,
+  std_threshold = 0.05,
   soft = FALSE,
   probe_sensitivity_external = NULL
 )
@@ -61,7 +61,7 @@ building the linear sensitivity segment in \code{calc_sensitivity()} via
 
 \item{R_squared_min}{Numeric. Minimum \eqn{R^2} threshold for accepting a
 segment as sufficiently linear during sensitivity calculation in
-\code{calc_sensitivity()}. Default is 0.99.}
+\code{calc_sensitivity()}. Default is 0.9.}
 
 \item{minimum_length}{Integer. Minimum number of accumulated points required
 for a valid sensitivity result. If the segment is shorter, sensitivity is
@@ -94,8 +94,43 @@ The values are stored in \code{probe_true_sensitivity_V_nm_<useCurve>}.}
 An updated \code{fdObj} with transformed curves stored in the corresponding slot.
 }
 \description{
-Applies `transform_a_curve()` to all raw curves in an fdObj object.
-Automatically computes sensitivity and baseline values if they are missing
-by calling `analyze_sensitivity()` and `analyze_baseline()`, passing through
-any user-supplied arguments that match those functions' parameters.
+Applies \code{transform_a_curve()} to every raw curve stored in an
+\code{fdObj} and writes the transformed force-separation curves back into the
+object. The function operates on either the approach or retract branch,
+selects the corresponding raw piezo and deflection columns, optionally
+denoises those raw curves first, and then resolves all quantities required
+for transformation on a per-curve basis.
+}
+\details{
+Before transforming curves, the function ensures that spring constants,
+sensitivity values, baseline values, and sensitivity-calibration segments are
+available. A single numeric \code{spring_constant} is copied to all curves,
+whereas a character value is interpreted as the name of a metadata column
+containing per-curve spring constants. If the required
+\code{sensitivity_V_nm_<useCurve>} or \code{baseline_V_<useCurve>} metadata
+columns are missing, the function automatically calls
+\code{analyze_sensitivity()} and \code{analyze_baseline()} using the supplied
+transformation arguments.
+
+When \code{soft = TRUE}, the function also resolves probe sensitivity values
+from \code{probe_sensitivity_external}, stores them in
+\code{probe_true_sensitivity_V_nm_<useCurve>}, and passes that information to
+both baseline analysis and per-curve transformation. If metadata includes the
+imported number of valid approach or retract points, each raw curve is first
+truncated to that valid length before transformation so that trailing padding
+values are ignored.
+
+Curves are transformed independently. For each curve with complete required
+inputs, \code{transform_a_curve()} returns separation distance and force. If a
+curve is missing the required raw columns, has missing baseline,
+sensitivity, spring constant, or calibration segment, it is not dropped but
+stored as an empty transformed data frame. Successful results are written to
+\code{fdObj@approachCurves} or \code{fdObj@retractCurves}, depending on
+\code{useCurve}, and a summary message reports how many curves failed to
+transform.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj,spring_constant = 0.1, useCurve = "approach", threads = 1,denoise_first = TRUE, least_length= 300)
 }

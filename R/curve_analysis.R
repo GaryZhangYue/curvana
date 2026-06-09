@@ -1,3 +1,6 @@
+#' @importFrom dplyr %>%
+NULL
+
 #' Calculate Sensitivity from a Segment of AFM Data
 #'
 #' This function identifies a linear segment from AFM deflection vs. piezo extension data and calculates

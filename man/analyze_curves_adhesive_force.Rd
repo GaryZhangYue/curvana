@@ -33,3 +33,10 @@ Behavior:
   \item If a curve cannot be analyzed at all (missing/invalid transformed data), both are NA.
 }
 }
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj <- analyze_curves_adhesive_force(fd_obj, useCurve = "retract", threads = 1)
+print(fd_obj@metadata[, c("adhesive_force_nN_retract", "adhesive_sep_nm_retract")])
+}

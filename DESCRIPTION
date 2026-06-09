@@ -33,6 +33,7 @@ Imports:
     zip
 RoxygenNote: 7.3.3
 Suggests: 
+    DT,
     knitr,
     rmarkdown
 VignetteBuilder: knitr

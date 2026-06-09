@@ -25,8 +25,8 @@ Computes the absolute area of a trapezoid formed by two points
 both points are on the same side of the x-axis (either both positive or both negative).
 }
 \examples{
-area_trapezoid(0, 2, 1, 4)   # 0.5 * (1 - 0) * (2 + 4) = 3
-area_trapezoid(0, -2, 1, -4) # same absolute area = 3
+curvana:::area_trapezoid(0, 2, 1, 4)   # 0.5 * (1 - 0) * (2 + 4) = 3
+curvana:::area_trapezoid(0, -2, 1, -4) # same absolute area = 3
 
 }
 \seealso{

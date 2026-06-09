@@ -11,7 +11,7 @@ output:
     number_sections: false
     highlight: tango
 vignette: >
-  %\VignetteIndexEntry{curvana tutorial}
+  %\VignetteIndexEntry{curvana vignette: minimal workflow}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -32,8 +32,8 @@ This vignette presents a minimal workflow for analyzing data, from loading raw c
 
 ```{r Initiate, results='hide',warning='False'}
 #required_packages = c('curvana', 'ggplot2', 'DT', 'dplyr', 'cowplot')
-required_packages = c('ggplot2', 'DT', 'dplyr', 'cowplot')
-optional_packages = c('ggpubr')
+required_packages = c('curvana', 'ggplot2', 'dplyr', 'cowplot')
+optional_packages = c('DT', 'ggpubr')
 
 
 missing_required <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
@@ -54,7 +54,6 @@ if (length(available_optional) > 0) {
   message("Optional package 'ggpubr' is not installed; statistical annotation examples will be skipped.")
 }
 
-devtools::load_all() 
 source(system.file("tutorial_helpers.R", package = "curvana"))
 
 ```

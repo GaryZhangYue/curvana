@@ -15,3 +15,8 @@ Invisibly returns the value from \code{shiny::runApp()}.
 \description{
 Starts the interactive Curvana Shiny application bundled with the package.
 }
+\examples{
+\dontrun{
+run_curvana_app()
+}
+}

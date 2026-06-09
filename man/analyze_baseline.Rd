@@ -8,8 +8,8 @@ analyze_baseline(
   fdObj,
   least_length = 150,
   useCurve = NULL,
-  slp_threshold = 0.001,
-  std_threshold = 0.005,
+  slp_threshold = 0.01,
+  std_threshold = 0.05,
   threads = 1,
   soft = FALSE,
   external_sensitivity_column = NULL
@@ -26,9 +26,9 @@ per-curve span values are read from
 
 \item{useCurve}{Character. Either "approach" or "retract" to specify which raw curve to use.}
 
-\item{slp_threshold}{Numeric. Maximum absolute slope allowed for baseline detection (default = 0.001).}
+\item{slp_threshold}{Numeric. Maximum absolute slope allowed for baseline detection (default = 0.01).}
 
-\item{std_threshold}{Numeric. Maximum standard error of the slope (default = 0.005).}
+\item{std_threshold}{Numeric. Maximum standard error of the slope (default = 0.05).}
 
 \item{threads}{Integer. Number of parallel threads to use (default = 1).}
 
@@ -48,7 +48,35 @@ An updated \code{fdObj} with baseline values in metadata and baseline
   \code{least_length = "automatic"}, existing span columns are preserved.
 }
 \description{
-Identifies baseline segments in AFM raw force-distance curves using pre-calculated sensitivity values,
-and stores baseline values and segments in the fdObj. As the undulating baseline is defined by forces, 
-the sensitivity is used to convert the deflection signal into force units for accurate baseline filtering.
+Applies baseline detection to each raw curve stored in an \code{fdObj} and
+writes the resulting baseline values and accepted baseline segments back into
+the object. For each curve, the function, finds the associated sensitivity value in metadata, and then calls
+\code{find_baseline()} on the trailing part of that curve.
+}
+\details{
+Baseline detection is therefore based on the same criteria implemented in
+\code{find_baseline()}: the last \code{least_length} points are tested after
+scaling the deflection signal by sensitivity, and the window is accepted only
+if the fitted slope magnitude is below \code{slp_threshold} and the slope
+standard error is below \code{std_threshold}. When \code{least_length} is a
+single number, that same trailing-window size is used for all curves; when it
+is \code{"automatic"}, per-curve window sizes are taken from the
+corresponding \code{baseline_span_<dir>} metadata column.
+
+Curves with missing required columns, missing sensitivity values, invalid
+per-curve baseline spans, or failed baseline detection are not dropped; they
+are recorded with \code{NA} baseline values and empty baseline-segment data
+frames. Successful results are stored in
+\code{fdObj@metadata$baseline_V_approach} or
+\code{fdObj@metadata$baseline_V_retract}, and in
+\code{fdObj@baseline_segment[[useCurve]]}. If \code{least_length} is fixed,
+the matching \code{baseline_span_<dir>} metadata column is updated to that
+value for all curves.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- analyze_sensitivity(fd_obj, end = 80, intv = 10, useCurve = "retract")
+fd_obj <- analyze_baseline(fd_obj, least_length = 100, useCurve = "retract", slp_threshold = 0.02, std_threshold = 0.02)
+head(fd_obj@metadata$baseline_V_retract)
 }

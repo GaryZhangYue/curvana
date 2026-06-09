@@ -31,7 +31,7 @@ plot_metric_violin(
 )
 }
 \arguments{
-\item{df}{A data.frame containing grouping and metric columns.}
+\item{df}{A data.frame containing grouping and metric columns. Typically the metadata slot of fdobj.}
 
 \item{metric_name}{Character scalar. One column name in \code{df} to plot
 on the y-axis.}
@@ -96,9 +96,27 @@ within each facet.}
 A ggplot object.
 }
 \description{
-Visualizes one metric column from a data frame using violin plots, optional
-jittered points, and an optional linear trend line. Faceting supports up to
-two columns. Supports one global test (ANOVA or Kruskal-Wallis) shown in
-subtitle, and pairwise tests (t-test or Wilcoxon) shown as significance
-asterisks.
+Takes a regular data frame as input together with the name of one numeric
+metric column and one grouping column, then constructs a violin plot for that
+metric across groups. Optional inputs can add color grouping, faceting,
+jittered points, boxplots, a linear trend line, and statistical summaries
+such as a global ANOVA/Kruskal-Wallis test or pairwise t-test/Wilcoxon
+comparisons. The output is a \code{ggplot} object that summarizes the
+distribution of one metric across user-defined groups.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+md <- fd_obj@metadata
+surface <- sub("_.*", "", md$filename)
+surface[surface == "F"] <- "Group_A"
+surface[surface == "P"] <- "Group_B"
+surface[surface == "silicon"] <- "Group_C"
+surface[surface == "Z"] <- "Group_D"
+md$surface <- surface
+fd_obj@metadata <- md
+plot_metric_violin(df = fd_obj@metadata, metric_name = "adhesive_force_nN_retract",group_by = "surface",global_test = 'kruskal', pairwise_test = 'wilcox', p_adjust_method = 'BH')
+
 }

@@ -143,7 +143,7 @@ plot_deflection_curves <- function(fdobj,
 
   # Theme
   p <- p + theme_minimal(base_size = 14) +
-    theme(
+    ggplot2::theme(
       panel.grid = element_blank(),
       strip.background = element_rect(fill = "#f0f0f0"),
       strip.text = element_text(face = "bold")
@@ -338,7 +338,7 @@ plot_deflection_curves_by_index <- function(fdobj,
 
   # Theme
   p <- p + theme_minimal(base_size = 14) +
-    theme(
+    ggplot2::theme(
       panel.grid.minor = element_blank(),
       strip.background = element_rect(fill = "#f0f0f0"),
       strip.text = element_text(face = "bold")
@@ -519,7 +519,7 @@ plot_fd_curves <- function(fdobj,
 
   # Final theming
   p <- p + theme_minimal(base_size = 14) +
-    theme(
+    ggplot2::theme(
       panel.grid = element_blank(),
       strip.background = element_rect(fill = "#f0f0f0"),
       strip.text = element_text(face = "bold")
@@ -568,8 +568,8 @@ plot_fd_curves <- function(fdobj,
 #' between the two points.
 #'
 #' @examples
-#' area_trapezoid(0, 2, 1, 4)   # 0.5 * (1 - 0) * (2 + 4) = 3
-#' area_trapezoid(0, -2, 1, -4) # same absolute area = 3
+#' curvana:::area_trapezoid(0, 2, 1, 4)   # 0.5 * (1 - 0) * (2 + 4) = 3
+#' curvana:::area_trapezoid(0, -2, 1, -4) # same absolute area = 3
 #'
 #' @seealso [area_triangle()], [crossing_x0()], [calculate_area()]
 area_trapezoid <- function(x1, y1, x2, y2) {
@@ -590,7 +590,7 @@ area_trapezoid <- function(x1, y1, x2, y2) {
 #'
 #' @examples
 #' # Triangle between (0, 4) and (1, 0)
-#' area_triangle(0, 4, 1)  # 0.5 * |1 - 0| * |4| = 2
+#' curvana:::area_triangle(0, 4, 1)  # 0.5 * |1 - 0| * |4| = 2
 #'
 #' @seealso [area_trapezoid()], [crossing_x0()], [calculate_area()]
 area_triangle <- function(x1, y1, x0) {
@@ -613,8 +613,8 @@ area_triangle <- function(x1, y1, x0) {
 #' Returns \code{NA} if no valid sign change exists between \code{y1} and \code{y2}.
 #'
 #' @examples
-#' crossing_x0(0, 4, 2, -2)  # 1.333 — line crosses y=0 between x=0 and x=2
-#' crossing_x0(0, 4, 2, 6)   # NA — no sign change
+#' curvana:::crossing_x0(0, 4, 2, -2)  # 1.333 — line crosses y=0 between x=0 and x=2
+#' curvana:::crossing_x0(0, 4, 2, 6)   # NA — no sign change
 #'
 #' @seealso [area_trapezoid()], [area_triangle()], [calculate_area()]
 crossing_x0 <- function(x1, y1, x2, y2) {
@@ -893,7 +893,7 @@ plot_a_curve_metrics <- function(
     ) +
     ggplot2::theme_classic(base_size = base_size) +
     ggplot2::coord_cartesian(xlim = xlim, ylim = ylim, clip = "off") +
-    theme(
+    ggplot2::theme(
       plot.margin = ggplot2::margin(5.5, 90, 5.5, 5.5),
       legend.position = "top"
     )
@@ -1068,7 +1068,7 @@ plot_a_curve_metrics <- function(
         title = sprintf("Raw curve: \n%s \n(%s)", curve_name, useCurve),
       ) +
       ggplot2::theme_classic(base_size = base_size) +
-      theme(legend.position = "top")
+      ggplot2::theme(legend.position = "top")
 
     raw_subtitle <- paste(
       sprintf("Sensitivity (V/nm) = %s", if (is.finite(sensitivity_val)) sprintf("%.3g", sensitivity_val) else "NA"),
@@ -2065,6 +2065,8 @@ plot_complex_heatmap <- function(
 #'   \code{NULL} a blue–white–red ramp scaled to the 1st/50th/99th percentile
 #'   of finite values is used.
 #' @param na_col Colour for padded \code{NA} cells.  Default \code{"grey90"}.
+#' @param index_tick_interval Numeric; spacing between row-index labels added on
+#'   the right side of the heatmap. Use \code{NULL} to disable these labels.
 #' @param draw Logical; if \code{TRUE} (default), calls
 #'   \code{ComplexHeatmap::draw()} before returning.
 #' @param ... Additional arguments forwarded to \code{ComplexHeatmap::Heatmap()}.
@@ -2262,7 +2264,7 @@ plot_raw_deflection_heatmap <- function(
 #'   \item Returns data in curvana's expected format with segment-specific parameters
 #' }
 #' @examples
-#' read_jpk_file(system.file("extdata_jpk", "jpk1.txt", package = "curvana"))
+#' curvana:::read_jpk_file(system.file("extdata_jpk", "jpk1.txt", package = "curvana"))
 #' @keywords internal
 read_jpk_file <- function(file_path, height_col = "height", deflection_col = "vDeflection") {
   

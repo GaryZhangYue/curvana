@@ -28,7 +28,7 @@ display as column annotations alongside the Segment bar.  Defaults to
 \code{NULL}.}
 
 \item{annotation_colors}{Named list of colour vectors for annotations,
-e.g. \code{list(surface = c(PEG = "green", silicon = "orange"))}.}
+e.g. \code{list(surface = c(groupA = "green", groupB = "orange"))}.}
 
 \item{approach_color}{Colour for the Approach segment annotation bar.
 Default \code{"steelblue"}.}
@@ -49,6 +49,9 @@ of finite values is used.}
 
 \item{na_col}{Colour for padded \code{NA} cells.  Default \code{"grey90"}.}
 
+\item{index_tick_interval}{Numeric; spacing between row-index labels added on
+the right side of the heatmap. Use \code{NULL} to disable these labels.}
+
 \item{draw}{Logical; if \code{TRUE} (default), calls
 \code{ComplexHeatmap::draw()} before returning.}
 
@@ -58,11 +61,25 @@ of finite values is used.}
 A \code{ComplexHeatmap} object (drawn when \code{draw = TRUE}).
 }
 \description{
-Rows are measurement indices (position steps along the curve); columns are
-individual (sample, segment) pairs — one column per approach curve and one
-per retract curve.  A column annotation bar shows the segment
-(Approach / Retract) and up to two categorical metadata fields for each
-sample.  Curves shorter than the longest one are bottom-padded with
-\code{NA} so unequal lengths are visible.  Only \code{Defl_V_Ex} and
-\code{Defl_V_Rt} are used (never \code{_original} backups).
+Takes an \code{fdObj} containing raw AFM curves as input and converts all raw
+approach and retract deflection traces into one heatmap-ready matrix. In the
+resulting matrix, rows correspond to measurement index, columns correspond to
+individual sample-segment pairs, and raw deflection values are padded and
+normalized so curves of unequal length can still be displayed together.
+Optional metadata annotations can be shown above the columns. The output is a
+\code{ComplexHeatmap} object, or a drawn heatmap when \code{draw = TRUE}.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+md <- fd_obj@metadata
+surface <- sub("_.*", "", md$filename)
+surface[surface == "F"] <- "Group_A"
+surface[surface == "P"] <- "Group_B"
+surface[surface == "silicon"] <- "Group_C"
+surface[surface == "Z"] <- "Group_D"
+md$surface <- surface
+fd_obj@metadata <- md
+plot_raw_deflection_heatmap(fd_obj,annotate_columns = "surface")
+
 }

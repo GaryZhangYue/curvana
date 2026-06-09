@@ -26,7 +26,7 @@ plot_deflection_curves(
 
 \item{point_size}{Size of points (default = 0.5)}
 
-\item{alpha}{Transparency of points (default = 0.6)}
+\item{alpha}{Transparency of points (default = 0.5)}
 
 \item{line_alpha}{Transparency of connecting paths (default = 0.5)}
 
@@ -36,5 +36,15 @@ plot_deflection_curves(
 A ggplot2 object of the scatter plots showing raw deflection signal.
 }
 \description{
-Plot raw deflection vs piezo distance from rawCurves slot of fdObj
+Takes an \code{fdObj} containing raw AFM curves in \code{fdobj@rawCurves},
+extracts the requested approach branch, retract branch, or both, and builds
+a plotting data frame from raw piezo-distance values and raw deflection
+signals. Optional metadata columns can be used to color curves or split the
+display into facets. The output is a \code{ggplot2} object showing raw
+deflection against distance for all included curves.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+plot_deflection_curves(fd_obj, curve = "retract")
 }

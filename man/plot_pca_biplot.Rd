@@ -20,7 +20,7 @@ plot_pca_biplot(
 )
 }
 \arguments{
-\item{df}{A data.frame containing features and metadata columns.}
+\item{df}{A data.frame containing features and metadata columns. Typically the metadata slot of fdobj.}
 
 \item{include_columns}{Character vector of column names to include as PCA
 features.}
@@ -51,8 +51,27 @@ A ggplot object. The fitted PCA model is attached as
   \\code{attr(plot, "pca_scores")} and \\code{attr(plot, "pca_loadings")}.
 }
 \description{
-Runs principal component analysis (PCA) on selected feature columns after
-numeric coercion and z-score normalization (
-\\code{center = TRUE, scale. = TRUE}), then draws a biplot with samples as
-points and feature-loading arrows showing trend directions.
+Takes a data frame as input together with a set of feature columns and one
+grouping column used for point color, coerces the selected features to
+numeric, filters incomplete rows, and runs principal component analysis on
+the resulting matrix. It then returns a \code{ggplot} biplot in which rows of
+the input data appear as points in PC space and selected feature loadings are
+drawn as arrows. In addition to the plotted object, the fitted PCA model and
+the score/loading tables are attached as attributes to the returned plot.
+}
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj <- analyze_curves_all_analytical_metrics(fd_obj, useCurve = "retract") 
+md <- fd_obj@metadata
+surface <- sub("_.*", "", md$filename)
+surface[surface == "F"] <- "Group_A"
+surface[surface == "P"] <- "Group_B"
+surface[surface == "silicon"] <- "Group_C"
+surface[surface == "Z"] <- "Group_D"
+md$surface <- surface
+fd_obj@metadata <- md
+plot_pca_biplot(fd_obj@metadata,include_columns = c("adhesive_force_nN_retract", "repulsive_energy_aJ_retract","adhesive_energy_aJ_retract","rupture_threshold_nN_retract"), color_by = "surface")
+
 }

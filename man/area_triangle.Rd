@@ -23,7 +23,7 @@ This function assumes one vertex lies on the x-axis (\code{y = 0}).
 }
 \examples{
 # Triangle between (0, 4) and (1, 0)
-area_triangle(0, 4, 1)  # 0.5 * |1 - 0| * |4| = 2
+curvana:::area_triangle(0, 4, 1)  # 0.5 * |1 - 0| * |4| = 2
 
 }
 \seealso{

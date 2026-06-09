@@ -57,6 +57,12 @@ Applies \code{analyze_a_curve_noise()} to each transformed curve in an
 }
 where \code{<dir>} is \code{"approach"} or \code{"retract"}.
 }
+\examples{
+folder <- system.file("extdata", package = "curvana")
+fd_obj <- createFdObjFromFolder(folder)
+fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
+fd_obj <- analyze_curves_noise(fd_obj, useCurve = "retract", threads = 1)
+}
 \seealso{
 analyze_a_curve_noise
 }

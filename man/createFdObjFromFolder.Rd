@@ -27,25 +27,25 @@ createFdObjFromFolder(
 
 \item{pattern}{Optional string pattern to filter files (e.g., "experiment"); default is "" (no filtering)}
 
+\item{Displacement_Approach}{Column name for approach distance (default: "Calc_Ramp_Ex_nm")}
+
+\item{Displacement_Retract}{Column name for retract distance (default: "Calc_Ramp_Rt_nm")}
+
+\item{Deflection_Approach}{Column name for approach deflection (default: "Defl_V_Ex")}
+
+\item{Deflection_Retract}{Column name for retract deflection (default: "Defl_V_Rt")}
+
 \item{metadata}{Optional data.frame. If provided, file names (excluding the suffix) matched to rownames(metadata) will be read in. Returns error if any files not found.}
 
 \item{threads}{Number of parallel threads to use for file reading. Default = 1 (sequential).}
 
-\item{Calc_Ramp_Ex_nm}{Column name for approach distance (default: "Calc_Ramp_Ex_nm")}
+\item{reverse_Displacement_Approach}{Logical; reverse approach distance column if TRUE. Default = FALSE.}
 
-\item{Calc_Ramp_Rt_nm}{Column name for retract distance (default: "Calc_Ramp_Rt_nm")}
+\item{reverse_Displacement_Retract}{Logical; reverse retract distance column if TRUE. Default = TRUE.}
 
-\item{Defl_V_Ex}{Column name for approach deflection (default: "Defl_V_Ex")}
+\item{reverse_Deflection_Approach}{Logical; reverse approach deflection column if TRUE. Default = TRUE.}
 
-\item{Defl_V_Rt}{Column name for retract deflection (default: "Defl_V_Rt")}
-
-\item{reverse_Calc_Ramp_Ex_nm}{Logical; reverse approach distance column if TRUE. Default = FALSE.}
-
-\item{reverse_Calc_Ramp_Rt_nm}{Logical; reverse retract distance column if TRUE. Default = TRUE.}
-
-\item{reverse_Defl_V_Ex}{Logical; reverse approach deflection column if TRUE. Default = TRUE.}
-
-\item{reverse_Defl_V_Rt}{Logical; reverse retract deflection column if TRUE. Default = FALSE.}
+\item{reverse_Deflection_Retract}{Logical; reverse retract deflection column if TRUE. Default = FALSE.}
 }
 \value{
 An object of class \code{fdObj}

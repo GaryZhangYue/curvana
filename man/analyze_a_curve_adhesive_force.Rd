@@ -16,23 +16,83 @@ analyze_a_curve_adhesive_force(curve_df)
 \value{
 A named numeric vector of length 2:
 \describe{
-  \item{adhesive_force_nN}{The most negative (minimum) force value in nN.}
-  \item{separation_distance_nm}{The separation distance (nm) at which the adhesive force occurs.}
+  \item{adhesive_force_nN}{The negated most negative force
+  value in the curve. Returns \\code{0} when the curve is valid but contains
+  no negative force values, and \\code{NA_real_} when the curve cannot be
+  analyzed.}
+  \item{separation_distance_nm}{The separation distance (nm) at which the
+  adhesive-force minimum occurs. Returns \\code{NA_real_} when no adhesion is
+  detected or when the input is invalid.}
 }
-If no negative force exists (i.e., all forces are \eqn{\ge} 0) or inputs are invalid,
-returns \code{c(adhesive_force_nN = NA_real_, separation_distance_nm = NA_real_)}.
+This makes the output distinguish between a valid "no adhesion" case
+(\\code{0}/\\code{NA}) and a failed analysis case (\\code{NA}/\\code{NA}).
 }
 \description{
-Computes the adhesive force as the most negative force value in a transformed curve
-and returns that value along with the separation distance at which it occurs. Note that
-the value will be negated. For example, if the most negative force is -2 nN,
-the function will return 2 nN as the adhesive force.
+Extracts the adhesion minimum from one transformed force-separation curve by
+locating the most negative value in \\code{force_nN} and reporting its
+magnitude together with the corresponding
+\\code{separation_distance_nm}. The function first validates that the input is
+a data frame containing the required transformed-curve columns, coerces both
+columns to numeric, and discards rows with non-finite values before
+searching for the minimum force.
+}
+\details{
+For valid transformed curves, adhesion is defined here as a negative force
+excursion. If the minimum force is below zero, its sign is flipped so the
+reported \\code{adhesive_force_nN} is a positive adhesion magnitude. If the
+curve contains no negative force values, the function records this as "no
+detectable adhesion" and returns \\code{adhesive_force_nN = 0} with
+\\code{separation_distance_nm = NA_real_}. If the input cannot be analyzed at
+all because required columns are missing or no finite x-y pairs remain after
+cleaning, both returned values are \\code{NA}.
 }
 \examples{
-df <- data.frame(
-  separation_distance_nm = seq(-50, 200, by = 1),
-  force_nN = 0.02 * seq(-50, 200, by = 1) + c(rep(0, 80), -3, rep(0, 170))
+transformed_df <- data.frame(
+  separation_distance_nm = c(
+    0.22196440, 0.19896440, 0.17496440, 0.23529773, 0.21129773,
+    0.18829773, 0.16429773, 0.14129773, 0.11729773, 0.17763107,
+    0.15463107, 0.13063107, 0.19096440, 0.08363107, -0.02270227,
+    -0.21336893, -0.31970227, -0.42603560, -0.53336893, -0.47303560,
+    -0.49703560, -0.43670227, -0.54403560, -0.65036893, -0.67336893,
+    -0.78070227, -0.72036893, -0.49436893, -0.18403560, 0.04196440,
+    0.18563107, 0.49496440, 1.13863107, 3.03229773, 5.09163107,
+    7.15196440, 8.21129773, 9.27163107, 10.58096440, 11.97463107,
+    13.28396440, 14.42763107, 15.48796440, 16.38063107, 17.44096440,
+    18.41696440, 19.39396440, 20.28663107, 21.26363107, 22.24063107,
+    23.13329773, 24.11029773, 25.08629773, 26.06329773, 27.12263107,
+    28.01629773, 28.99329773, 29.96929773, 30.94629773, 31.92229773,
+    32.89929773, 33.87529773, 34.85229773, 35.82829773, 36.72196440,
+    37.69896440, 38.75829773, 39.73529773, 40.79463107, 41.77163107,
+    42.74763107, 43.72463107, 44.70063107, 45.67763107, 46.57129773,
+    47.54729773, 48.52429773, 49.58363107, 50.47729773, 51.45329773,
+    52.43029773, 53.49063107, 54.38329773, 55.44363107, 56.33629773,
+    57.31329773, 58.28929773, 59.34963107, 60.32663107, 61.21929773,
+    62.19629773, 63.25563107, 64.23263107, 65.37529773, 66.26896440,
+    67.24496440, 68.13863107, 69.03229773, 70.00829773, 70.90196440
+  ),
+  force_nN = c(
+    2.588500000, 2.488500000, 2.388500000, 2.296833333, 2.196833333,
+    2.096833333, 1.996833333, 1.896833333, 1.796833333, 1.705166667,
+    1.605166667, 1.505166667, 1.413500000, 1.305166667, 1.196833333,
+    1.080166667, 0.971833333, 0.863500000, 0.755166667, 0.663500000,
+    0.563500000, 0.471833333, 0.363500000, 0.255166667, 0.155166667,
+    0.046833333, -0.044833333, -0.119833333, -0.186500000, -0.261500000,
+    -0.344833333, -0.411500000, -0.444833333, -0.353166667, -0.244833333,
+    -0.136500000, -0.128166667, -0.119833333, -0.086500000, -0.044833333,
+    -0.011500000, 0.005166667, 0.013500000, 0.005166667, 0.013500000,
+    0.013500000, 0.013500000, 0.005166667, 0.005166667, 0.005166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, 0.005166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.003166667,
+    -0.003166667, -0.003166667, -0.003166667, -0.003166667, -0.011500000,
+    -0.011500000, -0.003166667, -0.003166667, 0.005166667, 0.005166667,
+    0.005166667, 0.005166667, 0.005166667, 0.005166667, -0.003166667,
+    -0.003166667, -0.003166667, 0.005166667, -0.003166667, -0.003166667,
+    -0.003166667, 0.005166667, -0.003166667, 0.005166667, -0.003166667,
+    -0.003166667, -0.003166667, 0.005166667, 0.005166667, -0.003166667,
+    -0.003166667, 0.005166667, 0.005166667, 0.021833333, 0.013500000,
+    0.013500000, 0.005166667, -0.003166667, -0.003166667, -0.011500000
+  )
 )
-analyze_a_curve_adhesive_force(df)
+analyze_a_curve_adhesive_force(transformed_df)
 
 }
