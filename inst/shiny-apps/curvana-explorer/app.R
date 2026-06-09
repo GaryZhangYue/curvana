@@ -1,4 +1,6 @@
 
+options(shiny.maxRequestSize = 100 * 1024^2)
+
 tooltip_label <- function(label, tip) {
   shiny::tagList(
     label,
@@ -201,22 +203,23 @@ ui <- bs4Dash::dashboardPage(
             shiny::div(
               tooltip_label(
                 shiny::tags$span(style = "font-size: 1.15em; font-weight: 600;", "Data source"),
-                "Use the package's built-in demo data or provide a folder path to your own raw curves."
+                "Use the package's built-in demo data or upload a zipped folder containing your own raw curves."
               )
             ),
             shiny::div(style = "margin-top: 8px;",
               shiny::radioButtons(
                 "data_source",
                 label = NULL,
-                choices  = c("Built-in demo data" = "demo", "Custom folder path" = "custom"),
+                choices  = c("Built-in demo data" = "demo", "Upload zipped folder" = "custom"),
                 selected = "demo"
               )
             ),
             shiny::conditionalPanel(
               condition = "input.data_source == 'custom'",
-              shiny::textInput(
-                "custom_folder", tooltip_label("Folder path", "Path to the folder containing the raw AFM curve files."), value = "",
-                placeholder = "e.g. C:/data/my_experiment"
+              shiny::fileInput(
+                "custom_zip",
+                tooltip_label("Zipped data folder", "Upload a .zip archive containing the raw AFM curve files. The app will unpack it on the server before loading."),
+                accept = c(".zip")
               ),
               shiny::textInput("load_suffix", tooltip_label("File suffix", "File extension used for the raw AFM curve files, for example, .txt."), value = ".txt"),
               shiny::textInput("load_pattern", tooltip_label("File name pattern", "Optional filename pattern used to filter files before loading them."), value = ""),
@@ -1421,10 +1424,39 @@ server <- function(input, output, session) {
       folder <- if (identical(input$data_source, "demo")) {
         system.file("extdata", package = "curvana")
       } else {
-        input$custom_folder
+        uploaded_zip <- input$custom_zip
+        if (is.null(uploaded_zip) || !nzchar(uploaded_zip$datapath) || !file.exists(uploaded_zip$datapath)) {
+          shiny::showNotification("Upload a zipped data folder first.", type = "error")
+          return(NULL)
+        }
+
+        extract_dir <- tempfile(pattern = "curvana-upload-")
+        dir.create(extract_dir, recursive = TRUE, showWarnings = FALSE)
+
+        unzip_result <- tryCatch(
+          utils::unzip(uploaded_zip$datapath, exdir = extract_dir),
+          error = function(e) {
+            shiny::showNotification(
+              paste0("Failed to unpack uploaded zip file: ", e$message),
+              type = "error",
+              duration = NULL
+            )
+            NULL
+          }
+        )
+        if (is.null(unzip_result)) {
+          return(NULL)
+        }
+
+        extracted_entries <- list.files(extract_dir, full.names = TRUE, all.files = FALSE, no.. = TRUE)
+        if (length(extracted_entries) == 1 && dir.exists(extracted_entries[[1]])) {
+          extracted_entries[[1]]
+        } else {
+          extract_dir
+        }
       }
       if (!nzchar(folder) || !dir.exists(folder)) {
-        shiny::showNotification("Folder path does not exist.", type = "error")
+        shiny::showNotification("Uploaded data folder could not be found after extraction.", type = "error")
         return(NULL)
       }
 
