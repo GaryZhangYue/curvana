@@ -49,6 +49,8 @@ JPK text export files contain approach (extend) and/or retract segments marked b
 - If force data is provided (indicated by 'N' unit), it will be converted back to Voltage using the associated sensitivity and spring constant values
 - By default, the displacement and deflection columns of the approach segment are reversed so that both curves begin with the contact region
 
+Example ASCII files exported from Bruker NanoScope Analysis, Veeco, and JPK can be found in the inst/ directory. The Veeco and JPK files were obtained from the auxiliary files associated with afmToolkit (https://github.com/rbensua/afmToolkit/tree/master/inst).
+
 ### Generic Column-Separated Format
 
 Generic format for column-separated AFM data files where piezo displacement and cantilever deflection voltage are stored in separate columns.
