@@ -5,6 +5,6 @@ account: garyzhangyue
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 17484545
-bundleId: 12101978
+bundleId: 12102054
 url: https://garyzhangyue.shinyapps.io/curvana-explorer/
 version: 1
