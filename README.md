@@ -10,13 +10,32 @@ reproducible data sharing.
 
 ## Installation
 
-You can install **curvana** directly from GitHub using the **devtools** package:
+All packages required by **curvana** and the bundled Shiny app are listed in the package `Imports`, so they are installed automatically when you install **curvana**.
+
+For most users, the easiest local setup is:
+
+1. Install **R** from CRAN: https://cran.r-project.org/
+2. Install **RStudio Desktop**: https://posit.co/download/rstudio-desktop/
+
+RStudio is not strictly required, but it is strongly recommended for users who are not comfortable working in a plain R console.
+
+You can then install **curvana** directly from GitHub. A lightweight option is `pak`:
+
+```r
+# Install pak if needed
+install.packages("pak")
+
+# Install curvana and all required dependencies
+pak::pak("GaryZhangYue/curvana")
+```
+
+If you prefer `devtools`, this also works:
 
 ```r
 # Install devtools if not already installed
 install.packages("devtools")
 
-# Install curvana from GitHub
+# Install curvana and all required dependencies from GitHub
 devtools::install_github("GaryZhangYue/curvana", dependencies = TRUE)
 
 # Load the package
@@ -90,6 +109,30 @@ The package also provides essential downstream analysis tools, including:
 **curvana** includes an interactive Shiny application for code-free exploration
 and analysis of AFM force-distance datasets.
 
+### Run the app locally
+
+If you do not already have R installed, install:
+
+1. **R** from CRAN: https://cran.r-project.org/
+2. **RStudio Desktop** from Posit: https://posit.co/download/rstudio-desktop/
+
+After that, open RStudio and run:
+
+```r
+install.packages("pak")
+pak::pak("GaryZhangYue/curvana")
+
+library(curvana)
+run_curvana_app()
+```
+
+If you already installed **curvana**, you only need:
+
+```r
+library(curvana)
+run_curvana_app()
+```
+
 Main app capabilities include:
 
 - importing AFM datasets and metadata
@@ -98,7 +141,7 @@ Main app capabilities include:
 - generating violin plots, PCA biplots, and heatmaps
 - downloading processed results for downstream analysis
 
-You can launch the app from R with:
+You can also launch the app from R with:
 
 ```r
 library(curvana)
