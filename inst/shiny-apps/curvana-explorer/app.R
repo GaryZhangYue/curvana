@@ -559,11 +559,14 @@ ui <- bs4Dash::dashboardPage(
                     shiny::selectInput("spring_constant_col_approach", tooltip_label("Spring constant column", "Metadata column containing per-curve spring constant values in nN/nm."), choices = character(0))
                   ),
                   shiny::checkboxInput("denoise_first_approach", tooltip_label("Denoise with Savitzky-Golay filter", "Apply Savitzky-Golay smoothing before baseline and sensitivity calculations for approach curves."), value = TRUE),
-                  shiny::fluidRow(
-                    shiny::column(6, shiny::numericInput("denoise_p_approach", tooltip_label("Polynomial degree", "Polynomial order p used by the Savitzky-Golay filter."), value = 1, min = 0, step = 1)),
-                    shiny::column(6, shiny::numericInput("denoise_n_approach", tooltip_label("Window size", "Window size n used by the Savitzky-Golay filter. This must be an odd integer."), value = 3, min = 3, step = 2)),
-                    shiny::column(6, shiny::numericInput("denoise_m_approach", tooltip_label("Derivative order", "Derivative order m used by the Savitzky-Golay filter. Use 0 for standard denoising."), value = 0, min = 0, step = 1)),
-                    shiny::column(6, shiny::numericInput("denoise_ts_approach", tooltip_label("Sample spacing", "Sampling interval ts used by the Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
+                  shiny::conditionalPanel(
+                    condition = "input.denoise_first_approach == true",
+                    shiny::fluidRow(
+                      shiny::column(6, shiny::numericInput("denoise_p_approach", tooltip_label("Polynomial degree", "Polynomial order p used by the Savitzky-Golay filter."), value = 1, min = 0, step = 1)),
+                      shiny::column(6, shiny::numericInput("denoise_n_approach", tooltip_label("Window size", "Window size n used by the Savitzky-Golay filter. This must be an odd integer."), value = 3, min = 3, step = 2)),
+                      shiny::column(6, shiny::numericInput("denoise_m_approach", tooltip_label("Derivative order", "Derivative order m used by the Savitzky-Golay filter. Use 0 for standard denoising."), value = 0, min = 0, step = 1)),
+                      shiny::column(6, shiny::numericInput("denoise_ts_approach", tooltip_label("Sample spacing", "Sampling interval ts used by the Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
+                    )
                   ),
                   shiny::hr(),
                   shiny::h5("Baseline span", style = "font-size: 18px; font-weight: bold;"),
@@ -620,11 +623,14 @@ ui <- bs4Dash::dashboardPage(
                     shiny::selectInput("spring_constant_col_retract", tooltip_label("Spring constant column", "Metadata column containing per-curve spring constant values in nN/nm."), choices = character(0))
                   ),
                   shiny::checkboxInput("denoise_first_retract", tooltip_label("Denoise with Savitzky-Golay filter", "Apply Savitzky-Golay smoothing before baseline and sensitivity calculations for retract curves."), value = TRUE),
-                  shiny::fluidRow(
-                    shiny::column(6, shiny::numericInput("denoise_p_retract", tooltip_label("Polynomial degree", "Polynomial order p used by the Savitzky-Golay filter."), value = 1, min = 0, step = 1)),
-                    shiny::column(6, shiny::numericInput("denoise_n_retract", tooltip_label("Window size", "Window size n used by the Savitzky-Golay filter. This must be an odd integer."), value = 3, min = 3, step = 2)),
-                    shiny::column(6, shiny::numericInput("denoise_m_retract", tooltip_label("Derivative order", "Derivative order m used by the Savitzky-Golay filter. Use 0 for standard denoising."), value = 0, min = 0, step = 1)),
-                    shiny::column(6, shiny::numericInput("denoise_ts_retract", tooltip_label("Sample spacing", "Sampling interval ts used by the Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
+                  shiny::conditionalPanel(
+                    condition = "input.denoise_first_retract == true",
+                    shiny::fluidRow(
+                      shiny::column(6, shiny::numericInput("denoise_p_retract", tooltip_label("Polynomial degree", "Polynomial order p used by the Savitzky-Golay filter."), value = 1, min = 0, step = 1)),
+                      shiny::column(6, shiny::numericInput("denoise_n_retract", tooltip_label("Window size", "Window size n used by the Savitzky-Golay filter. This must be an odd integer."), value = 3, min = 3, step = 2)),
+                      shiny::column(6, shiny::numericInput("denoise_m_retract", tooltip_label("Derivative order", "Derivative order m used by the Savitzky-Golay filter. Use 0 for standard denoising."), value = 0, min = 0, step = 1)),
+                      shiny::column(6, shiny::numericInput("denoise_ts_retract", tooltip_label("Sample spacing", "Sampling interval ts used by the Savitzky-Golay filter."), value = 1, min = 0.0001, step = 0.1))
+                    )
                   ),
                   shiny::hr(),
                   shiny::h5("Baseline span", style = "font-size: 18px; font-weight: bold;"),
