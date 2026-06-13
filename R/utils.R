@@ -1392,7 +1392,7 @@ plot_all_curve_metrics <- function(
 #' plot_metric_violin(df = fd_obj@metadata, metric_name = "adhesive_force_nN_retract",group_by = "surface",global_test = 'kruskal', pairwise_test = 'wilcox', p_adjust_method = 'BH')
 #'
 #' @export
-#' @importFrom ggplot2 ggplot aes geom_violin geom_point geom_smooth
+#' @importFrom ggplot2 ggplot aes geom_violin geom_boxplot geom_point geom_smooth
 #' @importFrom ggplot2 facet_wrap facet_grid labs position_jitter theme_classic
 #' @importFrom ggplot2 scale_color_manual scale_fill_manual
 plot_metric_violin <- function(
@@ -1537,7 +1537,7 @@ plot_metric_violin <- function(
 
   if (isTRUE(show_whisker_box)) {
     if (isTRUE(use_color_dodge)) {
-      p <- p + geom_boxplot(
+      p <- p + ggplot2::geom_boxplot(
         aes(color = ColorGroup, group = interaction(Group, ColorGroup)),
         width = 0.16,
         outlier.shape = NA,
@@ -1547,7 +1547,7 @@ plot_metric_violin <- function(
         position = ggplot2::position_dodge(width = dodge_width)
       )
     } else {
-      p <- p + geom_boxplot(
+      p <- p + ggplot2::geom_boxplot(
         aes(color = ColorGroup, group = Group),
         width = 0.16,
         outlier.shape = NA,
