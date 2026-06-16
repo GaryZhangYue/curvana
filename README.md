@@ -27,16 +27,6 @@ install.packages("pak")
 
 # Install curvana and all required dependencies
 pak::pak("GaryZhangYue/curvana")
-```
-
-If you prefer `devtools`, this also works:
-
-```r
-# Install devtools if not already installed
-install.packages("devtools")
-
-# Install curvana and all required dependencies from GitHub
-devtools::install_github("GaryZhangYue/curvana", dependencies = TRUE)
 
 # Load the package
 library(curvana)
