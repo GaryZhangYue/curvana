@@ -1,0 +1,10 @@
+name: curvana
+title:
+username: eitlab
+account: eitlab
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 17514741
+bundleId:
+url: https://eitlab.shinyapps.io/curvana/
+version: 1
