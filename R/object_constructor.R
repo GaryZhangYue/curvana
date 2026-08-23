@@ -121,13 +121,29 @@ createFdObjFromFolder <- function(folder,
 
       cols <- list()
       if (has_approach) {
-        cols[["Calc_Ramp_Ex_nm"]] <- if (reverse_Calc_Ramp_Ex_nm) rev(df[[Calc_Ramp_Ex_nm]]) else df[[Calc_Ramp_Ex_nm]]
-        cols[["Defl_V_Ex"]] <- if (reverse_Defl_V_Ex) rev(df[[Defl_V_Ex]]) else df[[Defl_V_Ex]]
+        approach_dist <- if (reverse_Calc_Ramp_Ex_nm) rev(df[[Calc_Ramp_Ex_nm]]) else df[[Calc_Ramp_Ex_nm]]
+        approach_defl <- if (reverse_Defl_V_Ex) rev(df[[Defl_V_Ex]]) else df[[Defl_V_Ex]]
+        keep_approach <- complete.cases(approach_dist, approach_defl)
+        cols[["Calc_Ramp_Ex_nm"]] <- approach_dist[keep_approach]
+        cols[["Defl_V_Ex"]] <- approach_defl[keep_approach]
       }
       if (has_retract) {
-        cols[["Calc_Ramp_Rt_nm"]] <- if (reverse_Calc_Ramp_Rt_nm) rev(df[[Calc_Ramp_Rt_nm]]) else df[[Calc_Ramp_Rt_nm]]
-        cols[["Defl_V_Rt"]] <- if (reverse_Defl_V_Rt) rev(df[[Defl_V_Rt]]) else df[[Defl_V_Rt]]
+        retract_dist <- if (reverse_Calc_Ramp_Rt_nm) rev(df[[Calc_Ramp_Rt_nm]]) else df[[Calc_Ramp_Rt_nm]]
+        retract_defl <- if (reverse_Defl_V_Rt) rev(df[[Defl_V_Rt]]) else df[[Defl_V_Rt]]
+        keep_retract <- complete.cases(retract_dist, retract_defl)
+        cols[["Calc_Ramp_Rt_nm"]] <- retract_dist[keep_retract]
+        cols[["Defl_V_Rt"]] <- retract_defl[keep_retract]
       }
+
+      if (length(cols) == 0) {
+        return(data.frame())
+      }
+
+      max_len <- max(vapply(cols, length, integer(1)))
+      cols <- lapply(cols, function(x) {
+        length(x) <- max_len
+        x
+      })
 
       as.data.frame(cols, stringsAsFactors = FALSE)
     }),
@@ -342,8 +358,30 @@ createFdObjFromJPKFolder <- function(folder,
       if ("Defl_V_Rt" %in% colnames(raw_df) && reverse_Deflection_Retract) {
         raw_df$Defl_V_Rt <- rev(raw_df$Defl_V_Rt)
       }
+
+      cols <- list()
+      if (all(c("Calc_Ramp_Ex_nm", "Defl_V_Ex") %in% colnames(raw_df))) {
+        keep_approach <- complete.cases(raw_df$Calc_Ramp_Ex_nm, raw_df$Defl_V_Ex)
+        cols[["Calc_Ramp_Ex_nm"]] <- raw_df$Calc_Ramp_Ex_nm[keep_approach]
+        cols[["Defl_V_Ex"]] <- raw_df$Defl_V_Ex[keep_approach]
+      }
+      if (all(c("Calc_Ramp_Rt_nm", "Defl_V_Rt") %in% colnames(raw_df))) {
+        keep_retract <- complete.cases(raw_df$Calc_Ramp_Rt_nm, raw_df$Defl_V_Rt)
+        cols[["Calc_Ramp_Rt_nm"]] <- raw_df$Calc_Ramp_Rt_nm[keep_retract]
+        cols[["Defl_V_Rt"]] <- raw_df$Defl_V_Rt[keep_retract]
+      }
+
+      if (length(cols) == 0) {
+        return(data.frame())
+      }
+
+      max_len <- max(vapply(cols, length, integer(1)))
+      cols <- lapply(cols, function(x) {
+        length(x) <- max_len
+        x
+      })
       
-      raw_df
+      as.data.frame(cols, stringsAsFactors = FALSE)
     }),
     names(jpk_data_list)
   )
