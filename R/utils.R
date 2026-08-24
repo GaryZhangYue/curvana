@@ -15,6 +15,7 @@
 #' @param point_size Size of points (default = 0.5)
 #' @param alpha Transparency of points (default = 0.5)
 #' @param line_alpha Transparency of connecting paths (default = 0.5)
+#' @param text_size Text size for plot labels/ticks/strips/legend (default = 14)
 #'
 #' @return A ggplot2 object of the scatter plots showing raw deflection signal.
 #' @examples 
@@ -22,7 +23,7 @@
 #' fd_obj <- createFdObjFromFolder(folder)
 #' plot_deflection_curves(fd_obj, curve = "retract")
 #' @export
-#' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
+#' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_classic scale_color_manual guides element_blank element_rect element_text
 
 plot_deflection_curves <- function(fdobj,
                                    curve = c("both", "approach", "retract"),
@@ -31,7 +32,8 @@ plot_deflection_curves <- function(fdobj,
                                    point_size = 0.5,
                                    alpha = 0.5,
                                    line_alpha = 0.5,
-                                   color_map = NULL) {
+                                   color_map = NULL,
+                                   text_size = 14) {
   curve <- match.arg(curve)
   meta <- fdobj@metadata
   curves <- fdobj@rawCurves
@@ -142,11 +144,17 @@ plot_deflection_curves <- function(fdobj,
   }
 
   # Theme
-  p <- p + theme_minimal(base_size = 14) +
+  p <- p + theme_classic() +
     ggplot2::theme(
       panel.grid = element_blank(),
       strip.background = element_rect(fill = "#f0f0f0"),
-      strip.text = element_text(face = "bold")
+      strip.text = element_text(face = "bold", size = text_size),
+      axis.text = element_text(size = text_size),
+      axis.title = element_text(size = text_size),
+      legend.text = element_text(size = text_size),
+      legend.title = element_text(size = text_size),
+      plot.title = element_text(size = text_size),
+      plot.subtitle = element_text(size = text_size)
     )
 
   n_samples <- length(fdobj@rawCurves)
@@ -188,6 +196,7 @@ plot_deflection_curves <- function(fdobj,
 #' @param point_size Size of points (default = 0.5)
 #' @param alpha Transparency of points (default = 0.5)
 #' @param line_alpha Transparency of connecting paths (default = 0.5)
+#' @param text_size Text size for plot labels/ticks/strips/legend (default = 14)
 #'
 #' @return A ggplot2 object showing raw deflection signal vs data point index.
 #' @examples
@@ -195,7 +204,7 @@ plot_deflection_curves <- function(fdobj,
 #' fd_obj <- createFdObjFromFolder(folder)
 #' plot_deflection_curves_by_index(fd_obj, curve = "retract")
 #' @export
-#' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_minimal scale_color_manual guides element_blank element_rect element_text
+#' @importFrom ggplot2 ggplot aes geom_point geom_path facet_wrap facet_grid labs theme_classic scale_color_manual guides element_blank element_rect element_text
 plot_deflection_curves_by_index <- function(fdobj,
                                             curve = c("both", "approach", "retract"),
                                             group_curves_by = NULL,
@@ -203,7 +212,8 @@ plot_deflection_curves_by_index <- function(fdobj,
                                             point_size = 0.5,
                                             alpha = 0.5,
                                             line_alpha = 0.5,
-                                            color_map = NULL) {
+                                            color_map = NULL,
+                                            text_size = 14) {
   curve <- match.arg(curve)
   meta <- fdobj@metadata
   curves <- fdobj@rawCurves
@@ -337,11 +347,17 @@ plot_deflection_curves_by_index <- function(fdobj,
   }
 
   # Theme
-  p <- p + theme_minimal(base_size = 14) +
+  p <- p + theme_classic() +
     ggplot2::theme(
       panel.grid.minor = element_blank(),
       strip.background = element_rect(fill = "#f0f0f0"),
-      strip.text = element_text(face = "bold")
+      strip.text = element_text(face = "bold", size = text_size),
+      axis.text = element_text(size = text_size),
+      axis.title = element_text(size = text_size),
+      legend.text = element_text(size = text_size),
+      legend.title = element_text(size = text_size),
+      plot.title = element_text(size = text_size),
+      plot.subtitle = element_text(size = text_size)
     )
 
   n_samples <- length(fdobj@rawCurves)
@@ -375,6 +391,7 @@ plot_deflection_curves_by_index <- function(fdobj,
 #' @param point_size Size of points (default = 0.5).
 #' @param point_alpha Transparency of points (default = 0.6).
 #' @param line_alpha Transparency of curve lines (default = 0.5).
+#' @param text_size Text size for plot labels/ticks/strips/legend (default = 14).
 #' @param xlim Optional numeric vector of length 2 for x-axis limits.
 #' @param ylim Optional numeric vector of length 2 for y-axis limits.
 #' @param ... Additional ggplot2 layers/settings to add to the plot
@@ -387,7 +404,7 @@ plot_deflection_curves_by_index <- function(fdobj,
 #' fd_obj <- transform_curves(fd_obj, spring_constant = 0.1, useCurve = "retract", threads = 1, least_length= 300)
 #' plot_fd_curves(fd_obj, curve = "retract")
 #' @export
-#' @importFrom ggplot2 ggplot aes geom_point facet_wrap facet_grid labs theme_minimal scale_color_manual guides
+#' @importFrom ggplot2 ggplot aes geom_point facet_wrap facet_grid labs theme_classic scale_color_manual guides
 plot_fd_curves <- function(fdobj,
                            curve = "both",
                            group_curves_by = NULL,
@@ -396,6 +413,7 @@ plot_fd_curves <- function(fdobj,
                            point_size = 0.5,
                            point_alpha = 0.6,
                            line_alpha = 0.5,
+                           text_size = 14,
                            xlim = NULL,
                            ylim = NULL,
                            ...) {
@@ -518,11 +536,17 @@ plot_fd_curves <- function(fdobj,
   }
 
   # Final theming
-  p <- p + theme_minimal(base_size = 14) +
+  p <- p + theme_classic() +
     ggplot2::theme(
       panel.grid = element_blank(),
       strip.background = element_rect(fill = "#f0f0f0"),
-      strip.text = element_text(face = "bold")
+      strip.text = element_text(face = "bold", size = text_size),
+      axis.text = element_text(size = text_size),
+      axis.title = element_text(size = text_size),
+      legend.text = element_text(size = text_size),
+      legend.title = element_text(size = text_size),
+      plot.title = element_text(size = text_size),
+      plot.subtitle = element_text(size = text_size)
     )
 
   if (!is.null(xlim) || !is.null(ylim)) {
@@ -660,6 +684,10 @@ crossing_x0 <- function(x1, y1, x2, y2) {
 #' @param ylim Optional numeric vector of length 2 for y-axis limits.
 #' @param title Character. Plot title.
 #' @param base_size Numeric. Base theme text size.
+#' @param title_size Numeric. Title text size. Defaults to 
+#'   \\code{base_size * 1.1} when \\code{NULL}.
+#' @param subtitle_size Numeric. Subtitle text size. Defaults to 
+#'   \\code{base_size} when \\code{NULL}.
 #' @param line_color Character. Line color for curves.
 #' @param point_color Character. Point color for curves.
 #' @param line_size Numeric. Line width for curves.
@@ -701,6 +729,8 @@ plot_a_curve_metrics <- function(
     ylim = NULL,
     title = NULL,
     base_size = 14,
+    title_size = NULL,
+    subtitle_size = NULL,
     line_color = "grey35",
     point_color = "grey35",
     line_size = 0.7,
@@ -876,6 +906,19 @@ plot_a_curve_metrics <- function(
     stop("ylim must be NULL or a numeric vector of length 2.")
   }
 
+  if (is.null(title_size)) {
+    title_size <- base_size * 1.1
+  }
+  if (is.null(subtitle_size)) {
+    subtitle_size <- base_size
+  }
+  if (!is.numeric(title_size) || length(title_size) != 1 || is.na(title_size) || title_size <= 0) {
+    stop("title_size must be NULL or a positive numeric scalar.")
+  }
+  if (!is.numeric(subtitle_size) || length(subtitle_size) != 1 || is.na(subtitle_size) || subtitle_size <= 0) {
+    stop("subtitle_size must be NULL or a positive numeric scalar.")
+  }
+
   if (is.null(title)) {
     title <- sprintf("Transformed curve: \n%s \n(%s)", curve_name, useCurve)
   }
@@ -895,7 +938,9 @@ plot_a_curve_metrics <- function(
     ggplot2::coord_cartesian(xlim = xlim, ylim = ylim, clip = "off") +
     ggplot2::theme(
       plot.margin = ggplot2::margin(5.5, 90, 5.5, 5.5),
-      legend.position = "top"
+      legend.position = "top",
+      plot.title = element_text(size = title_size),
+      plot.subtitle = element_text(size = subtitle_size)
     )
 
   if (isTRUE(annotate_noiseBand) && is.finite(noiseBand_low) && is.finite(noiseBand_high) && noiseBand_low < noiseBand_high) {
@@ -1068,7 +1113,11 @@ plot_a_curve_metrics <- function(
         title = sprintf("Raw curve: \n%s \n(%s)", curve_name, useCurve),
       ) +
       ggplot2::theme_classic(base_size = base_size) +
-      ggplot2::theme(legend.position = "top")
+      ggplot2::theme(
+        legend.position = "top",
+        plot.title = element_text(size = title_size),
+        plot.subtitle = element_text(size = subtitle_size)
+      )
 
     raw_subtitle <- paste(
       sprintf("Sensitivity (V/nm) = %s", if (is.finite(sensitivity_val)) sprintf("%.3g", sensitivity_val) else "NA"),
@@ -1666,6 +1715,8 @@ plot_metric_violin <- function(
 #' @param show_feature_labels Logical; if \code{TRUE}, labels loading arrows.
 #' @param feature_label_size Numeric feature-label text size.
 #' @param base_size Numeric base font size.
+#' @param axis_label_size Numeric axis-label text size for x/y titles.
+#'   Defaults to \code{base_size} when \code{NULL}.
 #'
 #' @return A ggplot object. The fitted PCA model is attached as
 #'   \\code{attr(plot, "pca_model")}, plus score/loading tables in
@@ -1700,7 +1751,8 @@ plot_pca_biplot <- function(
     arrow_scale = 1,
     show_feature_labels = TRUE,
     feature_label_size = 3.5,
-    base_size = 12
+    base_size = 12,
+    axis_label_size = NULL
 ) {
   if (!is.data.frame(df)) {
     stop("df must be a data.frame.")
@@ -1710,6 +1762,13 @@ plot_pca_biplot <- function(
   }
   if (!is.character(color_by) || length(color_by) != 1 || is.na(color_by) || nchar(color_by) == 0) {
     stop("color_by must be one column name.")
+  }
+
+  if (is.null(axis_label_size)) {
+    axis_label_size <- base_size
+  }
+  if (!is.numeric(axis_label_size) || length(axis_label_size) != 1 || is.na(axis_label_size) || axis_label_size <= 0) {
+    stop("axis_label_size must be NULL or a positive numeric scalar.")
   }
 
   missing_features <- setdiff(include_columns, colnames(df))
@@ -1811,7 +1870,8 @@ plot_pca_biplot <- function(
       title = "PCA biplot"
     ) +
     coord_equal() +
-    ggplot2::theme_classic(base_size = base_size)
+    ggplot2::theme_classic(base_size = base_size) +
+    ggplot2::theme(axis.title = element_text(size = axis_label_size))
 
   if (isTRUE(show_feature_labels)) {
     p <- p + ggrepel::geom_text_repel(
