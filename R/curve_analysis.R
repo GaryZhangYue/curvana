@@ -231,8 +231,9 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
 #'
 #' This function tests the trailing part of an AFM (Atomic Force Microscopy)
 #' raw force-distance curve for a baseline segment. It takes the last
-#' \code{least_length} points after scaling \code{y} by \code{sensitivity}, fits a
-#' linear model of scaled deflection against \code{x}, and accepts that trailing
+#' \code{least_length} points after converting \code{y} to force
+#' using \code{sensitivity} and \code{spring_constant}, fits a
+#' linear model of the converted signal against \code{x}, and accepts that trailing
 #' window as baseline only when two criteria are met: the absolute fitted slope
 #' is smaller than \code{slp_threshold} and the standard error of that slope is
 #' smaller than \code{std_threshold}. If both criteria are satisfied, the
@@ -246,6 +247,9 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
 #' @param least_length Integer. Minimum number of points in the baseline segment. The function will
 #' take the last \code{least_length} points of the curve for testing.
 #' @param sensitivity Numeric. Scaling factor for the deflection signal (e.g., probe sensitivity)).
+#' @param spring_constant Numeric. Spring constant in nN/nm used to convert
+#'   sensitivity-corrected deflection to force for slope-based baseline
+#'   detection.
 #' @param slp_threshold Numeric. Maximum absolute slope for the segment to be considered flat (default: 0.01).
 #' @param std_threshold Numeric. Maximum standard error of the slope (default: 0.05).
 #'
@@ -288,23 +292,32 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
 #'   -0.056, -0.055, -0.056, -0.055, -0.056, -0.056, -0.056, -0.055, -0.055, -0.056,
 #'   -0.056, -0.055, -0.055, -0.053, -0.054, -0.054, -0.055, -0.056, -0.056, -0.057
 #' )
-#' result <- find_baseline(x,y, least_length = 50,sensitivity = 0.012,slp_threshold = 0.02, std_threshold = 0.02)
+#' result <- find_baseline(x,y, least_length = 50,sensitivity = 0.012, spring_constant = 0.1, slp_threshold = 0.02, std_threshold = 0.02)
 #' print(result$baseline)
 #' plot(x, y, type = "l"); lines(result$segment, col = "red", lwd = 2)
 #'
 #' @export
-find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.01, std_threshold = 0.05) {
+find_baseline <- function(x, y, least_length, sensitivity, spring_constant,
+                          slp_threshold = 0.01, std_threshold = 0.05) {
   if (length(x) < least_length + 1 || length(y) != length(x)) {
     warning("Insufficient data or mismatched x and y lengths.")
     return(list(baseline = NULL, segment = NULL))
   }
+  if (!is.finite(sensitivity) || sensitivity == 0) {
+    warning("Invalid sensitivity value.")
+    return(list(baseline = NULL, segment = NULL))
+  }
+  if (!is.finite(spring_constant) || spring_constant == 0) {
+    warning("Invalid spring_constant value.")
+    return(list(baseline = NULL, segment = NULL))
+  }
 
-  # Scale y by sensitivity
-  y_sens_crct <- y / sensitivity
+  # Convert voltage deflection to force for baseline detection.
+  y_force <- (y / sensitivity) * spring_constant
 
   # Select the tail segment
   window_x <- tail(x, least_length + 1)[-1]
-  window_y <- tail(y_sens_crct, least_length + 1)[-1]
+  window_y <- tail(y_force, least_length + 1)[-1]
 
   # Linear regression
   model <- lm(window_y ~ window_x)
@@ -312,7 +325,7 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.01,
   std_err <- summary(model)$coefficients["window_x", "Std. Error"]
 
   if (abs(slope) < slp_threshold && std_err < std_threshold) {
-    base_y <- window_y * sensitivity
+    base_y <- (window_y / spring_constant) * sensitivity
     baseline <- mean(base_y)
     segment <- data.frame(x = window_x, y = base_y)
     return(list(baseline = baseline, segment = segment))
@@ -325,12 +338,13 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.01,
 #'
 #' Applies baseline detection to each raw curve stored in an \code{fdObj} and
 #' writes the resulting baseline values and accepted baseline segments back into
-#' the object. For each curve, the function, finds the associated sensitivity value in metadata, and then calls
-#' \code{find_baseline()} on the trailing part of that curve.
+#' the object. For each curve, the function finds the associated sensitivity and
+#' spring-constant values in metadata and then calls \code{find_baseline()} on
+#' the trailing part of that curve.
 #'
 #' Baseline detection is therefore based on the same criteria implemented in
 #' \code{find_baseline()}: the last \code{least_length} points are tested after
-#' scaling the deflection signal by sensitivity, and the window is accepted only
+#' converting deflection to force, and the window is accepted only
 #' if the fitted slope magnitude is below \code{slp_threshold} and the slope
 #' standard error is below \code{std_threshold}. When \code{least_length} is a
 #' single number, that same trailing-window size is used for all curves; when it
@@ -364,6 +378,9 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.01,
 #' @param external_sensitivity_column Character. Name of a column in
 #'   \code{fdObj@metadata} containing sensitivity values. Required when
 #'   \code{soft = TRUE}.
+#' @param spring_constant Numeric or character. If numeric, a single spring
+#'   constant (nN/nm) applied to all curves. If character, the name of a
+#'   metadata column containing per-curve spring constants.
 #'
 #' @return An updated \code{fdObj} with baseline values in metadata and baseline
 #'   segments in \code{baseline_segment}. If \code{least_length} is numeric,
@@ -373,13 +390,14 @@ find_baseline <- function(x, y, least_length, sensitivity, slp_threshold = 0.01,
 #' folder <- system.file("extdata", package = "curvana")
 #' fd_obj <- createFdObjFromFolder(folder)
 #' fd_obj <- analyze_sensitivity(fd_obj, end = 80, intv = 10, useCurve = "retract")
-#' fd_obj <- analyze_baseline(fd_obj, least_length = 100, useCurve = "retract", slp_threshold = 0.02, std_threshold = 0.02)
+#' fd_obj <- analyze_baseline(fd_obj, least_length = 100, useCurve = "retract", spring_constant = 0.1, slp_threshold = 0.02, std_threshold = 0.02)
 #' head(fd_obj@metadata$baseline_V_retract)
 #' @export
 analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
                              slp_threshold = 0.01, std_threshold = 0.05,
                              threads = 1, soft = FALSE,
-                             external_sensitivity_column = NULL) {
+                             external_sensitivity_column = NULL,
+                             spring_constant = "spring_constant") {
   if (!inherits(fdObj, "fdObj")) stop("fdObj must be of class 'fdObj'")
   if (!useCurve %in% c("approach", "retract")) stop("useCurve must be either 'approach' or 'retract'")
 
@@ -441,6 +459,18 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
 
   if (is.null(sensitivity_vec)) stop("No sensitivity values found in metadata.")
 
+  if (is.numeric(spring_constant) && length(spring_constant) == 1 && is.finite(spring_constant)) {
+    spring_constant_vec <- rep(as.numeric(spring_constant), nrow(fdObj@metadata))
+  } else if (is.character(spring_constant) && length(spring_constant) == 1) {
+    if (!spring_constant %in% colnames(fdObj@metadata)) {
+      stop(sprintf("Column '%s' not found in fdObj@metadata.", spring_constant))
+    }
+    spring_constant_vec <- suppressWarnings(as.numeric(fdObj@metadata[[spring_constant]]))
+  } else {
+    stop("spring_constant must be either a single numeric value or a metadata column name.")
+  }
+  names(spring_constant_vec) <- rownames(fdObj@metadata)
+
   # Determine data point count column name
   n_datapoints_col <- if (useCurve == "approach") "Number_of_datapoints_approach" else "Number_of_datapoints_retract"
   has_datapoint_info <- n_datapoints_col %in% names(fdObj@metadata)
@@ -448,9 +478,11 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
   find_result_for_curve <- function(name) {
     df <- raw_list[[name]]
     sensitivity <- sensitivity_vec[name]
+    spring_constant <- spring_constant_vec[name]
     curve_least_length <- if (least_length_mode == "automatic") span_vec[name] else fixed_least_length
 
     if (is.na(sensitivity) ||
+      is.na(spring_constant) ||
         is.na(curve_least_length) || !is.finite(curve_least_length) || curve_least_length < 1 ||
         !(x_col %in% names(df)) || !(y_col %in% names(df))) {
       return(list(baseline = NA_real_, segment = empty_seg))
@@ -473,6 +505,7 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
       y = y,
       least_length = as.integer(curve_least_length),
       sensitivity = sensitivity,
+      spring_constant = spring_constant,
       slp_threshold = slp_threshold,
       std_threshold = std_threshold
     )
@@ -498,6 +531,7 @@ analyze_baseline <- function(fdObj, least_length = 150, useCurve = NULL,
         find_baseline = find_baseline,
         raw_list = raw_list,
         sensitivity_vec = sensitivity_vec,
+        spring_constant_vec = spring_constant_vec,
         span_vec = span_vec,
         least_length_mode = least_length_mode,
         fixed_least_length = fixed_least_length,
@@ -1090,7 +1124,8 @@ transform_curves <- function(fdObj,
       std_threshold = std_threshold,
       threads = threads,
       soft = soft,
-      external_sensitivity_column = if (soft) probe_sens_col else NULL
+      external_sensitivity_column = if (soft) probe_sens_col else NULL,
+      spring_constant = spring_constant
     )
   }
 
