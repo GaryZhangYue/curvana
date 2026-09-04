@@ -28,7 +28,8 @@ per-curve span values are read from
 
 \item{slp_threshold}{Numeric. Maximum absolute slope allowed for baseline detection (default = 0.01).}
 
-\item{std_threshold}{Numeric. Maximum standard error of the slope (default = 0.05).}
+\item{std_threshold}{Numeric. Maximum standard deviation of the converted
+force values in the tested baseline segment (default = 0.05).}
 
 \item{threads}{Integer. Number of parallel threads to use (default = 1).}
 
@@ -57,8 +58,8 @@ the object. For each curve, the function, finds the associated sensitivity value
 Baseline detection is therefore based on the same criteria implemented in
 \code{find_baseline()}: the last \code{least_length} points are tested after
 scaling the deflection signal by sensitivity, and the window is accepted only
-if the fitted slope magnitude is below \code{slp_threshold} and the slope
-standard error is below \code{std_threshold}. When \code{least_length} is a
+if the fitted slope magnitude is below \code{slp_threshold} and the baseline
+force standard deviation is below \code{std_threshold}. When \code{least_length} is a
 single number, that same trailing-window size is used for all curves; when it
 is \code{"automatic"}, per-curve window sizes are taken from the
 corresponding \code{baseline_span_<dir>} metadata column.

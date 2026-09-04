@@ -76,8 +76,8 @@ reported as \code{NA} in \code{analyze_sensitivity()}.}
 \item{slp_threshold}{Numeric. Maximum absolute baseline slope allowed in
 \code{analyze_baseline()}.}
 
-\item{std_threshold}{Numeric. Maximum baseline slope standard error allowed
-in \code{analyze_baseline()}.}
+\item{std_threshold}{Numeric. Maximum baseline force standard deviation
+allowed in \code{analyze_baseline()}.}
 
 \item{soft}{Logical. If \code{TRUE}, use \code{probe_sensitivity_external}
 for force conversion in \code{transform_a_curve()} and pass the

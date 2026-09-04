@@ -235,9 +235,9 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
 #' using \code{sensitivity} and \code{spring_constant}, fits a
 #' linear model of the converted signal against \code{x}, and accepts that trailing
 #' window as baseline only when two criteria are met: the absolute fitted slope
-#' is smaller than \code{slp_threshold} and the standard error of that slope is
-#' smaller than \code{std_threshold}. If both criteria are satisfied, the
-#' function returns the mean baseline value in the original \code{y} units and
+#' is smaller than \code{slp_threshold} and the standard deviation of the
+#' converted force signal is smaller than \code{std_threshold}. If both criteria
+#' are satisfied, the function returns the mean baseline value in the original \code{y} units and
 #' the accepted segment. If either criterion fails, or if the inputs are too
 #' short or mismatched, no baseline is reported and \code{NULL} values are
 #' returned.
@@ -251,7 +251,8 @@ analyze_sensitivity <- function(fdObj, end = 200, intv = 4, R_squared_min = 0.99
 #'   sensitivity-corrected deflection to force for slope-based baseline
 #'   detection.
 #' @param slp_threshold Numeric. Maximum absolute slope for the segment to be considered flat (default: 0.01).
-#' @param std_threshold Numeric. Maximum standard error of the slope (default: 0.05).
+#' @param std_threshold Numeric. Maximum standard deviation of the converted
+#'   force values in the tested baseline segment (default: 0.05).
 #'
 #' @return A list with two elements:
 #' \describe{
@@ -322,9 +323,9 @@ find_baseline <- function(x, y, least_length, sensitivity, spring_constant,
   # Linear regression
   model <- lm(window_y ~ window_x)
   slope <- coef(model)[["window_x"]]
-  std_err <- summary(model)$coefficients["window_x", "Std. Error"]
+  std_dev <- stats::sd(window_y, na.rm = TRUE)
 
-  if (abs(slope) < slp_threshold && std_err < std_threshold) {
+  if (abs(slope) < slp_threshold && std_dev < std_threshold) {
     base_y <- (window_y / spring_constant) * sensitivity
     baseline <- mean(base_y)
     segment <- data.frame(x = window_x, y = base_y)
@@ -345,8 +346,8 @@ find_baseline <- function(x, y, least_length, sensitivity, spring_constant,
 #' Baseline detection is therefore based on the same criteria implemented in
 #' \code{find_baseline()}: the last \code{least_length} points are tested after
 #' converting deflection to force, and the window is accepted only
-#' if the fitted slope magnitude is below \code{slp_threshold} and the slope
-#' standard error is below \code{std_threshold}. When \code{least_length} is a
+#' if the fitted slope magnitude is below \code{slp_threshold} and the baseline
+#' force standard deviation is below \code{std_threshold}. When \code{least_length} is a
 #' single number, that same trailing-window size is used for all curves; when it
 #' is \code{"automatic"}, per-curve window sizes are taken from the
 #' corresponding \code{baseline_span_<dir>} metadata column.
@@ -369,7 +370,8 @@ find_baseline <- function(x, y, least_length, sensitivity, spring_constant,
 #'   \code{fdObj@metadata$baseline_span_retract} depending on \code{useCurve}.
 #' @param useCurve Character. Either "approach" or "retract" to specify which raw curve to use.
 #' @param slp_threshold Numeric. Maximum absolute slope allowed for baseline detection (default = 0.01).
-#' @param std_threshold Numeric. Maximum standard error of the slope (default = 0.05).
+#' @param std_threshold Numeric. Maximum standard deviation of the converted
+#'   force values in the tested baseline segment (default = 0.05).
 #' @param threads Integer. Number of parallel threads to use (default = 1).
 #' @param soft Logical. If \code{TRUE}, use the sensitivity column specified by
 #'   \code{external_sensitivity_column} instead of the default
@@ -982,8 +984,8 @@ transform_a_curve <- function(x, y,
 #'  \code{fdObj@metadata$baseline_span_retract} depending on \code{useCurve}.
 #' @param slp_threshold Numeric. Maximum absolute baseline slope allowed in
 #'   \code{analyze_baseline()}.
-#' @param std_threshold Numeric. Maximum baseline slope standard error allowed
-#'   in \code{analyze_baseline()}.
+#' @param std_threshold Numeric. Maximum baseline force standard deviation
+#'   allowed in \code{analyze_baseline()}.
 #' @param soft Logical. If \code{TRUE}, use \code{probe_sensitivity_external}
 #'   for force conversion in \code{transform_a_curve()} and pass the
 #'   resulting sensitivity column to \code{analyze_baseline()}.

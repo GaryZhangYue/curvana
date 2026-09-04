@@ -25,7 +25,8 @@ take the last \code{least_length} points of the curve for testing.}
 
 \item{slp_threshold}{Numeric. Maximum absolute slope for the segment to be considered flat (default: 0.01).}
 
-\item{std_threshold}{Numeric. Maximum standard error of the slope (default: 0.05).}
+\item{std_threshold}{Numeric. Maximum standard deviation of the converted
+force values in the tested baseline segment (default: 0.05).}
 }
 \value{
 A list with two elements:
@@ -40,9 +41,9 @@ raw force-distance curve for a baseline segment. It takes the last
 \code{least_length} points after scaling \code{y} by \code{sensitivity}, fits a
 linear model of scaled deflection against \code{x}, and accepts that trailing
 window as baseline only when two criteria are met: the absolute fitted slope
-is smaller than \code{slp_threshold} and the standard error of that slope is
-smaller than \code{std_threshold}. If both criteria are satisfied, the
-function returns the mean baseline value in the original \code{y} units and
+is smaller than \code{slp_threshold} and the standard deviation of the
+converted force signal is smaller than \code{std_threshold}. If both criteria
+are satisfied, the function returns the mean baseline value in the original \code{y} units and
 the accepted segment. If either criterion fails, or if the inputs are too
 short or mismatched, no baseline is reported and \code{NULL} values are
 returned.
