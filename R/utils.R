@@ -1405,8 +1405,6 @@ plot_all_curve_metrics <- function(
 #' @param pairwise_comparisons Optional list of group-name pairs (e.g.,
 #'   \code{list(c("A", "B"), c("A", "C"))}). If \code{NULL}, all pairwise
 #'   combinations are used.
-#' @param p_adjust_method Character p-value adjustment method passed to
-#'   \code{ggpubr::stat_compare_means()}.
 #' @param log10 Logical. If \code{TRUE}, applies \code{log10} transform to the
 #'   metric values before plotting and testing. Non-positive values are removed.
 #' @param add_points Logical. If \code{TRUE}, overlays jittered points.
@@ -1438,7 +1436,7 @@ plot_all_curve_metrics <- function(
 #' surface[surface == "Z"] <- "Group_D"
 #' md$surface <- surface
 #' fd_obj@metadata <- md
-#' plot_metric_violin(df = fd_obj@metadata, metric_name = "adhesive_force_nN_retract",group_by = "surface",global_test = 'kruskal', pairwise_test = 'wilcox', p_adjust_method = 'BH')
+#' plot_metric_violin(df = fd_obj@metadata, metric_name = "adhesive_force_nN_retract",group_by = "surface",global_test = 'kruskal', pairwise_test = 'wilcox')
 #'
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_violin geom_boxplot geom_point geom_smooth
@@ -1454,7 +1452,6 @@ plot_metric_violin <- function(
     global_test = c("none", "anova", "kruskal"),
     pairwise_test = c("none", "t.test", "wilcox"),
     pairwise_comparisons = NULL,
-    p_adjust_method = "BH",
     log10 = FALSE,
     add_points = TRUE,
     show_whisker_box = FALSE,
@@ -1678,7 +1675,6 @@ plot_metric_violin <- function(
       p <- p + ggpubr::stat_compare_means(
         comparisons = pairwise_comparisons,
         method = pairwise_method,
-        p.adjust.method = p_adjust_method,
         label = "p.signif",
         hide.ns = TRUE,
         step.increase = 0.08

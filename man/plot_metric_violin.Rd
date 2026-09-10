@@ -14,7 +14,6 @@ plot_metric_violin(
   global_test = c("none", "anova", "kruskal"),
   pairwise_test = c("none", "t.test", "wilcox"),
   pairwise_comparisons = NULL,
-  p_adjust_method = "BH",
   log10 = FALSE,
   add_points = TRUE,
   show_whisker_box = FALSE,
@@ -59,9 +58,6 @@ significance asterisks.}
 \item{pairwise_comparisons}{Optional list of group-name pairs (e.g.,
 \code{list(c("A", "B"), c("A", "C"))}). If \code{NULL}, all pairwise
 combinations are used.}
-
-\item{p_adjust_method}{Character p-value adjustment method passed to
-\code{ggpubr::stat_compare_means()}.}
 
 \item{log10}{Logical. If \code{TRUE}, applies \code{log10} transform to the
 metric values before plotting and testing. Non-positive values are removed.}
@@ -117,6 +113,6 @@ surface[surface == "silicon"] <- "Group_C"
 surface[surface == "Z"] <- "Group_D"
 md$surface <- surface
 fd_obj@metadata <- md
-plot_metric_violin(df = fd_obj@metadata, metric_name = "adhesive_force_nN_retract",group_by = "surface",global_test = 'kruskal', pairwise_test = 'wilcox', p_adjust_method = 'BH')
+plot_metric_violin(df = fd_obj@metadata, metric_name = "adhesive_force_nN_retract",group_by = "surface",global_test = 'kruskal', pairwise_test = 'wilcox')
 
 }

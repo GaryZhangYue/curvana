@@ -1103,11 +1103,6 @@ ui <- bs4Dash::dashboardPage(
               shiny::column(3, shiny::selectInput("violin_pairwise_test", tooltip_label("Pairwise test", "Statistical test used for pairwise group comparisons."),
                 choices = c("none", "t.test", "wilcox"), selected = "t.test"))
             ),
-            shiny::fluidRow(
-              shiny::column(6, shiny::selectInput("violin_p_adjust_method", tooltip_label("P adjust method", "Multiple-testing correction method used for pairwise comparisons."),
-                choices = stats::p.adjust.methods, selected = "BH")),
-              shiny::column(6)
-            ),
             tooltip_plot("violin_plot", "400px", "Distribution of the selected metric across groups defined by the chosen metadata column."),
             shiny::fluidRow(
               shiny::column(3, shiny::numericInput("violin_download_width", tooltip_label("Download width (in)", "Width in inches for exported violin plot."), value = 9, min = 1, step = 0.5)),
@@ -2318,7 +2313,6 @@ server <- function(input, output, session) {
       show_whisker_box = isTRUE(input$violin_show_whisker_box),
       global_test = input$violin_global_test,
       pairwise_test = input$violin_pairwise_test,
-      p_adjust_method = input$violin_p_adjust_method,
       base_size   = 11
     )
   }
