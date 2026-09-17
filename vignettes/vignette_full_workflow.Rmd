@@ -825,7 +825,7 @@ plot_grid(f1,f2,f3,f4,f5, nrow = 2)
 
 ## Violin plot with statistical annotations
 
-`plot_metric_violin()` also has options to perform statistical tests and annotate significance on the plot. Here, we perform a Kruskal-Wallis test to compare adhesive force across different groups, followed by pairwise Wilcoxon tests for post hoc analysis. The p-values are adjusted using the Benjamini-Hochberg method to control the false discovery rate.
+`plot_metric_violin()` also has options to perform statistical tests and annotate significance on the plot. Here, we perform a Kruskal-Wallis test to compare adhesive force across different groups, followed by pairwise Wilcoxon tests for post hoc analysis. The p-values are reported.
 
 ```{r summary statistics with tests, eval=requireNamespace("ggpubr", quietly = TRUE)}
 plot_metric_violin(
@@ -840,9 +840,7 @@ plot_metric_violin(
     Group_D = "#e7298a"
   ),
   global_test = "kruskal",
-  pairwise_test = "wilcox",
-  p_adjust_method = "BH"
-
+  pairwise_test = "wilcox"
 )
 ```
 
@@ -862,7 +860,7 @@ plot_metric_violin(
   ),
   global_test = "none", # do not perform global test, only do pairwise comparisons
   pairwise_test = "wilcox",
-  p_adjust_method = "BH", pairwise_comparisons = list(
+  pairwise_comparisons = list(
     c("Group_A", "Group_D"),
     c("Group_A", "Group_C"),
     c("Group_A", "Group_B")
