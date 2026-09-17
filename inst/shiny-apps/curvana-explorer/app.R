@@ -441,7 +441,7 @@ ui <- bs4Dash::dashboardPage(
                                       icon = shiny::icon("file-import"))
                 )
               ),
-              shiny::numericInput("threads_load", tooltip_label("Threads", "Number of parallel workers to use when loading files."), value = 1, min = 1, step = 1)
+              shiny::numericInput("threads_load", tooltip_label("Threads", "Number of parallel workers to use when loading files. For most use cases, leave this set to 1."), value = 1, min = 1, step = 1)
             ),
             shiny::tags$div(
               style = "margin-top:12px;",
@@ -603,7 +603,7 @@ ui <- bs4Dash::dashboardPage(
                     )
                   ),
                     shiny::hr(),
-                  shiny::numericInput("threads_transform_approach", tooltip_label("Threads", "Number of workers used for transforming approach curves."), value = 1, min = 1, step = 1)
+                  shiny::numericInput("threads_transform_approach", tooltip_label("Threads", "Number of workers used for transforming approach curves. For most use cases, leave this set to 1."), value = 1, min = 1, step = 1)
                 )
               ),
               shiny::column(
@@ -667,7 +667,7 @@ ui <- bs4Dash::dashboardPage(
                     )
                   ),
                     shiny::hr(),
-                  shiny::numericInput("threads_transform_retract", tooltip_label("Threads", "Number of workers used for transforming retract curves."), value = 1, min = 1, step = 1)
+                  shiny::numericInput("threads_transform_retract", tooltip_label("Threads", "Number of workers used for transforming retract curves. For most use cases, leave this set to 1."), value = 1, min = 1, step = 1)
                 )
               )
             ),
@@ -931,7 +931,7 @@ ui <- bs4Dash::dashboardPage(
             shiny::fluidRow(
               shiny::column(3,
                 shiny::numericInput("threads_metrics",
-                  tooltip_label("Threads", "Number of parallel workers to use for metric calculations."),
+                  tooltip_label("Threads", "Number of parallel workers to use for metric calculations. For most use cases, leave this set to 1."),
                   value = 1, min = 1, step = 1)
               ),
               shiny::column(9,

@@ -84,7 +84,7 @@ print(ggplot(curve_df) +
 
 ## Load demo data
 
-All examples below use the demo dataset provided in `extdata/` within the package. This folder contains approximately 100 raw curve files exported from Bruker NanoScope Analysis with both approach and retract segments included. To use your own dataset, pass the path to the directory containing the data to the `folder` argument. Users can increase `threads` to enable parallel processing when loading a large folder, for example, more than 5000 curves, which can substantially reduce computation time.
+All examples below use the demo dataset provided in `extdata/` within the package. This folder contains approximately 100 raw curve files exported from Bruker NanoScope Analysis with both approach and retract segments included. To use your own dataset, pass the path to the directory containing the data to the `folder` argument. Users can increase `threads` to enable parallel processing when loading a large folder, for example, more than 10000 curves, which can substantially reduce computation time.
 
 In this step, we initialize an fdObj by importing the demo data directory `extdata/` with `createFdObjFromFolder()`. An fdObj is the core data container in curvana. It stores atomic force microscopy (AFM) force-distance curve data, including raw curves, transformed data, associated metadata for downstream analysis, and the analytical metrics generated.
 
@@ -95,8 +95,7 @@ Use `createFdObjFromFolder()` for generic Bruker/Veeco-style column-separated fi
 
 ```{r load data}
 folder = system.file("extdata", package = "curvana")
-t = 1
-test.input = createFdObjFromFolder(folder = folder, threads = t,
+test.input = createFdObjFromFolder(folder = folder,
                                   Displacement_Approach = "Calc_Ramp_Ex_nm", # column name for piezo displacement in the approach curve
                                   Deflection_Approach = "Defl_V_Ex", # column name for cantilever deflection in the approach curve
                                   Displacement_Retract = "Calc_Ramp_Rt_nm", # column name for piezo displacement in the retract curve
@@ -125,7 +124,6 @@ jpk_folder <- system.file("extdata_jpk", package = "curvana")
 
 test.input.jpk <- createFdObjFromJPKFolder(
   folder = jpk_folder,
-  threads = 1,
   height_col = "height",
   deflection_col = "vDeflection"
 )
@@ -218,8 +216,7 @@ test = transform_curves(test,
                         intv = 4, # number of data points added per iteration when building the linear sensitivity segment
                         end = 20, # use at most the first 20 data points on the left side of the curve to calculate sensitivity
                         R_squared_min = 0.99, # minimum R^2 threshold for accepting a segment as sufficiently linear during sensitivity calculation
-                        minimum_length = 4, # minimum number of accumulated points required for a valid sensitivity result; if shorter, sensitivity is reported as NA
-                        threads = 1 # number of threads to use for parallel processing; set to 1 for no parallelization; increase for faster processing of large datasets (e.g., > 5000 curves)
+                        minimum_length = 4 # minimum number of accumulated points required for a valid sensitivity result; if shorter, sensitivity is reported as NA
                         )
 
 # repeat the same transformation for the retract curves
@@ -237,8 +234,7 @@ test = transform_curves(test,
                         intv = 4, 
                         end = 20, 
                         R_squared_min = 0.99, 
-                        minimum_length = 4,
-                        threads = 1 
+                        minimum_length = 4
                         )
 ```
 
@@ -266,8 +262,6 @@ test3 = transform_curves(test,
                         end = 20, 
                         R_squared_min = 0.99, 
                         minimum_length = 4, 
-                        threads = 1,
-
                         # soft surface correction
                         soft = TRUE, # whether to apply soft surface correction
                         probe_sensitivity_external = 0.05 # externally calibrated sensitivity value to use for soft surface correction (in V/nm). This can be a single numeric value applied to all curves, or the name of a metadata column containing per-curve sensitivity values.
@@ -297,7 +291,6 @@ We can see that Group_A has the largest adhesion, which occurs mostly immediatel
 test = analyze_curves_all_analytical_metrics(
   test, # the object
   useCurve = "both", # run analysis for both approach and retract 
-  threads = 1, 
 
   # noise band parameters
   noise_baseline_span = "automatic", # use the baseline section previously defined in curve transformation for noise band calculation
@@ -346,7 +339,7 @@ plot_all_curve_metrics(
   useCurve = "retract", # plot the retract curve
   plot_raw = T, # whether to plot the raw curve
   destination_folder = '../test_plot_metrics_denoised', # the path to save the plots
-  format = 'png', width = 18, height = 9, # plot format and dimensions,
+  format = 'png', width = 18, height = 9, # plot format and dimensions
   threads = 8 # number of threads to use for parallel processing (set to 8 to use 8 cores, which will significantly speed up the plotting process for a large dataset
 )
 plot_all_curve_metrics(

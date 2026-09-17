@@ -955,7 +955,10 @@ transform_a_curve <- function(x, y,
 #'   \code{fdObj@metadata$spring_constant}. If character, the name of a column
 #'   in \code{fdObj@metadata} that contains per-curve spring constants.
 #' @param useCurve Character; one of \code{c("approach", "retract")}.
-#' @param threads Integer. Number of parallel threads to use (default = 1).
+#' @param threads Integer. Number of parallel threads to use (default = 1). Parallel 
+#'   worker-pool overhead may make this slower than threads = 1 unless 
+#'   you have a very large number of curves (e.g. > 100,000); consider using threads = 1 otherwise.
+#' 
 #' @param denoise_first Logical. If \code{TRUE}, denoise raw curves for the
 #'   selected \code{useCurve} before transformation.
 #' @param p Integer. Savitzky-Golay polynomial order used by
@@ -1031,6 +1034,12 @@ transform_curves <- function(fdObj,
   }
   if (!is.logical(soft) || length(soft) != 1 || is.na(soft)) {
     stop("soft must be a single TRUE/FALSE value.")
+  }
+
+  # threads > 1 spins up a worker pool at each internal step (denoise/sensitivity/baseline/transform);
+  # this overhead usually outweighs the benefit for typical curve counts
+  if (threads > 1) {
+    warning("threads > 1 requested. Parallel worker-pool overhead may make this slower than threads = 1 unless you have a very large number of curves (e.g. > 100,000); consider using threads = 1 otherwise.")
   }
 
   # ---- Handle probe sensitivity for soft mode ----
@@ -2613,6 +2622,8 @@ analyze_curves_energy <- function(fdObj, useCurve = c("retract", "approach"), th
 #' @param fdObj An object of class \code{fdObj}.
 #' @param useCurve Character; one of \code{c("retract", "approach", "both")}. Default \code{"both"}.
 #' @param threads Integer. Number of parallel workers passed to wrapped functions (default \code{1}).
+#'  Parallel worker-pool overhead may make this slower than threads = 1 unless you have a very large 
+#'  number of curves (e.g. > 100,000); consider using threads = 1 otherwise.
 #'
 #' @param noise_baseline_span Either a single integer >= 1, or \code{"automatic"}.
 #'   Passed to \code{analyze_curves_noise()}.
@@ -2743,6 +2754,11 @@ analyze_curves_all_analytical_metrics <- function(
     stop("analyze_repulsive_distance_min_consecutive must be a single integer >= 1.")
   }
 
+  # threads > 1 spins up a worker pool at each internal step;
+  # this overhead usually outweighs the benefit for typical curve counts
+  if (threads > 1) {
+    warning("threads > 1 requested. Parallel worker-pool overhead may make this slower than threads = 1 unless you have a very large number of curves (e.g. > 100,000); consider using threads = 1 otherwise.")
+  }
   analyze_rupture_distance_min_consecutive <- as.integer(analyze_rupture_distance_min_consecutive)
   analyze_repulsive_distance_min_consecutive <- as.integer(analyze_repulsive_distance_min_consecutive)
 
