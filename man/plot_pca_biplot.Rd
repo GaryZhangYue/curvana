@@ -16,7 +16,8 @@ plot_pca_biplot(
   arrow_scale = 1,
   show_feature_labels = TRUE,
   feature_label_size = 3.5,
-  base_size = 12
+  base_size = 12,
+  axis_label_size = NULL
 )
 }
 \arguments{
@@ -44,6 +45,9 @@ features.}
 \item{feature_label_size}{Numeric feature-label text size.}
 
 \item{base_size}{Numeric base font size.}
+
+\item{axis_label_size}{Numeric axis-label text size for x/y titles.
+Defaults to \code{base_size} when \code{NULL}.}
 }
 \value{
 A ggplot object. The fitted PCA model is attached as

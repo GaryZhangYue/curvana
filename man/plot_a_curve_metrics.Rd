@@ -19,6 +19,8 @@ plot_a_curve_metrics(
   ylim = NULL,
   title = NULL,
   base_size = 14,
+  title_size = NULL,
+  subtitle_size = NULL,
   line_color = "grey35",
   point_color = "grey35",
   line_size = 0.7,
@@ -69,6 +71,12 @@ distance/threshold using arrow + label.}
 \item{title}{Character. Plot title.}
 
 \item{base_size}{Numeric. Base theme text size.}
+
+\item{title_size}{Numeric. Title text size. Defaults to 
+\\code{base_size * 1.1} when \\code{NULL}.}
+
+\item{subtitle_size}{Numeric. Subtitle text size. Defaults to 
+\\code{base_size} when \\code{NULL}.}
 
 \item{line_color}{Character. Line color for curves.}
 

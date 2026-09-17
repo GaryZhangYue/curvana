@@ -35,7 +35,9 @@ in \code{fdObj@metadata} that contains per-curve spring constants.}
 
 \item{useCurve}{Character; one of \code{c("approach", "retract")}.}
 
-\item{threads}{Integer. Number of parallel threads to use (default = 1).}
+\item{threads}{Integer. Number of parallel threads to use (default = 1). Parallel 
+worker-pool overhead may make this slower than threads = 1 unless 
+you have a very large number of curves (e.g. > 100,000); consider using threads = 1 otherwise.}
 
 \item{denoise_first}{Logical. If \code{TRUE}, denoise raw curves for the
 selected \code{useCurve} before transformation.}

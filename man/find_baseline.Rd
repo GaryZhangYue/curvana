@@ -9,6 +9,7 @@ find_baseline(
   y,
   least_length,
   sensitivity,
+  spring_constant,
   slp_threshold = 0.01,
   std_threshold = 0.05
 )
@@ -22,6 +23,10 @@ find_baseline(
 take the last \code{least_length} points of the curve for testing.}
 
 \item{sensitivity}{Numeric. Scaling factor for the deflection signal (e.g., probe sensitivity)).}
+
+\item{spring_constant}{Numeric. Spring constant in nN/nm used to convert
+sensitivity-corrected deflection to force for slope-based baseline
+detection.}
 
 \item{slp_threshold}{Numeric. Maximum absolute slope for the segment to be considered flat (default: 0.01).}
 
@@ -38,8 +43,9 @@ A list with two elements:
 \description{
 This function tests the trailing part of an AFM (Atomic Force Microscopy)
 raw force-distance curve for a baseline segment. It takes the last
-\code{least_length} points after scaling \code{y} by \code{sensitivity}, fits a
-linear model of scaled deflection against \code{x}, and accepts that trailing
+\code{least_length} points after converting \code{y} to force
+using \code{sensitivity} and \code{spring_constant}, fits a
+linear model of the converted signal against \code{x}, and accepts that trailing
 window as baseline only when two criteria are met: the absolute fitted slope
 is smaller than \code{slp_threshold} and the standard deviation of the
 converted force signal is smaller than \code{std_threshold}. If both criteria
@@ -81,7 +87,7 @@ y <- c(
   -0.056, -0.055, -0.056, -0.055, -0.056, -0.056, -0.056, -0.055, -0.055, -0.056,
   -0.056, -0.055, -0.055, -0.053, -0.054, -0.054, -0.055, -0.056, -0.056, -0.057
 )
-result <- find_baseline(x,y, least_length = 50,sensitivity = 0.012,slp_threshold = 0.02, std_threshold = 0.02)
+result <- find_baseline(x,y, least_length = 50,sensitivity = 0.012, spring_constant = 0.1, slp_threshold = 0.02, std_threshold = 0.02)
 print(result$baseline)
 plot(x, y, type = "l"); lines(result$segment, col = "red", lwd = 2)
 

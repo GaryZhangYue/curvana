@@ -33,7 +33,9 @@ analyze_curves_all_analytical_metrics(
 
 \item{useCurve}{Character; one of \code{c("retract", "approach", "both")}. Default \code{"both"}.}
 
-\item{threads}{Integer. Number of parallel workers passed to wrapped functions (default \code{1}).}
+\item{threads}{Integer. Number of parallel workers passed to wrapped functions (default \code{1}).
+Parallel worker-pool overhead may make this slower than threads = 1 unless you have a very large 
+number of curves (e.g. > 100,000); consider using threads = 1 otherwise.}
 
 \item{noise_baseline_span}{Either a single integer >= 1, or \code{"automatic"}.
 Passed to \code{analyze_curves_noise()}.}

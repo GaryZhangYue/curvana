@@ -12,7 +12,8 @@ analyze_baseline(
   std_threshold = 0.05,
   threads = 1,
   soft = FALSE,
-  external_sensitivity_column = NULL
+  external_sensitivity_column = NULL,
+  spring_constant = "spring_constant"
 )
 }
 \arguments{
@@ -41,6 +42,10 @@ Default \code{FALSE}.}
 \item{external_sensitivity_column}{Character. Name of a column in
 \code{fdObj@metadata} containing sensitivity values. Required when
 \code{soft = TRUE}.}
+
+\item{spring_constant}{Numeric or character. If numeric, a single spring
+constant (nN/nm) applied to all curves. If character, the name of a
+metadata column containing per-curve spring constants.}
 }
 \value{
 An updated \code{fdObj} with baseline values in metadata and baseline
@@ -51,13 +56,14 @@ An updated \code{fdObj} with baseline values in metadata and baseline
 \description{
 Applies baseline detection to each raw curve stored in an \code{fdObj} and
 writes the resulting baseline values and accepted baseline segments back into
-the object. For each curve, the function, finds the associated sensitivity value in metadata, and then calls
-\code{find_baseline()} on the trailing part of that curve.
+the object. For each curve, the function finds the associated sensitivity and
+spring-constant values in metadata and then calls \code{find_baseline()} on
+the trailing part of that curve.
 }
 \details{
 Baseline detection is therefore based on the same criteria implemented in
 \code{find_baseline()}: the last \code{least_length} points are tested after
-scaling the deflection signal by sensitivity, and the window is accepted only
+converting deflection to force, and the window is accepted only
 if the fitted slope magnitude is below \code{slp_threshold} and the baseline
 force standard deviation is below \code{std_threshold}. When \code{least_length} is a
 single number, that same trailing-window size is used for all curves; when it
@@ -78,6 +84,6 @@ value for all curves.
 folder <- system.file("extdata", package = "curvana")
 fd_obj <- createFdObjFromFolder(folder)
 fd_obj <- analyze_sensitivity(fd_obj, end = 80, intv = 10, useCurve = "retract")
-fd_obj <- analyze_baseline(fd_obj, least_length = 100, useCurve = "retract", slp_threshold = 0.02, std_threshold = 0.02)
+fd_obj <- analyze_baseline(fd_obj, least_length = 100, useCurve = "retract", spring_constant = 0.1, slp_threshold = 0.02, std_threshold = 0.02)
 head(fd_obj@metadata$baseline_V_retract)
 }

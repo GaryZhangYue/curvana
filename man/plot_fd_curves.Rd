@@ -13,6 +13,7 @@ plot_fd_curves(
   point_size = 0.5,
   point_alpha = 0.6,
   line_alpha = 0.5,
+  text_size = 14,
   xlim = NULL,
   ylim = NULL,
   ...
@@ -34,6 +35,8 @@ plot_fd_curves(
 \item{point_alpha}{Transparency of points (default = 0.6).}
 
 \item{line_alpha}{Transparency of curve lines (default = 0.5).}
+
+\item{text_size}{Text size for plot labels/ticks/strips/legend (default = 14).}
 
 \item{xlim}{Optional numeric vector of length 2 for x-axis limits.}
 

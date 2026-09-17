@@ -12,7 +12,8 @@ plot_deflection_curves(
   point_size = 0.5,
   alpha = 0.5,
   line_alpha = 0.5,
-  color_map = NULL
+  color_map = NULL,
+  text_size = 14
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ plot_deflection_curves(
 \item{line_alpha}{Transparency of connecting paths (default = 0.5)}
 
 \item{color_map}{Named vector of colors (optional)}
+
+\item{text_size}{Text size for plot labels/ticks/strips/legend (default = 14)}
 }
 \value{
 A ggplot2 object of the scatter plots showing raw deflection signal.

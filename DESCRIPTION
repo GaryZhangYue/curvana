@@ -31,9 +31,9 @@ Imports:
     tibble,
     writexl,
     zip
-RoxygenNote: 7.3.3
 Suggests: 
     DT,
     knitr,
     rmarkdown
 VignetteBuilder: knitr
+Config/roxygen2/version: 8.0.0
