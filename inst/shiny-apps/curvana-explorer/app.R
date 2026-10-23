@@ -441,7 +441,7 @@ ui <- bs4Dash::dashboardPage(
                                       icon = shiny::icon("file-import"))
                 )
               ),
-              shiny::numericInput("threads_load", tooltip_label("Threads", "Number of parallel workers to use when loading files. For most use cases, leave this set to 1."), value = 1, min = 1, step = 1)
+              shiny::numericInput("threads_load", tooltip_label("Threads (fixed)", "File loading is fixed to one worker."), value = 1, min = 1, max = 1, step = 1)
             ),
             shiny::tags$div(
               style = "margin-top:12px;",
@@ -603,7 +603,7 @@ ui <- bs4Dash::dashboardPage(
                     )
                   ),
                     shiny::hr(),
-                  shiny::numericInput("threads_transform_approach", tooltip_label("Threads", "Number of workers used for transforming approach curves. For most use cases, leave this set to 1."), value = 1, min = 1, step = 1)
+                  shiny::numericInput("threads_transform_approach", tooltip_label("Threads (fixed)", "Approach curve transformation is fixed to one worker."), value = 1, min = 1, max = 1, step = 1)
                 )
               ),
               shiny::column(
@@ -667,7 +667,7 @@ ui <- bs4Dash::dashboardPage(
                     )
                   ),
                     shiny::hr(),
-                  shiny::numericInput("threads_transform_retract", tooltip_label("Threads", "Number of workers used for transforming retract curves. For most use cases, leave this set to 1."), value = 1, min = 1, step = 1)
+                  shiny::numericInput("threads_transform_retract", tooltip_label("Threads (fixed)", "Retract curve transformation is fixed to one worker."), value = 1, min = 1, max = 1, step = 1)
                 )
               )
             ),
@@ -931,8 +931,8 @@ ui <- bs4Dash::dashboardPage(
             shiny::fluidRow(
               shiny::column(3,
                 shiny::numericInput("threads_metrics",
-                  tooltip_label("Threads", "Number of parallel workers to use for metric calculations. For most use cases, leave this set to 1."),
-                  value = 1, min = 1, step = 1)
+                  tooltip_label("Threads (fixed)", "Metric calculations are fixed to one worker."),
+                  value = 1, min = 1, max = 1, step = 1)
               ),
               shiny::column(9,
                 shiny::tags$div(style = "margin-top:24px;",
@@ -1532,7 +1532,7 @@ server <- function(input, output, session) {
             suffix = suffix,
             pattern = pattern,
             metadata = metadata_for_load,
-            threads = max(1L, as.integer(input$threads_load)),
+            threads = 1L,
             height_col = jpk_height,
             deflection_col = jpk_deflection,
             reverse_Displacement_Approach = isTRUE(input$jpk_reverse_calc_ramp_ex_nm),
@@ -1564,7 +1564,7 @@ server <- function(input, output, session) {
             reverse_Deflection_Approach = isTRUE(input$reverse_defl_v_ex),
             reverse_Deflection_Retract = isTRUE(input$reverse_defl_v_rt),
             metadata = metadata_for_load,
-            threads = max(1L, as.integer(input$threads_load))
+            threads = 1L
           ),
           error = function(e) {
             shiny::showNotification(
@@ -1594,7 +1594,7 @@ server <- function(input, output, session) {
             reverse_Deflection_Approach = isTRUE(input$generic_reverse_defl_v_ex),
             reverse_Deflection_Retract = isTRUE(input$generic_reverse_defl_v_rt),
             metadata = metadata_for_load,
-            threads = max(1L, as.integer(input$threads_load))
+            threads = 1L
           ),
           error = function(e) {
             shiny::showNotification(
@@ -1711,7 +1711,7 @@ server <- function(input, output, session) {
           
           fdobj_result <- curvana::transform_curves(
             fdObj = fdobj_current, spring_constant = sc_app, useCurve = "approach",
-            threads = max(1L, as.integer(input$threads_transform_approach)),
+            threads = 1L,
             denoise_first = isTRUE(input$denoise_first_approach),
             p = as.integer(input$denoise_p_approach), n = as.integer(input$denoise_n_approach),
             m = as.integer(input$denoise_m_approach), ts = as.numeric(input$denoise_ts_approach),
@@ -1746,7 +1746,7 @@ server <- function(input, output, session) {
           
           fdobj_result <- curvana::transform_curves(
             fdObj = fdobj_current, spring_constant = sc_ret, useCurve = "retract",
-            threads = max(1L, as.integer(input$threads_transform_retract)),
+            threads = 1L,
             denoise_first = isTRUE(input$denoise_first_retract),
             p = as.integer(input$denoise_p_retract), n = as.integer(input$denoise_n_retract),
             m = as.integer(input$denoise_m_retract), ts = as.numeric(input$denoise_ts_retract),
@@ -1888,7 +1888,7 @@ server <- function(input, output, session) {
       approach_args <- list(
         fdObj                                    = fdobj_current,
         useCurve                                 = "approach",
-        threads                                  = max(1L, as.integer(input$threads_metrics)),
+        threads                                  = 1L,
         noise_baseline_span                      = parse_span(input$noise_baseline_span_approach),
         noise_threshold_method                   = input$noise_threshold_method_approach,
         noise_multiplier                         = as.numeric(input$noise_multiplier_approach),
@@ -1925,7 +1925,7 @@ server <- function(input, output, session) {
       retract_args <- list(
         fdObj                                    = fdobj_current,
         useCurve                                 = "retract",
-        threads                                  = max(1L, as.integer(input$threads_metrics)),
+        threads                                  = 1L,
         noise_baseline_span                      = parse_span(input$noise_baseline_span_retract),
         noise_threshold_method                   = input$noise_threshold_method_retract,
         noise_multiplier                         = as.numeric(input$noise_multiplier_retract),
@@ -2713,4 +2713,3 @@ server <- function(input, output, session) {
 }
 
 shiny::shinyApp(ui = ui, server = server)
-
